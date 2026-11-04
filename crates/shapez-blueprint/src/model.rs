@@ -87,14 +87,17 @@ impl Building {
 pub struct BuildingBlueprint {
     #[serde(rename = "Entries")]
     pub entries: Vec<Building>,
-    #[serde(skip)]
-    pub(crate) legacy_icon: Option<BlueprintIcon>,
+    #[serde(rename = "Icon", skip_serializing_if = "Option::is_none")]
+    pub embedded_icon: Option<BlueprintIcon>,
+    #[serde(rename = "BinaryVersion", skip_serializing_if = "Option::is_none")]
+    pub binary_version: Option<u32>,
 }
 impl BuildingBlueprint {
     pub fn new(entries: Vec<Building>) -> Self {
         Self {
             entries,
-            legacy_icon: None,
+            embedded_icon: None,
+            binary_version: None,
         }
     }
 }
@@ -149,14 +152,17 @@ impl Island {
 pub struct IslandBlueprint {
     #[serde(rename = "Entries")]
     pub entries: Vec<Island>,
-    #[serde(skip)]
-    pub(crate) legacy_icon: Option<BlueprintIcon>,
+    #[serde(rename = "Icon", skip_serializing_if = "Option::is_none")]
+    pub embedded_icon: Option<BlueprintIcon>,
+    #[serde(rename = "BinaryVersion", skip_serializing_if = "Option::is_none")]
+    pub binary_version: Option<u32>,
 }
 impl IslandBlueprint {
     pub fn new(entries: Vec<Island>) -> Self {
         Self {
             entries,
-            legacy_icon: None,
+            embedded_icon: None,
+            binary_version: None,
         }
     }
 }
@@ -215,35 +221,73 @@ pub(crate) mod wire {
             entries: Array<super::Island>,
             #[serde(rename = "Icon", default)]
             icon: Option<BlueprintIcon>,
+            #[serde(rename = "BinaryVersion", default)]
+            binary_version: Option<u32>,
         },
         Building {
             #[serde(rename = "Entries")]
             entries: Array<super::Building>,
             #[serde(rename = "Icon", default)]
             icon: Option<BlueprintIcon>,
+            #[serde(rename = "BinaryVersion", default)]
+            binary_version: Option<u32>,
         },
     }
 
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    pub enum Array<T> {
-        Plain(Vec<T>),
-        Typed(TypedArray<T>),
-    }
-    #[derive(Deserialize)]
-    #[serde(deny_unknown_fields)]
-    pub struct TypedArray<T> {
-        #[serde(rename = "$type")]
-        _type_name: String,
-        #[serde(rename = "$values")]
-        values: Vec<T>,
-    }
+    pub struct Array<T>(Vec<T>);
     impl<T> Array<T> {
         pub fn into_vec(self) -> Vec<T> {
-            match self {
-                Self::Plain(v) => v,
-                Self::Typed(v) => v.values,
+            self.0
+        }
+    }
+    impl<'de, T: Deserialize<'de>> Deserialize<'de> for Array<T> {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            struct Visitor<T>(std::marker::PhantomData<T>);
+            impl<'de, T: Deserialize<'de>> de::Visitor<'de> for Visitor<T> {
+                type Value = Array<T>;
+                fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    f.write_str("an array or a Newtonsoft $values wrapper")
+                }
+                fn visit_seq<A: de::SeqAccess<'de>>(
+                    self,
+                    mut seq: A,
+                ) -> Result<Self::Value, A::Error> {
+                    let mut values = Vec::new();
+                    while let Some(value) = seq.next_element()? {
+                        values.push(value);
+                    }
+                    Ok(Array(values))
+                }
+                fn visit_map<A: de::MapAccess<'de>>(
+                    self,
+                    mut map: A,
+                ) -> Result<Self::Value, A::Error> {
+                    let mut values = None;
+                    let mut type_name = None;
+                    while let Some(key) = map.next_key::<String>()? {
+                        match key.as_str() {
+                            "$type" => {
+                                if type_name.is_some() {
+                                    return Err(de::Error::duplicate_field("$type"));
+                                }
+                                type_name = Some(map.next_value::<String>()?);
+                            }
+                            "$values" => {
+                                if values.is_some() {
+                                    return Err(de::Error::duplicate_field("$values"));
+                                }
+                                values = Some(map.next_value()?);
+                            }
+                            _ => return Err(de::Error::unknown_field(&key, &["$type", "$values"])),
+                        }
+                    }
+                    type_name.ok_or_else(|| de::Error::missing_field("$type"))?;
+                    Ok(Array(
+                        values.ok_or_else(|| de::Error::missing_field("$values"))?,
+                    ))
+                }
             }
+            deserializer.deserialize_any(Visitor(std::marker::PhantomData))
         }
     }
     #[derive(Deserialize)]
@@ -295,6 +339,8 @@ pub(crate) mod wire {
         pub entries: Array<super::Building>,
         #[serde(rename = "Icon", default)]
         pub icon: Option<BlueprintIcon>,
+        #[serde(rename = "BinaryVersion", default)]
+        pub binary_version: Option<u32>,
     }
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -327,18 +373,30 @@ pub(crate) mod wire {
         pub entries: Array<super::Island>,
         #[serde(rename = "Icon", default)]
         pub icon: Option<BlueprintIcon>,
+        #[serde(rename = "BinaryVersion", default)]
+        pub binary_version: Option<u32>,
     }
 }
 impl From<wire::Content> for BlueprintContent {
     fn from(v: wire::Content) -> Self {
         match v {
-            wire::Content::Island { entries, icon } => Self::Islands(IslandBlueprint {
+            wire::Content::Island {
+                entries,
+                icon,
+                binary_version,
+            } => Self::Islands(IslandBlueprint {
                 entries: entries.into_vec(),
-                legacy_icon: icon,
+                embedded_icon: icon,
+                binary_version,
             }),
-            wire::Content::Building { entries, icon } => Self::Buildings(BuildingBlueprint {
+            wire::Content::Building {
+                entries,
+                icon,
+                binary_version,
+            } => Self::Buildings(BuildingBlueprint {
                 entries: entries.into_vec(),
-                legacy_icon: icon,
+                embedded_icon: icon,
+                binary_version,
             }),
         }
     }
@@ -383,7 +441,8 @@ impl TryFrom<wire::BuildingBlueprint> for BuildingBlueprint {
         );
         Ok(Self {
             entries: v.entries.into_vec(),
-            legacy_icon: v.icon,
+            embedded_icon: v.icon,
+            binary_version: v.binary_version,
         })
     }
 }
@@ -397,7 +456,8 @@ impl TryFrom<wire::IslandBlueprint> for IslandBlueprint {
         );
         Ok(Self {
             entries: v.entries.into_vec(),
-            legacy_icon: v.icon,
+            embedded_icon: v.icon,
+            binary_version: v.binary_version,
         })
     }
 }

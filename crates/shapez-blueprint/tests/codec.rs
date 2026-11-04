@@ -21,6 +21,15 @@ fn sample() -> Blueprint {
     let mut island = Island::new("Foundation_1x1", -20, 4, -1, Rotation::new(2));
     island.configuration = Some(Configuration(vec![0, 1, 2, 255]));
     island.buildings = Some(BuildingBlueprint::new(vec![building]));
+    island.buildings.as_mut().unwrap().embedded_icon = Some(BlueprintIcon {
+        components: [
+            Some(IconComponent::Icon("Buildings".into())),
+            None,
+            None,
+            None,
+        ],
+    });
+    island.buildings.as_mut().unwrap().binary_version = Some(1137);
     Blueprint {
         game_version: 1138,
         content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
@@ -123,4 +132,52 @@ fn rejects_broken_envelopes_instead_of_truncating_the_payload() {
         assert!(decode_blueprint(&broken).is_err());
     }
     assert!(decode_blueprint("SHAPEZ2-1-invalid$").is_err());
+}
+
+#[test]
+#[ignore = "reads the installed user's local blueprint library"]
+fn local_library_roundtrips_without_losing_layout_configurations_or_icons() {
+    fn visit(path: &std::path::Path, count: &mut usize) {
+        for entry in std::fs::read_dir(path).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                if entry.file_name() != "backup" {
+                    visit(&entry.path(), count);
+                }
+            } else if entry.path().extension().is_some_and(|s| s == "spz2bp") {
+                let original = Blueprint::read(entry.path())
+                    .unwrap_or_else(|e| panic!("{}: {e:#}", entry.path().display()));
+                let encoded = encode_blueprint(&original).unwrap();
+                let decoded = decode_blueprint(&encoded).unwrap();
+                assert_eq!(
+                    decoded.content,
+                    original.content,
+                    "{}",
+                    entry.path().display()
+                );
+                assert_eq!(decoded.game_version, original.game_version);
+                assert_eq!(
+                    decoded.icon,
+                    Some(
+                        original
+                            .icon
+                            .clone()
+                            .unwrap_or_else(|| original.default_icon())
+                    )
+                );
+                let model_json = serde_json::to_string(&original).unwrap();
+                assert_eq!(
+                    serde_json::from_str::<Blueprint>(&model_json).unwrap(),
+                    original
+                );
+                *count += 1;
+            }
+        }
+    }
+    let root = std::path::PathBuf::from(std::env::var_os("USERPROFILE").unwrap())
+        .join("AppData/LocalLow/tobspr Games/shapez 2/blueprints");
+    let mut count = 0;
+    visit(&root, &mut count);
+    assert!(count > 0);
+    println!("Roundtripped {count} local blueprints");
 }

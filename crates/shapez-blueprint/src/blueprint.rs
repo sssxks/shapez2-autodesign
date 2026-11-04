@@ -44,8 +44,8 @@ impl TryFrom<Document> for Blueprint {
     fn try_from(mut value: Document) -> Result<Self> {
         ensure!(value.game_version > 0, "Missing game version");
         let icon = match &mut value.content {
-            BlueprintContent::Islands(b) => b.legacy_icon.take(),
-            BlueprintContent::Buildings(b) => b.legacy_icon.take(),
+            BlueprintContent::Islands(b) => b.embedded_icon.take(),
+            BlueprintContent::Buildings(b) => b.embedded_icon.take(),
         };
         Ok(Self {
             game_version: value.game_version,
