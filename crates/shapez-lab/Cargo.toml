@@ -11,6 +11,7 @@ flate2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_Security", "Win32_System_Threading"] }
-
+shapez-core = { path = "../shapez-core" }
+shapez-runtime = { path = "../shapez-runtime" }
+cmam-compact = { path = "../../tasks/cmam-compact" }
+scaffold-recipe = { path = "../../tasks/scaffold-recipe" }

@@ -1,4 +1,4 @@
-use crate::{Blueprint, encode_blueprint};
+use shapez_core::{Blueprint, encode_blueprint};
 use anyhow::{Result, bail, ensure};
 use serde_json::{Value, json};
 use std::{

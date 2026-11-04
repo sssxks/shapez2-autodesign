@@ -1,5 +1,6 @@
 [workspace]
-members = ["crates/shapez-lab"]
+members = ["crates/*", "tasks/*"]
+default-members = ["crates/shapez-lab"]
 resolver = "3"
 
 [workspace.package]

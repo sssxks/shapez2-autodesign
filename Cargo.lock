@@ -117,6 +117,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
+name = "cmam-compact"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "shapez-core",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -201,6 +211,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "scaffold-recipe"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "shapez-core",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -244,15 +264,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "shapez-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "flate2",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "shapez-lab"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64",
  "clap",
+ "cmam-compact",
  "flate2",
+ "scaffold-recipe",
  "serde",
  "serde_json",
+ "shapez-core",
+ "shapez-runtime",
+]
+
+[[package]]
+name = "shapez-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "shapez-core",
  "windows-sys",
 ]
 
