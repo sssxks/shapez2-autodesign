@@ -121,6 +121,7 @@ name = "cmam-compact"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "serde",
  "serde_json",
  "shapez-core",
@@ -216,6 +217,7 @@ name = "scaffold-recipe"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "serde",
  "serde_json",
  "shapez-core",
