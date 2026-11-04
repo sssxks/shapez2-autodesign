@@ -1,0 +1,619 @@
+{
+  "buildings": 1053,
+  "occupied": 1089,
+  "jump_pairs": 47,
+  "components": [
+    {
+      "input": {
+        "X": -12,
+        "Y": 2,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 28,
+        "Y": 17,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 53
+    },
+    {
+      "input": {
+        "X": -11,
+        "Y": 2,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 29,
+        "Y": 17,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 52
+    },
+    {
+      "input": {
+        "X": -10,
+        "Y": 2,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 30,
+        "Y": 17,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 50
+    },
+    {
+      "input": {
+        "X": -9,
+        "Y": 2,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 31,
+        "Y": 17,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 54
+    },
+    {
+      "input": {
+        "X": -12,
+        "Y": 2,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 8,
+        "Y": 17,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 32
+    },
+    {
+      "input": {
+        "X": -11,
+        "Y": 2,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 9,
+        "Y": 17,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 26
+    },
+    {
+      "input": {
+        "X": -10,
+        "Y": 2,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 10,
+        "Y": 17,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 29
+    },
+    {
+      "input": {
+        "X": -9,
+        "Y": 2,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 11,
+        "Y": 17,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 30
+    },
+    {
+      "input": {
+        "X": -12,
+        "Y": 2,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": -12,
+        "Y": 17,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 16
+    },
+    {
+      "input": {
+        "X": -11,
+        "Y": 2,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": -11,
+        "Y": 17,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 12
+    },
+    {
+      "input": {
+        "X": -10,
+        "Y": 2,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": -10,
+        "Y": 17,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 12
+    },
+    {
+      "input": {
+        "X": -9,
+        "Y": 2,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": -9,
+        "Y": 17,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 8
+    },
+    {
+      "input": {
+        "X": 8,
+        "Y": 2,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 28,
+        "Y": 17,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 28
+    },
+    {
+      "input": {
+        "X": 9,
+        "Y": 2,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 29,
+        "Y": 17,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 30
+    },
+    {
+      "input": {
+        "X": 10,
+        "Y": 2,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 30,
+        "Y": 17,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 33
+    },
+    {
+      "input": {
+        "X": 11,
+        "Y": 2,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 31,
+        "Y": 17,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 34
+    },
+    {
+      "input": {
+        "X": 8,
+        "Y": 2,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 8,
+        "Y": 17,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 12
+    },
+    {
+      "input": {
+        "X": 9,
+        "Y": 2,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 9,
+        "Y": 17,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 12
+    },
+    {
+      "input": {
+        "X": 10,
+        "Y": 2,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 10,
+        "Y": 17,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 12
+    },
+    {
+      "input": {
+        "X": 11,
+        "Y": 2,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 11,
+        "Y": 17,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 12
+    },
+    {
+      "input": {
+        "X": 8,
+        "Y": 2,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": -12,
+        "Y": 17,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 36
+    },
+    {
+      "input": {
+        "X": 9,
+        "Y": 2,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": -11,
+        "Y": 17,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 35
+    },
+    {
+      "input": {
+        "X": 10,
+        "Y": 2,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": -10,
+        "Y": 17,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 32
+    },
+    {
+      "input": {
+        "X": 11,
+        "Y": 2,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": -9,
+        "Y": 17,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 30
+    },
+    {
+      "input": {
+        "X": 28,
+        "Y": 2,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 28,
+        "Y": 17,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 8
+    },
+    {
+      "input": {
+        "X": 29,
+        "Y": 2,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 29,
+        "Y": 17,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 8
+    },
+    {
+      "input": {
+        "X": 30,
+        "Y": 2,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 30,
+        "Y": 17,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 10
+    },
+    {
+      "input": {
+        "X": 31,
+        "Y": 2,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 31,
+        "Y": 17,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 12
+    },
+    {
+      "input": {
+        "X": 28,
+        "Y": 2,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 8,
+        "Y": 17,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 29
+    },
+    {
+      "input": {
+        "X": 29,
+        "Y": 2,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 9,
+        "Y": 17,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 36
+    },
+    {
+      "input": {
+        "X": 30,
+        "Y": 2,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 10,
+        "Y": 17,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 32
+    },
+    {
+      "input": {
+        "X": 31,
+        "Y": 2,
+        "L": 1,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": 11,
+        "Y": 17,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 28
+    },
+    {
+      "input": {
+        "X": 28,
+        "Y": 2,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": -12,
+        "Y": 17,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 52
+    },
+    {
+      "input": {
+        "X": 29,
+        "Y": 2,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": -11,
+        "Y": 17,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 48
+    },
+    {
+      "input": {
+        "X": 30,
+        "Y": 2,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": -10,
+        "Y": 17,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 56
+    },
+    {
+      "input": {
+        "X": 31,
+        "Y": 2,
+        "L": 2,
+        "R": 1,
+        "T": "FluidPortReceiverInternalVariant"
+      },
+      "output": {
+        "X": -9,
+        "Y": 17,
+        "L": 0,
+        "R": 1,
+        "T": "FluidPortSenderInternalVariant"
+      },
+      "buildings": 54
+    }
+  ]
+}
