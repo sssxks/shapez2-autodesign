@@ -1,6 +1,6 @@
-use shapez_core::{Blueprint, encode_blueprint};
 use anyhow::{Result, bail, ensure};
 use serde_json::{Value, json};
+use shapez_core::{Blueprint, encode_blueprint};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
