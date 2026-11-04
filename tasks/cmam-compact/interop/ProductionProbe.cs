@@ -15,18 +15,20 @@ internal sealed class ProductionProbe {
  readonly Dictionary<string,long> discardedAt=new Dictionary<string,long>();
  internal ProductionProbe(ISimulator simulator,JObject manifest,string target){
   this.target=target;supply=new UnloaderSupply(simulator,manifest);
-  var session=GameBindings.Session;var registry=GameBindings.Field<ShapeRegistry>(session,"ShapeRegistry");var ids=GameBindings.Field<IShapeIdManager>(session,"ShapeIdManager");
+  var session=GameBindings.Session;var registry=GameBindings.Shapes;var ids=GameBindings.ShapeIds;
   var signal=BeltItemSignal.From(registry.GetItem(ids.Resolve(target)));
   foreach(var localized in simulator.Simulations){
    // The isolated world has no operator channels. Drive the receiver's normal
    // conductor at native signal ticks, preserving all downstream control logic.
    if(localized.Simulation is GlobalSignalReceiverSimulation receiver)drivers.Add(new ConstantSignalSimulation(new ConstantSignalConfiguration{Value=signal}){OutputConductor=receiver.OutputConductor});
-   // This CMAM's accepted output ends at the existing trash island (9, 4).
-   if(localized.Simulation is TrashSimulation sink&&localized is ILocalizedTileSimulation tile){var p=tile.GetOccupiedTile(0);var final=p.x>=180&&p.x<200&&p.y>=80&&p.y<100;
+   var outputChunk=manifest["production"]["output_chunk"];
+   var outputX=(int)outputChunk[0]*20;var outputY=(int)outputChunk[1]*20;
+   if(localized.Simulation is TrashSimulation sink&&localized is ILocalizedTileSimulation tile){var p=tile.GetOccupiedTile(0);var final=p.x>=outputX&&p.x<outputX+20&&p.y>=outputY&&p.y<outputY+20&&p.z==(int)outputChunk[2];
     sink.OnLaneTrashesItem.Register((item,ticks,lane)=>{var key=item.ToString();trash[key]=trash.TryGetValue(key,out var n)?n+1:1;var location=p.x+","+p.y+","+p.z+":"+key;discardedAt[location]=discardedAt.TryGetValue(location,out var d)?d+1:1;if(final)output[key]=output.TryGetValue(key,out var m)?m+1:1;});
    }
   }
-  if(drivers.Count!=1)throw new Exception("Expected one target-signal receiver, got "+drivers.Count);
+  var expectedReceivers=(int)manifest["production"]["signal_receivers"];
+  if(drivers.Count!=expectedReceivers)throw new Exception("Target-signal receiver mismatch: "+drivers.Count+"/"+expectedReceivers);
  }
  internal void BeforeTick(Ticks start,Ticks delta){supply.BeforeTick();foreach(var driver in drivers)driver.Update(start,delta);}
  internal long Produced=>output.TryGetValue(target,out var n)?n:0;

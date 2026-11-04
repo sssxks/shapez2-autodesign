@@ -235,3 +235,27 @@ pub fn plan_recipe(target: &str) -> Result<Recipe> {
     recipe.validate()?;
     Ok(recipe)
 }
+
+/// The symbol set and case enumeration are owned by this construction task.
+pub fn write_check_suite(dir: &std::path::Path) -> Result<std::path::PathBuf> {
+    use serde_json::json;
+    use std::fs;
+    fs::create_dir_all(dir)?;
+    let mut cases = Vec::new();
+    let symbols = ["--", "P-", "Cu", "cw", "cr"];
+    for n in 1..625 {
+        let mut k = n;
+        let mut target = String::new();
+        for _ in 0..4 {
+            target.push_str(symbols[k % 5]);
+            k /= 5;
+        }
+        let path = dir.join(format!("{n}.json"));
+        fs::write(&path, serde_json::to_vec_pretty(&plan_recipe(&target)?)?)?;
+        cases.push(json!({"name":target,"operation":"recipe","recipe":path}));
+    }
+    let path = dir.join("suite.json");
+    fs::write(&path, serde_json::to_vec_pretty(&json!({"cases":cases}))?)?;
+    Ok(path)
+}
+pub mod commands;

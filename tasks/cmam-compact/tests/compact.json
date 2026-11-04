@@ -2,8 +2,8 @@
   "cases": [
     {"name":"native-capacities", "operation":"capacities"},
     {"name":"original-import", "blueprint":"${LIBRARY}/CMAM not connected.spz2bp", "expected_buildings":52375,"seconds":1},
-    {"name":"compact-import", "blueprint":"${LAB}/compact/CMAM compact full-rate.spz2bp", "expected_buildings":54906,"seconds":1},
-    {"name":"all-inputs-full-rate", "blueprint":"${LAB}/compact/CMAM compact full-rate.spz2bp", "rate_manifest":"${LAB}/compact/manifest.json", "warmup_seconds":300, "seconds":120},
+    {"name":"compact-import", "blueprint":"${TASK:cmam-compact}/CMAM compact full-rate.spz2bp", "expected_buildings":54906,"seconds":1},
+    {"name":"all-inputs-full-rate", "blueprint":"${TASK:cmam-compact}/CMAM compact full-rate.spz2bp", "rate_manifest":"${TASK:cmam-compact}/manifest.json", "warmup_seconds":300, "seconds":120},
     {"name":"bad-operation", "operation":"invalid", "expected_ok":false},
     {"name":"host-still-ready", "operation":"capabilities"}
   ]

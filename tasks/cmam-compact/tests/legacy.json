@@ -21,13 +21,13 @@
     },
     {
       "name": "connected-cmam",
-      "blueprint": "${LAB}/adapter/CMAM connected.spz2bp",
+      "blueprint": "${TASK:cmam-legacy}/CMAM connected.spz2bp",
       "expected_buildings": 142208,
       "seconds": 1
     },
     {
       "name": "adapter-480-inlets",
-      "blueprint": "${LAB}/adapter/CMAM connected.spz2bp",
+      "blueprint": "${TASK:cmam-legacy}/CMAM connected.spz2bp",
       "adapter_probe": true,
       "seconds": 1200,
       "experiment": {

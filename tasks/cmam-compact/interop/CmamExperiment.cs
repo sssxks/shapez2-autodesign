@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Game.Core.Coordinates;
+using Game.Core.Simulation;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 

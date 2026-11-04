@@ -124,6 +124,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shapez-core",
+ "shapez-runtime",
 ]
 
 [[package]]
@@ -218,6 +219,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shapez-core",
+ "shapez-runtime",
 ]
 
 [[package]]
@@ -279,12 +281,9 @@ name = "shapez-lab"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64",
  "clap",
  "cmam-compact",
- "flate2",
  "scaffold-recipe",
- "serde",
  "serde_json",
  "shapez-core",
  "shapez-runtime",
@@ -297,7 +296,6 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
- "shapez-core",
  "windows-sys",
 ]
 

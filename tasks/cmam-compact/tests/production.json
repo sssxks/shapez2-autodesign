@@ -2,8 +2,8 @@
   "cases": [
     {
       "name": "half-windmill-circle",
-      "blueprint": "${LAB}/compact/CMAM compact full-rate.spz2bp",
-      "production_manifest": "${LAB}/compact/manifest.json",
+      "blueprint": "${TASK:cmam-compact}/CMAM compact full-rate.spz2bp",
+      "production_manifest": "${TASK:cmam-compact}/manifest.json",
       "target": "WrWr----:CuCu----",
       "seconds": 600,
       "min_produced": 1,
@@ -14,8 +14,8 @@
     },
     {
       "name": "pin-crystal-target",
-      "blueprint": "${LAB}/compact/CMAM compact full-rate.spz2bp",
-      "production_manifest": "${LAB}/compact/manifest.json",
+      "blueprint": "${TASK:cmam-compact}/CMAM compact full-rate.spz2bp",
+      "production_manifest": "${TASK:cmam-compact}/manifest.json",
       "target": "WwcbWwcb:P-cwP-cw:WgP---P-",
       "seconds": 600,
       "min_produced": 1,
@@ -26,8 +26,8 @@
     },
     {
       "name": "crystal-without-pins",
-      "blueprint": "${LAB}/compact/CMAM compact full-rate.spz2bp",
-      "production_manifest": "${LAB}/compact/manifest.json",
+      "blueprint": "${TASK:cmam-compact}/CMAM compact full-rate.spz2bp",
+      "production_manifest": "${TASK:cmam-compact}/manifest.json",
       "target": "WwcbWwcb:cwcwcwcw:WgP---P-",
       "seconds": 600,
       "min_produced": 1,
@@ -38,8 +38,8 @@
     },
     {
       "name": "isolated-pin-crystal",
-      "blueprint": "${LAB}/compact/CMAM compact full-rate.spz2bp",
-      "production_manifest": "${LAB}/compact/manifest.json",
+      "blueprint": "${TASK:cmam-compact}/CMAM compact full-rate.spz2bp",
+      "production_manifest": "${TASK:cmam-compact}/manifest.json",
       "target": "P-cwP-cw",
       "seconds": 600,
       "min_produced": 1,

@@ -1,9 +1,11 @@
+use crate::design::CmamDesign;
 use anyhow::{Result, ensure};
 use serde_json::{Value, json};
+use shapez_core::interface::{DemandPort, FactoryInterface, RateManifest, SupplyPort};
 use shapez_core::{
     Blueprint, encode_blueprint,
-    geometry::{ChunkPos, Direction, GridBounds},
-    routing::{SearchOptions, TransportNet, TransportProblem, solve_transport},
+    geometry::{ChunkPos, Direction, TilePos},
+    routing::{TransportNet, TransportProblem, solve_transport},
     space::space_island,
 };
 use std::{
@@ -14,10 +16,29 @@ use std::{
 fn n(v: &Value, k: &str) -> i32 {
     v[k].as_i64().unwrap_or(0) as i32
 }
-pub fn compact_cmam(input: &Path, rgb: &Path, out: &Path) -> Result<Value> {
-    let original = Blueprint::read(input)?;
-    let rgb = Blueprint::read(rgb)?;
-    ensure!(original.islands().len() == 108, "Expected original CMAM");
+pub struct CompactBuild {
+    pub blueprint: Blueprint,
+    pub manifest: Value,
+}
+
+pub fn build_compact(
+    original: &Blueprint,
+    rgb: &Blueprint,
+    previous: Option<&Blueprint>,
+    design: &CmamDesign,
+) -> Result<CompactBuild> {
+    ensure!(
+        original.islands().len() == design.expected_islands,
+        "Expected original CMAM"
+    );
+    ensure!(!rgb.islands().is_empty(), "RGB template requires an island");
+    ensure!(
+        design
+            .supply_groups
+            .iter()
+            .all(|g| g.modules.end <= design.module_offsets.len()),
+        "Supply group refers to missing module"
+    );
     let mut islands = vec![];
     let mut blocked = HashSet::new();
     let mut cuts = vec![];
@@ -35,7 +56,7 @@ pub fn compact_cmam(input: &Path, rgb: &Path, out: &Path) -> Result<Value> {
         }) {
             continue;
         }
-        cuts.push(json!([n(i, "X"), n(i, "Y"), 0]));
+        cuts.push(ChunkPos(n(i, "X"), n(i, "Y"), 0));
         for b in bs {
             blocked.insert(ChunkPos(
                 (n(i, "X") * 20 + n(b, "X")).div_euclid(20),
@@ -49,11 +70,11 @@ pub fn compact_cmam(input: &Path, rgb: &Path, out: &Path) -> Result<Value> {
         .iter()
         .map(|i| i["B"]["Entries"].as_array().unwrap().len())
         .sum();
-    for j in 0..5 {
+    for &offset in &design.module_offsets {
         let mut i = rgb.islands()[0].clone();
-        i["X"] = json!(-16 + 5 * j);
+        i["X"] = json!(-16 + offset);
         i["Y"] = json!(-2);
-        for x in -17 + 5 * j..=-15 + 5 * j {
+        for x in -17 + offset..=-15 + offset {
             blocked.insert(ChunkPos(x, -2, 0));
         }
         islands.push(i);
@@ -64,17 +85,21 @@ pub fn compact_cmam(input: &Path, rgb: &Path, out: &Path) -> Result<Value> {
     let labels = [
         "P-P-P-P-", "CuCuCuCu", "RuRuRuRu", "SuSuSuSu", "WuWuWuWu", "r", "g", "b",
     ];
-    for group in 0..2 {
-        let start = if group == 0 { -18 } else { -3 };
+    for group in &design.supply_groups {
+        let start = group.start_x;
         for (kind, label) in labels.iter().enumerate() {
             let x = start + kind as i32;
             let fluid = kind >= 5;
             islands.push(json!({"T":if fluid{"Layout_TrainUnloader_Fluids"}else{"Layout_TrainUnloader_Shapes"},"X":x,"Y":-7,"R":2}));
             blocked.insert(ChunkPos(x, -7, 0));
             blocked.insert(ChunkPos(x, -6, 0));
-            sources.push(json!({"chunk":[x,-7,0],"item":label}));
+            sources.push(SupplyPort {
+                chunk: ChunkPos(x, -7, 0),
+                item: (*label).to_owned().try_into()?,
+            });
             let mut ends = vec![];
-            for j in if group == 0 { 0..3 } else { 3..5 } {
+            for j in group.modules.clone() {
+                let offset = design.module_offsets[j];
                 let (col, y, d) = match kind {
                     0 => (-18, 1, 1),
                     1 => (-19, 5, 3),
@@ -85,7 +110,7 @@ pub fn compact_cmam(input: &Path, rgb: &Path, out: &Path) -> Result<Value> {
                     6 => (-16, -3, 1),
                     _ => (-15, -3, 1),
                 };
-                ends.push((ChunkPos(col + j * 5, y, 0), Direction::ALL[d]));
+                ends.push((ChunkPos(col + offset, y, 0), Direction::ALL[d]));
             }
             nets.push(TransportNet {
                 root: ChunkPos(x, -5, 0),
@@ -102,12 +127,12 @@ pub fn compact_cmam(input: &Path, rgb: &Path, out: &Path) -> Result<Value> {
         islands.push(json!({"T":if x== -19||x== -4{"Layout_TrainQuickStation"}else{"Rail_Forward"},"X":x,"Y":-7,"R":2,"S":"AQAAAAA="}));
         blocked.insert(ChunkPos(x, -7, 0));
     }
-    for j in 0..5 {
+    for &offset in &design.module_offsets {
         for (port, col, y, d) in [(0, -18, 5, 3), (1, -16, 1, 1), (2, -15, 1, 1)] {
             nets.push(TransportNet {
-                root: ChunkPos(-17 + 5 * j + port, -1, 0),
+                root: ChunkPos(-17 + offset + port, -1, 0),
                 heading: Direction::South,
-                ends: vec![(ChunkPos(col + 5 * j, y, 0), Direction::ALL[d])],
+                ends: vec![(ChunkPos(col + offset, y, 0), Direction::ALL[d])],
                 fluid: true,
             });
         }
@@ -120,12 +145,16 @@ pub fn compact_cmam(input: &Path, rgb: &Path, out: &Path) -> Result<Value> {
                     (-19, 97, "CuCuCuCu"),
                     (-17, 97, "RuRuRuRu"),
                 ] {
-                    targets.push(json!({"tile":[(col+5*j)*20+8+k,y,z],"item":item}));
+                    targets.push(DemandPort {
+                        tile: TilePos((col + offset) * 20 + 8 + k, y, z),
+                        item: item.to_owned().try_into()?,
+                    });
                 }
                 for (col, y) in [(-16, 42), (-15, 42), (-18, 97)] {
-                    targets.push(
-                        json!({"tile":[(col+5*j)*20+8+k,y,z],"item":(["b","g","r"][z as usize])}),
-                    );
+                    targets.push(DemandPort {
+                        tile: TilePos((col + offset) * 20 + 8 + k, y, z),
+                        item: ["b", "g", "r"][z as usize].to_owned().try_into()?,
+                    });
                 }
             }
         }
@@ -145,46 +174,59 @@ pub fn compact_cmam(input: &Path, rgb: &Path, out: &Path) -> Result<Value> {
         nets,
         blocked,
         reserved,
-        bounds: GridBounds {
-            min: ChunkPos(-24, -9, 0),
-            max: ChunkPos(12, 7, 2),
-        },
+        bounds: design.routing_bounds,
     };
-    let nodes = solve_transport(
-        &problem,
-        SearchOptions {
-            attempts: 80,
-            seed: 1,
-        },
-    )?;
+    let nodes = solve_transport(&problem, design.search)?;
     let mut routing = vec![];
     let ordered: BTreeMap<_, _> = nodes.iter().collect();
     for (&p, node) in ordered {
         islands.push(space_island(p, node, problem.nets[node.owner].fluid));
         routing.push(json!({"p":p,"net":node.owner,"input":node.input.index(),"out_z":node.zout,"outputs":node.outputs.iter().map(|d|d.index()).collect::<Vec<_>>()}));
     }
-    let mut bp = original.value;
+    let mut bp = original.value.clone();
     bp["BP"]["Entries"] = json!(islands);
     let result = Blueprint { value: bp };
-    fs::create_dir_all(out)?;
-    let path = out.join("CMAM compact full-rate.spz2bp");
-    fs::write(&path, encode_blueprint(&result.value)?)?;
-    let previous = out.parent().unwrap().join("adapter/CMAM connected.spz2bp");
-    let previous = if previous.exists() {
-        Some(Blueprint::read(previous)?)
-    } else {
-        None
+    let boundary = RateManifest {
+        interface: FactoryInterface { sources, targets },
+        cut_islands: cuts,
     };
-    let manifest = json!({"sources":sources,"targets":targets,"cut_islands":cuts,"space_ratio":4,"production_buildings":production_buildings,"space_nodes":nodes.len(),"routing":routing,"summary":result.summary(),"bounds":bounds(&result),"previous":previous.as_ref().map(|p|json!({"summary":p.summary(),"bounds":bounds(p)}))});
-    fs::write(
-        out.join("manifest.json"),
-        serde_json::to_vec_pretty(&manifest)?,
-    )?;
-    fs::write(
-        out.join("review.html"),
-        include_str!("compact_review.html").replace("__DATA__", &serde_json::to_string(&manifest)?),
-    )?;
-    Ok(manifest)
+    let manifest = json!({"sources":boundary.interface.sources,"targets":boundary.interface.targets,"cut_islands":boundary.cut_islands,"space_ratio":4,"production_buildings":production_buildings,"space_nodes":nodes.len(),"routing":routing,"summary":result.summary(),"bounds":bounds(&result),"production":{"output_chunk":design.accepted_output,"signal_receivers":design.signal_receivers},"previous":previous.map(|p|json!({"summary":p.summary(),"bounds":bounds(p)}))});
+    Ok(CompactBuild {
+        blueprint: result,
+        manifest,
+    })
+}
+impl CompactBuild {
+    pub fn write(&self, out: &Path) -> Result<()> {
+        fs::create_dir_all(out)?;
+        fs::write(
+            out.join("CMAM compact full-rate.spz2bp"),
+            encode_blueprint(&self.blueprint.value)?,
+        )?;
+        fs::write(
+            out.join("manifest.json"),
+            serde_json::to_vec_pretty(&self.manifest)?,
+        )?;
+        fs::write(
+            out.join("review.html"),
+            include_str!("compact_review.html")
+                .replace("__DATA__", &serde_json::to_string(&self.manifest)?),
+        )?;
+        Ok(())
+    }
+}
+pub fn compact_cmam(
+    input: &Path,
+    rgb: &Path,
+    out: &Path,
+    previous: Option<&Path>,
+) -> Result<Value> {
+    let input = Blueprint::read(input)?;
+    let rgb = Blueprint::read(rgb)?;
+    let previous = previous.map(Blueprint::read).transpose()?;
+    let build = build_compact(&input, &rgb, previous.as_ref(), &CmamDesign::default())?;
+    build.write(out)?;
+    Ok(build.manifest)
 }
 
 fn bounds(bp: &Blueprint) -> Value {
