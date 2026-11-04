@@ -58,7 +58,7 @@ Rust 继续在运行入口调用 `dotnet build` 构建公共 Mod 和任务插件
 
 临时副本的启动桥接只运行原生设置、玩家基础对象、游戏模式/核心数据初始化；跳过交互控制、音频系统、渲染系统、HUD、成就和调试控制台初始化，禁用摄像机与宿主地图每帧 Tick。保留内容加载所需的图形设备。此版本的资源加载不能直接使用 Unity `-nographics`，因此采用停止渲染而保留资源加载的方式。
 
-本次裁剪实例启动约 **3–4 秒**；新版的 420 模拟秒满速用例（含导入、测量和图导出）实测约 **5.6 秒**。完整六项套件结果在运行目录 `report.json`，各项含 `wall_seconds`，启动数据在 `ready.json`。
+本次裁剪实例启动约 **3–4 秒**；新版的 420 模拟秒满速用例（含导入、测量和图导出）实测约 **5.6 秒**。完整七项套件结果在运行目录 `report.json`，各项含 `wall_seconds`，启动数据在 `ready.json`。
 
 Managed DLL 是独立副本，其他只读发行资源使用硬链接。HostPrep 只处理带标记的暂存目录，并输出 `patch-audit.json`；游戏 DLL 不提交或分发。
 
@@ -66,6 +66,8 @@ Managed DLL 是独立副本，其他只读发行资源使用硬链接。HostPrep
 ## 任务命令
 
 CMAM 入口的 `inspect` 输出蓝图摘要，`decode` 解压到独立运行目录；两个任务都提供 `prepare`、`probe` 和 `test`。`probe --operation capacities` 查询原生速度及运输类型。任务的 `test [suite.json]` 在同一宿主中执行用例，错误请求可通过 `expected_ok: false` 验收。
+
+`decode` 输出完整类型化模型（包含图标和来源格式版本），可以直接通过 `Blueprint::read` 读取。`reencode <blueprint>` 将既有蓝图转换为当前格式，输出到新的独立运行目录，保留源文件。蓝图模型、格式及图库旧版警告的原因见[蓝图格式说明](docs/blueprint-format.md)。
 
 读取存档副本时设置 `SHAPEZ_LAB_SAVE`，再运行 `probe --operation inspect-save`。原生宿主复制存档后加载，不保存回源文件；批量请求可通过 `seconds` 推进副本。
 

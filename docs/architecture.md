@@ -7,6 +7,8 @@
 - `shapez-model`：形状、颜色、坐标、端口、加工 DAG、验证后配方及运输问题/结果模型。
 - `shapez-routing`：运输求解算法；依赖 `shapez-model`。
 - `shapez-blueprint`：蓝图编解码、摘要及游戏建筑编码；依赖 `shapez-model`。
+
+蓝图在输入边界解析为 `Blueprint`、`BlueprintContent`、`IslandBlueprint`、`BuildingBlueprint`、`Island` 和 `Building`。配置为解码后的 `Configuration(Vec<u8>)`，旋转为受约束的 `Rotation`；图标为四槽 `BlueprintIcon`。公共模型和任务算法均不携带原始 JSON、`serde_json::Value` 或未知字段字典。Newtonsoft 的 `$values`/`$value` 包装只在解码时处理；遇到未建模字段会报错，避免重写时丢失信息。具体格式与原生验证见[蓝图格式说明](blueprint-format.md)。
 - `shapez-runtime`：原生宿主生命周期、请求协议、批量执行与运行目录。
 
 `shapez-routing` 与 `shapez-blueprint` 相互独立，调用方负责将路由结果交给蓝图编码器。没有汇总所有功能的 core crate，也没有公共可执行入口。

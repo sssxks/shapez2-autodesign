@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use shapez_blueprint::Blueprint;
+use shapez_blueprint::{Blueprint, encode_blueprint};
 use shapez_runtime::{Host, LabPaths, RunDirectory, prepare_host, run_suite};
 use std::{fs, path::PathBuf, time::Duration};
 
@@ -27,6 +27,10 @@ enum Command {
         blueprint: PathBuf,
     },
     Decode {
+        blueprint: PathBuf,
+    },
+    /// Rewrite an existing blueprint using the current format and typed model.
+    Reencode {
         blueprint: PathBuf,
     },
     Build {
@@ -81,6 +85,19 @@ fn main() -> Result<()> {
                 &output,
                 serde_json::to_vec_pretty(&Blueprint::read(input)?)?,
             )?;
+            println!("{}", output.display());
+            Ok(())
+        }
+        Command::Reencode { blueprint } => {
+            let run = RunDirectory::create(&paths.root, "blueprint-reencode")?;
+            let input = run.snapshot(&blueprint, "source.spz2bp")?;
+            let model = Blueprint::read(input)?;
+            let output = run.path.join(
+                blueprint
+                    .file_name()
+                    .ok_or_else(|| anyhow::anyhow!("Blueprint filename required"))?,
+            );
+            fs::write(&output, encode_blueprint(&model)?)?;
             println!("{}", output.display());
             Ok(())
         }
