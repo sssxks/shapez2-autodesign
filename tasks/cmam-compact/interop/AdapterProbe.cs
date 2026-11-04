@@ -32,8 +32,8 @@ internal sealed class AdapterProbe {
  readonly HashSet<(int,int,int)> fluidsSeen=new HashSet<(int,int,int)>();
  int injected;
  internal AdapterProbe(ISimulator simulator){
-  var session=LabWorld.Session;var registry=LabWorld.Field<ShapeRegistry>(session,"ShapeRegistry");var ids=LabWorld.Field<IShapeIdManager>(session,"ShapeIdManager");
-  var fluids=LabWorld.Field<Dictionary<IFluid,FluidId>>(LabWorld.Field<object>(session,"FluidRegistry"),"FluidReferenceToIdLookup").Keys.OfType<ColorFluid>().ToArray();
+  var session=GameBindings.Session;var registry=GameBindings.Field<ShapeRegistry>(session,"ShapeRegistry");var ids=GameBindings.Field<IShapeIdManager>(session,"ShapeIdManager");
+  var fluids=GameBindings.Field<Dictionary<IFluid,FluidId>>(GameBindings.Field<object>(session,"FluidRegistry"),"FluidReferenceToIdLookup").Keys.OfType<ColorFluid>().ToArray();
   foreach(var localized in simulator.Simulations){
    var sim=localized.Simulation;
    if(sim.GetType().Name.StartsWith("TrainCargoUnloaderSimulation")){

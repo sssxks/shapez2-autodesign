@@ -18,27 +18,22 @@ using Game.Content.Features.Signals.Channels;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-internal sealed class LabWorld:IDisposable {
+public sealed class LabWorld:IDisposable {
  readonly MapLayout layout;readonly Map map;readonly MapModel model;readonly Simulator simulator;
  readonly SimulationGraph graph;readonly ISimulationSystem[] systems;readonly ProcessingUpdateStrategy strategy;
  readonly GameMode mode;readonly ILogger logger;readonly BlueprintRawDataConverter converter;readonly IBlueprintImporter importer;
- public static object Session {
-  get{if(LabBootstrap.Session!=null)return LabBootstrap.Session;var orchestrator=typeof(GameBootstrapper).GetField("GameOrchestrator",BindingFlags.Static|BindingFlags.NonPublic).GetValue(null);
-   var session=Field<object>(orchestrator,"CurrentSubOrchestrator");if(!(session is GameSessionOrchestrator))throw new InvalidOperationException("Game session is not ready");return session;}
- }
- internal static T Field<T>(object obj,string name)=>(T)obj.GetType().GetField(name,BindingFlags.NonPublic|BindingFlags.Public|BindingFlags.Instance).GetValue(obj);
  public LabWorld(){
-  var session=Session;logger=Field<ILogger>(session,"Logger");mode=Field<GameMode>(session,"Mode");
-  var deps=Field<DependencyContainer>(session,"DependencyContainer");
-  var generator=new DefaultMapGenerator(mode.Seed,mode.MapGenerationParameters,mode.Scenario.StartingLocation,mode.ShapesConfiguration,mode.ShapeColorScheme,Field<ShapeRegistry>(session,"ShapeRegistry"),Field<IShapeIdManager>(session,"ShapeIdManager"));
+  var session=GameBindings.Session;logger=GameBindings.Field<ILogger>(session,"Logger");mode=GameBindings.Field<GameMode>(session,"Mode");
+  var deps=GameBindings.Field<DependencyContainer>(session,"DependencyContainer");
+  var generator=new DefaultMapGenerator(mode.Seed,mode.MapGenerationParameters,mode.Scenario.StartingLocation,mode.ShapesConfiguration,mode.ShapeColorScheme,GameBindings.Field<ShapeRegistry>(session,"ShapeRegistry"),GameBindings.Field<IShapeIdManager>(session,"ShapeIdManager"));
   var resources=new GameResourcesMap(generator);
   // Construct a new system collection. Stateful systems must never be shared with the host map.
   var constructor=typeof(BuiltinSimulationSystems).GetConstructors().Single();
   var values=constructor.GetParameters().Select(p=>p.Name switch {
-   "initialSimulationTime"=>(object)Ticks.Zero,"shapeOperations"=>Field<object>(session,"ShapeOperations"),
-   "mode"=>mode,"shapeRegistry"=>Field<object>(session,"ShapeRegistry"),"shapeIdManager"=>Field<object>(session,"ShapeIdManager"),
-   "resourcesMap"=>resources,"fluidRegistry"=>Field<object>(session,"FluidRegistry"),"packageItemSolver"=>Field<object>(session,"FluidPackageItemSolver"),
-   "signalChannelRegistry"=>new SignalChannelRegistry(Enumerable.Empty<(SignalChannelId,IReadOnlySignalChannel)>()),"researchUnlockManager"=>Field<ResearchManager>(session,"Research").UnlockManager,
+   "initialSimulationTime"=>(object)Ticks.Zero,"shapeOperations"=>GameBindings.Field<object>(session,"ShapeOperations"),
+   "mode"=>mode,"shapeRegistry"=>GameBindings.Field<object>(session,"ShapeRegistry"),"shapeIdManager"=>GameBindings.Field<object>(session,"ShapeIdManager"),
+   "resourcesMap"=>resources,"fluidRegistry"=>GameBindings.Field<object>(session,"FluidRegistry"),"packageItemSolver"=>GameBindings.Field<object>(session,"FluidPackageItemSolver"),
+   "signalChannelRegistry"=>new SignalChannelRegistry(Enumerable.Empty<(SignalChannelId,IReadOnlySignalChannel)>()),"researchUnlockManager"=>GameBindings.Field<ResearchManager>(session,"Research").UnlockManager,
    "logger"=>logger,_=>throw new InvalidOperationException("Unknown dependency: "+p.Name)
   }).ToArray();
   systems=((BuiltinSimulationSystems)constructor.Invoke(values)).CreateSimulationSystems().ToArray();
@@ -48,7 +43,17 @@ internal sealed class LabWorld:IDisposable {
   importer=LabBootstrap.Importer??deps.Resolve<IBlueprintImporter>();
   converter=new BlueprintRawDataConverter(((GameSessionOrchestrator)session).DataSerializers,logger);
  }
+ public Simulator Simulator=>simulator;
+ public void Advance(int seconds, int ticksPerSecond, Action before=null, Action after=null){
+  if(seconds<0||ticksPerSecond<=0)throw new ArgumentException("Invalid simulation duration or step");
+  var lods=model.Islands.SelectMany(i=>i.Definition.Layout.GetChunkPositions().Select(c=>SimulationLOD.Highest(c.ToGlobal(i.Transform)))).ToArray();
+  var update=new SimulationUpdateConfiguration(lods,TimeSpan.Zero,1);
+  var delta=Ticks.OneSecond/ticksPerSecond;
+  for(int i=0;i<checked(seconds*ticksPerSecond);i++){before?.Invoke();simulator.SynchronousUpdate(delta,update,strategy);after?.Invoke();}
+ }
  public object Run(JObject args,string root){
+  var experiment=BlueprintExperiment.Load(args["experiment"] as JObject);
+  experiment?.Configure(args);
   var path=(string)args["blueprint"];if(string.IsNullOrEmpty(path))throw new ArgumentException("blueprint path required");
   if(!importer.TryImport(File.ReadAllText(path),out var annotated,out var version,out var error))throw error;
   if(!(annotated.Blueprint is IslandBlueprint blueprint))throw new ArgumentException("Island blueprint required");
@@ -70,34 +75,17 @@ internal sealed class LabWorld:IDisposable {
     if(building.AdditionalConfigData!=null&&config!=null)converter.DeserializeByteArrayIntoData(building.AdditionalConfigData,GameVersionEnvironment.CurrentVersion,config.Sync);
     var t=new LocalTileTransform(building.Tile_L,building.Rotation).ToGlobal(new GlobalChunkTransform(transform.Position,default(GridRotation)));
     if(rateProbe!=null&&rateProbe.CutIslands.Contains((entry.Chunk_L.x,entry.Chunk_L.y,entry.Chunk_L.z))&&!rateProbe.Targets.ContainsKey((t.Position.x,t.Position.y,t.Position.z)))continue;
-    if((bool?)args["adapter_probe"]==true&&!AdapterProbe.KeepBuilding(t.Position))continue;
+    if(experiment!=null&&!experiment.KeepBuilding(t.Position))continue;
     model.CreateBuilding(building.Definition,t,config);
    }
   }
   }
   if(args["expected_buildings"]!=null && (int)args["expected_buildings"]!=model.BuildingCount)throw new Exception("Building count mismatch");
   var seconds=(int?)args["seconds"]??1;
-  var lods=model.Islands.SelectMany(i=>i.Definition.Layout.GetChunkPositions().Select(c=>SimulationLOD.Highest(c.ToGlobal(i.Transform)))).ToArray();
-  var update=new SimulationUpdateConfiguration(lods,TimeSpan.Zero,1);
   object probeReport=null;
-  if(args["production_manifest"]!=null){
-   var production=new ProductionProbe(simulator,JObject.Parse(File.ReadAllText((string)args["production_manifest"])),(string)args["target"]);
-   for(int i=0;i<seconds*10;i++){production.BeforeTick(simulator.SimulationTime,Ticks.OneSecond/10);simulator.SynchronousUpdate(Ticks.OneSecond/10,update,strategy);}
-   var productionName=(string)args["name"]??"production";
-   if(productionName.IndexOfAny(Path.GetInvalidFileNameChars())>=0)throw new ArgumentException("Invalid case name");
-   probeReport=production.Report();File.WriteAllText(Path.Combine(root,productionName+"-production.json"),JsonConvert.SerializeObject(probeReport,Formatting.Indented));
-   if(args["min_produced"]!=null&&production.Produced<(long)args["min_produced"])throw new Exception("Production below required count: "+production.Produced);
-  }else if(rateProbe!=null){
-   rateProbe.Attach(simulator,rateManifest);var warmup=(int?)args["warmup_seconds"]??300;
-   for(int i=0;i<(warmup+seconds)*10;i++){if(i==warmup*10)rateProbe.ResetMeters();rateProbe.BeforeTick();simulator.SynchronousUpdate(Ticks.OneSecond/10,update,strategy);rateProbe.AfterTick();}
-   var report=rateProbe.Report(seconds);probeReport=report;File.WriteAllText(Path.Combine(root,"rate-report.json"),report.ToString());
-   if((double)report["min_shape_ratio"]<0.99||(double)report["min_fluid_ratio"]<0.99)throw new Exception("Full-rate test failed. Shape minimum="+report["min_shape_ratio"]+", fluid minimum="+report["min_fluid_ratio"]);
-  }else if((bool?)args["adapter_probe"]==true){
-   var probe=new AdapterProbe(simulator);bool complete=false;
-   for(int i=0;i<seconds*10;i++){probe.BeforeTick();simulator.SynchronousUpdate(Ticks.OneSecond/10,update,strategy);if(probe.AfterTick()){complete=true;break;}}
-   probeReport=probe.Report();File.WriteAllText(Path.Combine(root,"adapter-flow.json"),JsonConvert.SerializeObject(probeReport));
-   if(!complete)throw new Exception("Adapter flow did not reach every inlet: "+JsonConvert.SerializeObject(probeReport));
-  }else for(int i=0;i<seconds*60;i++)simulator.SynchronousUpdate(Ticks.OneSecond/60,update,strategy);
+  if(experiment!=null)probeReport=experiment.Run(this,args,root);
+  else if(rateProbe!=null)probeReport=RateScenario.Run(this,rateProbe,rateManifest,args,root);
+  else Advance(seconds,60);
   var nodes=new List<object>();var open=new List<object>();
   foreach(var sim in ((ISimulator)simulator).Simulations){
    var positions=new List<int[]>();if(sim is ILocalizedTileSimulation tile)for(int i=0;i<tile.NumOccupiedTiles;i++){var p=tile.GetOccupiedTile(i);positions.Add(new[]{p.x,p.y,(int)p.z});}

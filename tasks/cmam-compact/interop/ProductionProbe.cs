@@ -9,13 +9,13 @@ using Newtonsoft.Json.Linq;
 internal sealed class ProductionProbe {
  // Supply native unloaders, keep the complete factory, and observe its existing
  // trash events. Unlike RateProbe's demand test, no production lanes are cut.
- readonly RateProbe supply;readonly List<ConstantSignalSimulation> drivers=new List<ConstantSignalSimulation>();
+ readonly UnloaderSupply supply;readonly List<ConstantSignalSimulation> drivers=new List<ConstantSignalSimulation>();
  readonly Dictionary<string,long> trash=new Dictionary<string,long>();readonly Dictionary<string,long> output=new Dictionary<string,long>();
  readonly string target;
  readonly Dictionary<string,long> discardedAt=new Dictionary<string,long>();
  internal ProductionProbe(ISimulator simulator,JObject manifest,string target){
-  this.target=target;supply=new RateProbe(manifest);supply.Attach(simulator,manifest,true);
-  var session=LabWorld.Session;var registry=LabWorld.Field<ShapeRegistry>(session,"ShapeRegistry");var ids=LabWorld.Field<IShapeIdManager>(session,"ShapeIdManager");
+  this.target=target;supply=new UnloaderSupply(simulator,manifest);
+  var session=GameBindings.Session;var registry=GameBindings.Field<ShapeRegistry>(session,"ShapeRegistry");var ids=GameBindings.Field<IShapeIdManager>(session,"ShapeIdManager");
   var signal=BeltItemSignal.From(registry.GetItem(ids.Resolve(target)));
   foreach(var localized in simulator.Simulations){
    // The isolated world has no operator channels. Drive the receiver's normal

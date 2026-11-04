@@ -9,10 +9,10 @@ internal static class RecipeProbe {
  internal static object Run(JObject args,string root){
   var recipe=JObject.Parse(File.ReadAllText((string)args["recipe"]));
   File.WriteAllText(Path.Combine(root,"recipe.json"),recipe.ToString());
-  var session=LabWorld.Session;var ops=LabWorld.Field<ShapeOperations>(session,"ShapeOperations");
-  var registry=LabWorld.Field<ShapeRegistry>(session,"ShapeRegistry");var ids=LabWorld.Field<IShapeIdManager>(session,"ShapeIdManager");
-  var fluids=LabWorld.Field<FluidRegistry>(session,"FluidRegistry");
-  var colors=LabWorld.Field<Dictionary<IFluid,FluidId>>(fluids,"FluidReferenceToIdLookup").Keys.OfType<ColorFluid>().ToArray();
+  var session=GameBindings.Session;var ops=GameBindings.Field<ShapeOperations>(session,"ShapeOperations");
+  var registry=GameBindings.Field<ShapeRegistry>(session,"ShapeRegistry");var ids=GameBindings.Field<IShapeIdManager>(session,"ShapeIdManager");
+  var fluids=GameBindings.Field<FluidRegistry>(session,"FluidRegistry");
+  var colors=GameBindings.Field<Dictionary<IFluid,FluidId>>(fluids,"FluidReferenceToIdLookup").Keys.OfType<ColorFluid>().ToArray();
   var values=new List<IItem>();var trace=new List<object>();
   foreach(JObject node in recipe["nodes"]){
    var op=(string)node["op"];var expected=(string)node["expected"];var inputs=node["inputs"].Select(x=>values[(int)x]).ToArray();

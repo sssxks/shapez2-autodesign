@@ -37,12 +37,12 @@ public sealed class LabService:MonoBehaviour {
    case "recipe":return RecipeProbe.Run(args,root);
    case "inspect-save":return SaveInspection.Read(args);
    case "capacities":
-    var mode=LabWorld.Field<GameMode>(LabWorld.Session,"Mode");
+    var mode=GameBindings.Field<GameMode>(GameBindings.Session,"Mode");
     BeltSpeed belt=mode.Buildings.ForwardBelt.ConfigAs<IConveyorConfiguration>().ConveyorSpeed;
     BeltSpeed space=mode.Islands.SpaceBelts.First().ConfigAs<SpacePathConfiguration>().SpaceConveyorSpeed;
     BeltSpeed pipe=mode.Islands.SpacePipes.First().ConfigAs<SpacePathConfiguration>().SpaceConveyorSpeed;
     return new{belt=belt.ToString(),space=space.ToString(),pipe=pipe.ToString(),space_ratio=(double)space.StepsPerTick.Value/belt.StepsPerTick.Value,mode.MinIslandLayer,mode.MaxIslandLayer,space_ids=mode.Islands.SpaceBelts.Select(x=>x.Id.ToString()).ToArray(),pipe_ids=mode.Islands.SpacePipes.Select(x=>x.Id.ToString()).ToArray()};
-   case "capabilities":return new{game=Application.version,data=GameEnvironment.DataPath,simulator="Simulator",headless=true,operations=new[]{"capabilities","blueprint","catalog","capacities"}};
+   case "capabilities":return new{game=Application.version,data=GameEnvironment.DataPath,simulator="Simulator",headless=true,operations=new[]{"capabilities","blueprint","catalog","capacities","recipe","inspect-save"}};
    case "blueprint":using(var world=new LabWorld())return world.Run(args,root);
    case "catalog":
     var definitions=new JObject();

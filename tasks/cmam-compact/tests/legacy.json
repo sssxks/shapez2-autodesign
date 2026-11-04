@@ -1,11 +1,46 @@
 {
   "cases": [
-    {"name": "host-capabilities", "operation": "capabilities"},
-    {"name": "unknown-operation-rejected", "operation": "deliberately-invalid", "expected_ok": false},
-    {"name": "host-recovers-after-case-error", "operation": "capabilities"},
-    {"name": "original-cmam", "blueprint": "${LIBRARY}/CMAM not connected.spz2bp", "expected_buildings": 52375, "seconds": 1},
-    {"name": "connected-cmam", "blueprint": "${LAB}/adapter/CMAM connected.spz2bp", "expected_buildings": 142208, "seconds": 1},
-    {"name": "adapter-480-inlets", "blueprint": "${LAB}/adapter/CMAM connected.spz2bp", "adapter_probe": true, "seconds": 1200},
-    {"name": "host-survives-world-disposal", "operation": "capabilities"}
+    {
+      "name": "host-capabilities",
+      "operation": "capabilities"
+    },
+    {
+      "name": "unknown-operation-rejected",
+      "operation": "deliberately-invalid",
+      "expected_ok": false
+    },
+    {
+      "name": "host-recovers-after-case-error",
+      "operation": "capabilities"
+    },
+    {
+      "name": "original-cmam",
+      "blueprint": "${LIBRARY}/CMAM not connected.spz2bp",
+      "expected_buildings": 52375,
+      "seconds": 1
+    },
+    {
+      "name": "connected-cmam",
+      "blueprint": "${LAB}/adapter/CMAM connected.spz2bp",
+      "expected_buildings": 142208,
+      "seconds": 1
+    },
+    {
+      "name": "adapter-480-inlets",
+      "blueprint": "${LAB}/adapter/CMAM connected.spz2bp",
+      "adapter_probe": true,
+      "seconds": 1200,
+      "experiment": {
+        "assembly": "${LAB}/bin/CmamTask/Release/netstandard2.1/ShapezLab.Cmam.dll",
+        "type": "CmamExperiment"
+      }
+    },
+    {
+      "name": "host-survives-world-disposal",
+      "operation": "capabilities"
+    }
+  ],
+  "projects": [
+    "${REPO}/tasks/cmam-compact/interop/CmamTask.csproj"
   ]
 }

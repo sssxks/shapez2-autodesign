@@ -6,7 +6,11 @@
       "production_manifest": "${LAB}/compact/manifest.json",
       "target": "WrWr----:CuCu----",
       "seconds": 600,
-      "min_produced": 1
+      "min_produced": 1,
+      "experiment": {
+        "assembly": "${LAB}/bin/CmamTask/Release/netstandard2.1/ShapezLab.Cmam.dll",
+        "type": "CmamExperiment"
+      }
     },
     {
       "name": "pin-crystal-target",
@@ -14,7 +18,11 @@
       "production_manifest": "${LAB}/compact/manifest.json",
       "target": "WwcbWwcb:P-cwP-cw:WgP---P-",
       "seconds": 600,
-      "min_produced": 1
+      "min_produced": 1,
+      "experiment": {
+        "assembly": "${LAB}/bin/CmamTask/Release/netstandard2.1/ShapezLab.Cmam.dll",
+        "type": "CmamExperiment"
+      }
     },
     {
       "name": "crystal-without-pins",
@@ -22,7 +30,11 @@
       "production_manifest": "${LAB}/compact/manifest.json",
       "target": "WwcbWwcb:cwcwcwcw:WgP---P-",
       "seconds": 600,
-      "min_produced": 1
+      "min_produced": 1,
+      "experiment": {
+        "assembly": "${LAB}/bin/CmamTask/Release/netstandard2.1/ShapezLab.Cmam.dll",
+        "type": "CmamExperiment"
+      }
     },
     {
       "name": "isolated-pin-crystal",
@@ -30,7 +42,14 @@
       "production_manifest": "${LAB}/compact/manifest.json",
       "target": "P-cwP-cw",
       "seconds": 600,
-      "min_produced": 1
+      "min_produced": 1,
+      "experiment": {
+        "assembly": "${LAB}/bin/CmamTask/Release/netstandard2.1/ShapezLab.Cmam.dll",
+        "type": "CmamExperiment"
+      }
     }
+  ],
+  "projects": [
+    "${REPO}/tasks/cmam-compact/interop/CmamTask.csproj"
   ]
 }

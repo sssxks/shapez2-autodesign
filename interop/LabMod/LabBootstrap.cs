@@ -21,14 +21,14 @@ public static class LabBootstrap {
   if(!string.IsNullOrEmpty(save)){
    var copy=System.IO.Path.Combine(Environment.GetEnvironmentVariable("SHAPEZ_LAB_RUN"),"inspection.spz2");
    System.IO.File.Copy(save,copy);
-   var saveLogger=LabWorld.Field<ILogger>(session,"Logger");
+   var saveLogger=GameBindings.Field<ILogger>(session,"Logger");
    var reader=new SaveFileAccessor(saveLogger).Read(copy,new Dictionary<Type,Game.Core.Serialization.IDataSerializer>());
    options=new GameStartOptionsContinueExisting(reader,false,"lab-inspection");
   }
   Invoke(session,"Init_1_GameOptions",globals,options,gameData,platform);
   Invoke(session,"Init_2_Player");
   Invoke(session,"Init_3_SavegameAndMode",content,gameData,options);
-  var logger=LabWorld.Field<ILogger>(session,"Logger");var mode=LabWorld.Field<GameMode>(session,"Mode");
+  var logger=GameBindings.Field<ILogger>(session,"Logger");var mode=GameBindings.Field<GameMode>(session,"Mode");
   var migrators=new BlueprintMigrators(logger);
   var factory=new BlueprintImporterFactory(new CustomDataConverter(new List<Game.Blueprints.IBlueprintAdditionalDataConverter>{new BlueprintIconConverter()}));
   Importer=factory.CreateImporter(mode.Buildings,mode.Islands,migrators.FormatMigrators,migrators.CandidateMigrators);
