@@ -1,4 +1,6 @@
 mod adapter;
+mod compact;
+pub use compact::compact_cmam;
 mod blueprint;
 mod host;
 pub use adapter::connect_cmam;

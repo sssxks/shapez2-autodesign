@@ -1,7 +1,7 @@
 use anyhow::{Result, ensure};
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
-use shapez_lab::{Blueprint, Host, LabPaths, connect_cmam, prepare_host};
+use shapez_lab::{Blueprint, Host, LabPaths, compact_cmam, connect_cmam, prepare_host};
 use std::{fs, path::PathBuf, time::Duration};
 #[derive(Parser)]
 struct Cli {
@@ -17,6 +17,11 @@ enum Cmd {
         blueprint: PathBuf,
     },
     Prepare,
+    Compact {
+        blueprint: PathBuf,
+        #[arg(long)]
+        rgb: PathBuf,
+    },
     Connect {
         blueprint: PathBuf,
         #[arg(long)]
@@ -40,6 +45,11 @@ fn main() -> Result<()> {
     let p = LabPaths::discover();
     fs::create_dir_all(&p.root)?;
     match Cli::parse().command {
+        Cmd::Compact { blueprint, rgb } => {
+            let report = compact_cmam(&blueprint, &rgb, &p.root.join("compact"))?;
+            println!("{}", report["summary"]);
+            println!("space nodes: {}", report["space_nodes"]);
+        }
         Cmd::Connect {
             blueprint,
             splitter,
