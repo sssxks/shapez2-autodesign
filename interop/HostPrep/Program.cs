@@ -17,9 +17,21 @@ foreach(var file in Directory.GetFiles(managed,"*.dll")) {
  if(!(name.StartsWith("Game.")||name.StartsWith("SPZ")||name=="MainMenuAssembly.dll")) continue;
  using var input=new MemoryStream(File.ReadAllBytes(file));
  using var asm=AssemblyDefinition.ReadAssembly(input,new ReaderParameters{AssemblyResolver=resolver});
- int paths=0,boot=0;
+ int paths=0,boot=0,headless=0;
  foreach(var type in Flatten(asm.MainModule.Types)) foreach(var method in type.Methods) {
   if(!method.HasBody) continue;
+  if(type.FullName=="GameSessionOrchestrator" && method.Name=="Prepare"){
+   method.Body=new MethodBody(method);var il=method.Body.GetILProcessor();
+   var reference=new AssemblyNameReference("ShapezLab",new Version(1,0,0,0));asm.MainModule.AssemblyReferences.Add(reference);
+   var bridge=new TypeReference("","LabBootstrap",asm.MainModule,reference);
+   var prepare=new MethodReference("Prepare",method.ReturnType,bridge){HasThis=false};
+   for(int i=0;i<7;i++)prepare.Parameters.Add(new ParameterDefinition(asm.MainModule.TypeSystem.Object));
+   il.Append(Instruction.Create(OpCodes.Ldarg_0));foreach(var p in method.Parameters)il.Append(Instruction.Create(OpCodes.Ldarg,p));
+   il.Append(Instruction.Create(OpCodes.Call,prepare));il.Append(Instruction.Create(OpCodes.Ret));headless++;continue;
+  }
+  if(type.FullName=="GameSessionOrchestrator" && method.Name=="Tick"){
+   method.Body=new MethodBody(method);method.Body.GetILProcessor().Append(Instruction.Create(OpCodes.Ret));headless++;continue;
+  }
   foreach(var ins in method.Body.Instructions.ToArray()) {
    if(ins.Operand is MethodReference target && target.Name=="get_persistentDataPath" && target.DeclaringType.FullName.StartsWith("UnityEngine.")) {
     // Import against the game's corlib, not the host .NET runtime.
@@ -37,9 +49,9 @@ foreach(var file in Directory.GetFiles(managed,"*.dll")) {
    il.InsertBefore(first,Instruction.Create(OpCodes.Starg,method.Parameters[0]));boot++;
   }
  }
- if(paths+boot>0) {
+ if(paths+boot+headless>0) {
   var temp=file+".lab-patched";asm.Write(temp);File.Move(temp,file,true);
-  audit.Add(new{assembly=name,persistentPathCalls=paths,quickBootConstructors=boot});
+  audit.Add(new{assembly=name,persistentPathCalls=paths,quickBootConstructors=boot,headlessMethods=headless});
  }
 }
 File.WriteAllText(Path.Combine(root,"patch-audit.json"),JsonSerializer.Serialize(audit,new JsonSerializerOptions{WriteIndented=true}));

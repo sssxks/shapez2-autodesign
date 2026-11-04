@@ -139,6 +139,7 @@ impl Host {
                     "--disable-store-sdk",
                     "--qa",
                     "-batchmode",
+                    "-noaudio",
                     "-screen-fullscreen",
                     "0",
                     "-screen-width",
