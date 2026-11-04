@@ -80,7 +80,14 @@ internal sealed class LabWorld:IDisposable {
   var lods=model.Islands.SelectMany(i=>i.Definition.Layout.GetChunkPositions().Select(c=>SimulationLOD.Highest(c.ToGlobal(i.Transform)))).ToArray();
   var update=new SimulationUpdateConfiguration(lods,TimeSpan.Zero,1);
   object probeReport=null;
-  if(rateProbe!=null){
+  if(args["production_manifest"]!=null){
+   var production=new ProductionProbe(simulator,JObject.Parse(File.ReadAllText((string)args["production_manifest"])),(string)args["target"]);
+   for(int i=0;i<seconds*10;i++){production.BeforeTick(simulator.SimulationTime,Ticks.OneSecond/10);simulator.SynchronousUpdate(Ticks.OneSecond/10,update,strategy);}
+   var productionName=(string)args["name"]??"production";
+   if(productionName.IndexOfAny(Path.GetInvalidFileNameChars())>=0)throw new ArgumentException("Invalid case name");
+   probeReport=production.Report();File.WriteAllText(Path.Combine(root,productionName+"-production.json"),JsonConvert.SerializeObject(probeReport,Formatting.Indented));
+   if(args["min_produced"]!=null&&production.Produced<(long)args["min_produced"])throw new Exception("Production below required count: "+production.Produced);
+  }else if(rateProbe!=null){
    rateProbe.Attach(simulator,rateManifest);var warmup=(int?)args["warmup_seconds"]??300;
    for(int i=0;i<(warmup+seconds)*10;i++){if(i==warmup*10)rateProbe.ResetMeters();rateProbe.BeforeTick();simulator.SynchronousUpdate(Ticks.OneSecond/10,update,strategy);rateProbe.AfterTick();}
    var report=rateProbe.Report(seconds);probeReport=report;File.WriteAllText(Path.Combine(root,"rate-report.json"),report.ToString());

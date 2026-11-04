@@ -27,7 +27,7 @@ internal sealed class RateProbe {
   public bool CanAcceptItem(IBeltItem item)=>credit>=interval;
   public void HandOverItem(IBeltItem item,Ticks remaining){if(item.ToString()!=expected)throw new Exception("Wrong shape: "+item+", expected "+expected);credit-=interval;Count++;}
  }
- internal void Attach(ISimulator simulator,JObject manifest){
+ internal void Attach(ISimulator simulator,JObject manifest,bool supplyOnly=false){
   var session=LabWorld.Session;var ids=LabWorld.Field<IShapeIdManager>(session,"ShapeIdManager");var registry=LabWorld.Field<FluidRegistry>(session,"FluidRegistry");
   var colors=LabWorld.Field<Dictionary<IFluid,FluidId>>(registry,"FluidReferenceToIdLookup").Keys.OfType<ColorFluid>().ToArray();
   var mode=LabWorld.Field<GameMode>(session,"Mode");BeltSpeed speed=mode.Buildings.ForwardBelt.ConfigAs<IConveyorConfiguration>().ConveyorSpeed;
@@ -40,13 +40,13 @@ internal sealed class RateProbe {
     if(sim is TrainCargoUnloaderSimulation<ShapeId> shape){var id=ids.Resolve(item);foreach(var f in LabWorld.Field<TrainCargoToBeltFillingContainer<ShapeId>[]>(shape,"_FillingContainers"))refill.Add(()=>{if(f.Package.Amount<1000)f.LoadPackage(new CargoPackage<ShapeId>(30000,id));});}
     else if(sim is TrainCargoUnloaderSimulation<FluidId> fluid){var id=registry.GetFluidId(colors.Single(f=>f.Color.Code==item[0]));foreach(var f in LabWorld.Field<TrainCargoToBeltFillingContainer<FluidId>[]>(fluid,"_FillingContainers"))refill.Add(()=>{if(f.Package.Amount<1000)f.LoadPackage(new CargoPackage<FluidId>(30000,id));});}
    }
-   if(!(localized is ILocalizedTileSimulation tile))continue;
+   if(supplyOnly||!(localized is ILocalizedTileSimulation tile))continue;
    for(int i=0;i<tile.NumOccupiedTiles;i++){var p=tile.GetOccupiedTile(i);var key=(p.x,p.y,(int)p.z);if(!Targets.TryGetValue(key,out var expected))continue;
     if(expected.Length>1 && sim is IItemSimulation belt && belt.NumItemProviders==1){var meter=new Meter(expected,ExpectedBeltRate);belt.GetItemProvider(0).NextLane=meter;shapes.Add(key,meter);}
     if(expected.Length==1 && sim is ISimulationComposedWithFluidPortReceiver fluid){fluids.Add(key,(fluid.FluidPortReceiverContainer,expected));volumes.Add(key,0);}
    }
   }
-  if(found!=sources.Count||shapes.Count!=300||fluids.Count!=180)throw new Exception($"Endpoint mismatch: unloaders {found}/{sources.Count}, shape lanes {shapes.Count}/300, fluid lanes {fluids.Count}/180");
+  if(found!=sources.Count||!supplyOnly&&(shapes.Count!=300||fluids.Count!=180))throw new Exception($"Endpoint mismatch: unloaders {found}/{sources.Count}, shape lanes {shapes.Count}/300, fluid lanes {fluids.Count}/180");
  }
  internal void BeforeTick(){foreach(var f in refill)f();foreach(var meter in shapes.Values)meter.Supply(Ticks.OneSecond/10);}
  internal void AfterTick(){foreach(var pair in fluids){var c=pair.Value.container;if(c.IsEmpty)continue;if((c.Fluid as ColorFluid)?.Color.Code.ToString()!=pair.Value.expected)throw new Exception("Wrong fluid at "+pair.Key);volumes[pair.Key]+=c.Value.Units;c.Take(c.Value);}}

@@ -50,6 +50,22 @@ cargo clippy --all-targets -- -D warnings
 
 `rate_manifest` 指定输入/输出边界，`warmup_seconds` 指定预热时间，`seconds` 指定测量窗口。普通带额定速率由原生 `BeltSpeed` 和 `LaneConstants.ItemSpacing` 计算；本版本流体一包 10 升，流体额定量据此计算。低于额定值的 99% 或出现串料即失败。该测试验收的是整个接入网络的输送能力。
 
+## 完整生产测试与销钉/晶体故障
+
+`cargo run -- batch tests/suites/production.json --timeout 300` 保留完整 CMAM 电路和加工链，持续补充原生卸货站货仓，将目标形状信号送入原有全局接收器的输出导线，按原生信号时钟更新。只监听现有垃圾桶事件；不切断生产带、不替换筛选器。当前 CMAM 的合格品出口是 `(9,4)` 平台，其他位置的销毁记录为中间产物或筛选废品。该出口位置是此设计专用的约定。
+
+参数 `production_manifest` 指定供料卸货站，`target` 指定目标，`seconds` 指定完整模拟时长，`min_produced` 规定合格成品下限。每例输出 `<name>-production.json`，含合格输出计数、全部销毁形状和销毁坐标。达到模拟时长并不等于生产成功，生产验收必须设置 `min_produced`。
+
+2026-11-04 原生游戏实测：
+
+- `WwcbWwcb:P-cwP-cw:WgP---P-`：600 秒合格输出 0，末端丢弃 5,073 个 `WwcbWwcb:cwcwcwcw:WgP---P-`。另一次 900 秒运行丢弃同样错误形状 12,273 个，合格输出仍为 0。
+- `WwcbWwcb:cwcwcwcw:WgP---P-`：600 秒合格输出 4,756。
+- 单独的 `P-cwP-cw`：600 秒合格输出 0，丢弃 9,145 个 `cwcwcwcw`。
+
+故障是原 CMAM 的销钉/晶体混合层加工：本地游戏 `ShapeOperationCrystallize.ExecuteInternal` 将每层的空位和销钉都替换为晶体；这台机器没有在该路径恢复目标中需要保留的销钉。原目标的第二层因此被做成整层白晶，最终筛选器正常拒收。紧凑接入生成器完整复制生产平台及其电路，未修改此加工逻辑。修复需要改造混合层的生成与组合流程。上述生产套件有意保留 `min_produced: 1`，当前原目标及最小复现用例会报失败；未交付或覆盖所谓修复蓝图。
+
+诊断记录：`%TEMP%/shapez-lab/runs/1793797114261-18528/*-production.json`；900 秒记录：`%TEMP%/shapez-lab/runs/1793796811462-24484/production-report.json`。
+
 ## 项目与临时文件
 
 - `crates/shapez-lab`：Rust workspace 中的正式 crate；蓝图读写、实例管理、CLI 和当前设计求解器。
