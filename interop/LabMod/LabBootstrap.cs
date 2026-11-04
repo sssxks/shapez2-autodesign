@@ -17,6 +17,14 @@ public static class LabBootstrap {
  internal static object Session;
  internal static IBlueprintImporter Importer;
  public static UniTask Prepare(object session,object options,object globals,object gameData,object platform,object content,object metadata){
+  var save=Environment.GetEnvironmentVariable("SHAPEZ_LAB_SAVE");
+  if(!string.IsNullOrEmpty(save)){
+   var copy=System.IO.Path.Combine(Environment.GetEnvironmentVariable("SHAPEZ_LAB_RUN"),"inspection.spz2");
+   System.IO.File.Copy(save,copy);
+   var saveLogger=LabWorld.Field<ILogger>(session,"Logger");
+   var reader=new SaveFileAccessor(saveLogger).Read(copy,new Dictionary<Type,Game.Core.Serialization.IDataSerializer>());
+   options=new GameStartOptionsContinueExisting(reader,false,"lab-inspection");
+  }
   Invoke(session,"Init_1_GameOptions",globals,options,gameData,platform);
   Invoke(session,"Init_2_Player");
   Invoke(session,"Init_3_SavegameAndMode",content,gameData,options);

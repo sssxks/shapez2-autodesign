@@ -58,6 +58,7 @@ cargo clippy --all-targets -- -D warnings
 
 2026-11-04 原生游戏实测：
 
+- `WrWr----:CuCu----`：600 秒合格输出 5,746。此配方在交付蓝图上通过完整生产测试；现场停产需继续检查实际存档的信号、供料和改动。
 - `WwcbWwcb:P-cwP-cw:WgP---P-`：600 秒合格输出 0，末端丢弃 5,073 个 `WwcbWwcb:cwcwcwcw:WgP---P-`。另一次 900 秒运行丢弃同样错误形状 12,273 个，合格输出仍为 0。
 - `WwcbWwcb:cwcwcwcw:WgP---P-`：600 秒合格输出 4,756。
 - 单独的 `P-cwP-cw`：600 秒合格输出 0，丢弃 9,145 个 `cwcwcwcw`。
@@ -65,6 +66,10 @@ cargo clippy --all-targets -- -D warnings
 故障是原 CMAM 的销钉/晶体混合层加工：本地游戏 `ShapeOperationCrystallize.ExecuteInternal` 将每层的空位和销钉都替换为晶体；这台机器没有在该路径恢复目标中需要保留的销钉。原目标的第二层因此被做成整层白晶，最终筛选器正常拒收。紧凑接入生成器完整复制生产平台及其电路，未修改此加工逻辑。修复需要改造混合层的生成与组合流程。上述生产套件有意保留 `min_produced: 1`，当前原目标及最小复现用例会报失败；未交付或覆盖所谓修复蓝图。
 
 诊断记录：`%TEMP%/shapez-lab/runs/1793797114261-18528/*-production.json`；900 秒记录：`%TEMP%/shapez-lab/runs/1793796811462-24484/production-report.json`。
+
+半形状配方记录：`%TEMP%/shapez-lab/runs/1793798197194-12116/half-windmill-circle-production.json`。
+
+读取现场快照：设置 `SHAPEZ_LAB_SAVE` 为 `.spz2` 自动存档路径，再运行 `cargo run -- probe --operation inspect-save`。宿主先将文件复制到本次临时目录的 `inspection.spz2`，通过原生存档加载器恢复地图，输出常量/全局目标信号和卸货站存货。此模式不推进地图、不保存回源存档；使用后清除该环境变量即可恢复新地图测试。
 
 ## 项目与临时文件
 

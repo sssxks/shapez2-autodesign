@@ -1,6 +1,14 @@
 {
   "cases": [
     {
+      "name": "half-windmill-circle",
+      "blueprint": "${LAB}/compact/CMAM compact full-rate.spz2bp",
+      "production_manifest": "${LAB}/compact/manifest.json",
+      "target": "WrWr----:CuCu----",
+      "seconds": 600,
+      "min_produced": 1
+    },
+    {
       "name": "pin-crystal-target",
       "blueprint": "${LAB}/compact/CMAM compact full-rate.spz2bp",
       "production_manifest": "${LAB}/compact/manifest.json",
