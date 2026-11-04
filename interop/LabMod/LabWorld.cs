@@ -44,12 +44,12 @@ public sealed class LabWorld:IDisposable {
   converter=new BlueprintRawDataConverter(((GameSessionOrchestrator)session).DataSerializers,logger);
  }
  public Simulator Simulator=>simulator;
- public void Advance(int seconds, int ticksPerSecond, Action before=null, Action after=null){
+ public void Advance(int seconds, int ticksPerSecond, Action before=null, Action after=null, Func<bool> stop=null){
   if(seconds<0||ticksPerSecond<=0)throw new ArgumentException("Invalid simulation duration or step");
   var lods=model.Islands.SelectMany(i=>i.Definition.Layout.GetChunkPositions().Select(c=>SimulationLOD.Highest(c.ToGlobal(i.Transform)))).ToArray();
   var update=new SimulationUpdateConfiguration(lods,TimeSpan.Zero,1);
   var delta=Ticks.OneSecond/ticksPerSecond;
-  for(int i=0;i<checked(seconds*ticksPerSecond);i++){before?.Invoke();simulator.SynchronousUpdate(delta,update,strategy);after?.Invoke();}
+  for(int i=0;i<checked(seconds*ticksPerSecond);i++){before?.Invoke();simulator.SynchronousUpdate(delta,update,strategy);after?.Invoke();if(stop?.Invoke()==true)break;}
  }
  public object Run(JObject args,string root){
   var experiment=BlueprintExperiment.Load(args["experiment"] as JObject);

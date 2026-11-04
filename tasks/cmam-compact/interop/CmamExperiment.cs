@@ -22,7 +22,7 @@ public sealed class CmamExperiment:IBlueprintExperiment {
    return report;
   }
   var probe=new AdapterProbe(world.Simulator);bool complete=false;
-  world.Advance(seconds,10,()=>{if(!complete)probe.BeforeTick();},()=>{if(!complete)complete=probe.AfterTick();});
+  world.Advance(seconds,10,probe.BeforeTick,()=>complete=probe.AfterTick(),()=>complete);
   var flow=probe.Report();File.WriteAllText(Path.Combine(root,"adapter-flow.json"),JsonConvert.SerializeObject(flow));
   if(!complete)throw new Exception("Adapter flow did not reach every inlet: "+JsonConvert.SerializeObject(flow));
   return flow;

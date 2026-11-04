@@ -23,7 +23,7 @@ internal sealed class ProductionProbe {
    if(localized.Simulation is GlobalSignalReceiverSimulation receiver)drivers.Add(new ConstantSignalSimulation(new ConstantSignalConfiguration{Value=signal}){OutputConductor=receiver.OutputConductor});
    var outputChunk=manifest["production"]["output_chunk"];
    var outputX=(int)outputChunk[0]*20;var outputY=(int)outputChunk[1]*20;
-   if(localized.Simulation is TrashSimulation sink&&localized is ILocalizedTileSimulation tile){var p=tile.GetOccupiedTile(0);var final=p.x>=outputX&&p.x<outputX+20&&p.y>=outputY&&p.y<outputY+20&&p.z==(int)outputChunk[2];
+   if(localized.Simulation is TrashSimulation sink&&localized is ILocalizedTileSimulation tile){var p=tile.GetOccupiedTile(0);var final=p.x>=outputX&&p.x<outputX+20&&p.y>=outputY&&p.y<outputY+20;
     sink.OnLaneTrashesItem.Register((item,ticks,lane)=>{var key=item.ToString();trash[key]=trash.TryGetValue(key,out var n)?n+1:1;var location=p.x+","+p.y+","+p.z+":"+key;discardedAt[location]=discardedAt.TryGetValue(location,out var d)?d+1:1;if(final)output[key]=output.TryGetValue(key,out var m)?m+1:1;});
    }
   }
