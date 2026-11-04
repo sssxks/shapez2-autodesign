@@ -43,6 +43,17 @@ impl LabPaths {
         self.root.join("host")
     }
     pub fn build(&self, project: &str) -> Result<PathBuf> {
+        self.build_project(
+            &self
+                .repo
+                .join(format!("interop/{project}/{project}.csproj")),
+        )
+    }
+    pub fn build_project(&self, path: &Path) -> Result<PathBuf> {
+        let project = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .context("Project filename required")?;
         ensure!(
             self.dotnet.is_file(),
             ".NET SDK missing at {}. Set SHAPEZ_LAB_DOTNET to an SDK dotnet.exe",
@@ -50,10 +61,7 @@ impl LabPaths {
         );
         let status = Command::new(&self.dotnet)
             .arg("build")
-            .arg(
-                self.repo
-                    .join(format!("interop/{project}/{project}.csproj")),
-            )
+            .arg(path)
             .args(["-c", "Release", "--nologo"])
             .arg(format!("-p:GameRoot={}", self.game.display()))
             .status()?;

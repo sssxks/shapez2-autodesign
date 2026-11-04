@@ -1,25 +1,39 @@
 use anyhow::{Result, ensure};
-use serde_json::{Value, json};
+use shapez_core::{
+    recipe::{NodeId, Operation, Recipe, RecipeNode},
+    shape::{Color, Shape},
+};
 use std::collections::HashMap;
 
 #[derive(Default)]
 struct Planner {
-    nodes: Vec<Value>,
+    nodes: Vec<RecipeNode>,
     cache: HashMap<String, usize>,
 }
 impl Planner {
-    fn node(&mut self, op: &str, inputs: &[usize], expected: String, color: Option<char>) -> usize {
+    fn node(
+        &mut self,
+        op: Operation,
+        inputs: &[usize],
+        expected: String,
+        color: Option<char>,
+    ) -> usize {
         if let Some(&id) = self.cache.get(&expected) {
             return id;
         }
         let id = self.nodes.len();
-        self.nodes
-            .push(json!({"id":id,"op":op,"inputs":inputs,"expected":expected,"color":color}));
+        self.nodes.push(RecipeNode {
+            id: NodeId(id),
+            op,
+            inputs: inputs.iter().copied().map(NodeId).collect(),
+            expected: expected.parse().expect("planner generated invalid shape"),
+            color: color.map(|c| Color::try_from(c).expect("planner generated invalid color")),
+        });
         self.cache.insert(expected, id);
         id
     }
     fn shape(&self, id: usize) -> String {
-        self.nodes[id]["expected"].as_str().unwrap().into()
+        self.nodes[id].expected.to_string()
     }
     fn rotate(&mut self, id: usize, clockwise: bool) -> usize {
         let s = self.shape(id);
@@ -30,7 +44,11 @@ impl Planner {
             .collect::<Vec<_>>()
             .join(":");
         self.node(
-            if clockwise { "rotate-cw" } else { "rotate-ccw" },
+            if clockwise {
+                Operation::RotateCw
+            } else {
+                Operation::RotateCcw
+            },
             &[id],
             result,
             None,
@@ -43,7 +61,7 @@ impl Planner {
             .map(|s| format!("{}----", &s[..4]))
             .collect::<Vec<_>>()
             .join(":");
-        self.node("cut", &[id], result, None)
+        self.node(Operation::Cut, &[id], result, None)
     }
     fn isolate(&mut self, id: usize) -> usize {
         let id = self.half(id);
@@ -81,7 +99,7 @@ impl Planner {
             })
             .collect::<Vec<_>>()
             .join(":");
-        let id = self.node("swap", &[a, b], result, None);
+        let id = self.node(Operation::Swap, &[a, b], result, None);
         Some(if rotated { self.rotate(id, false) } else { id })
     }
     fn quarter(&mut self, part: &str, position: usize) -> usize {
@@ -89,7 +107,7 @@ impl Planner {
         let full = if chars[0] == b'c' {
             let mask = self.layer("--CuCuCu").unwrap();
             self.node(
-                "crystallize",
+                Operation::Crystallize,
                 &[mask],
                 format!("{part}CuCuCu"),
                 Some(chars[1] as char),
@@ -100,11 +118,16 @@ impl Planner {
             } else {
                 format!("{}u", chars[0] as char)
             };
-            let source = self.node("source", &[], raw.repeat(4), None);
+            let source = self.node(Operation::Source, &[], raw.repeat(4), None);
             if chars[0] == b'P' || chars[1] == b'u' {
                 source
             } else {
-                self.node("paint", &[source], part.repeat(4), Some(chars[1] as char))
+                self.node(
+                    Operation::Paint,
+                    &[source],
+                    part.repeat(4),
+                    Some(chars[1] as char),
+                )
             }
         };
         let mut id = self.isolate(full);
@@ -149,12 +172,12 @@ impl Planner {
             built.push(row);
             let id = match result {
                 None => upper,
-                Some(lower) => self.node("stack", &[lower, upper], built.join(":"), None),
+                Some(lower) => self.node(Operation::Stack, &[lower, upper], built.join(":"), None),
             };
             result = Some(if crystal {
                 *built.last_mut().unwrap() = format!("{part}CuCuCu");
                 self.node(
-                    "crystallize",
+                    Operation::Crystallize,
                     &[id],
                     built.join(":"),
                     Some(part.as_bytes()[1] as char),
@@ -170,7 +193,8 @@ impl Planner {
         Ok(Some(id))
     }
 }
-pub fn plan_recipe(target: &str) -> Result<Value> {
+pub fn plan_recipe(target: &str) -> Result<Recipe> {
+    let shape: Shape = target.parse()?;
     let layers: Vec<_> = target.split(':').collect();
     ensure!(
         !layers.is_empty() && layers.len() <= 4,
@@ -178,23 +202,11 @@ pub fn plan_recipe(target: &str) -> Result<Value> {
     );
     for layer in &layers {
         ensure!(
-            layer.is_ascii() && layer.len() == 8,
-            "Each layer needs four two-character parts"
-        );
-        ensure!(
             *layer != "--------",
             "Empty layers require a different construction strategy"
         );
-        for p in layer.as_bytes().as_chunks::<2>().0 {
-            ensure!(
-                p == b"--"
-                    || p == b"P-"
-                    || ((b"CRSW".contains(&p[0]) && b"urgbcmyw".contains(&p[1]))
-                        || (p[0] == b'c' && b"rgbcmyw".contains(&p[1]))),
-                "Unsupported part or unavailable input color"
-            );
-        }
     }
+
     let mut p = Planner::default();
     let result = if layers.len() == 1 {
         p.layer(target)
@@ -215,7 +227,11 @@ pub fn plan_recipe(target: &str) -> Result<Value> {
         let b = p.merge(columns[2], columns[3], true);
         p.merge(a, b, false)
     };
-    Ok(
-        json!({"target":target,"strategy":"scaffold-columns-then-swap","root":result.unwrap(),"nodes":p.nodes,"status":"candidate-requires-native-verification"}),
-    )
+    let recipe = Recipe {
+        target: shape,
+        root: NodeId(result.unwrap()),
+        nodes: p.nodes,
+    };
+    recipe.validate()?;
+    Ok(recipe)
 }

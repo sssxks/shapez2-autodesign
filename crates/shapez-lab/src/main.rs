@@ -91,7 +91,7 @@ fn main() -> Result<()> {
                         "{} {} inputs={} output={} port={}\n",
                         id,
                         step["op"],
-                        recipe["nodes"][id]["inputs"],
+                        serde_json::to_value(&recipe.nodes[id].inputs)?,
                         step["expected"],
                         step["selected_port"]
                     ));
@@ -148,6 +148,15 @@ fn main() -> Result<()> {
         Cmd::Batch { suite, timeout } => {
             let mut suite: Value = serde_json::from_slice(&fs::read(suite)?)?;
             expand_paths(&mut suite, &p);
+            if let Some(projects) = suite["projects"].as_array() {
+                for project in projects {
+                    p.build_project(std::path::Path::new(
+                        project
+                            .as_str()
+                            .ok_or_else(|| anyhow::anyhow!("Project path must be a string"))?,
+                    ))?;
+                }
+            }
             let cases = suite["cases"]
                 .as_array()
                 .ok_or_else(|| anyhow::anyhow!("suite.cases must be an array"))?;
@@ -202,6 +211,7 @@ fn expand_paths(value: &mut Value, p: &LabPaths) {
             let library = PathBuf::from(std::env::var_os("USERPROFILE").unwrap_or_default())
                 .join("AppData/LocalLow/tobspr Games/shapez 2/blueprints");
             *s = s
+                .replace("${REPO}", &p.repo.to_string_lossy())
                 .replace("${LAB}", &p.root.to_string_lossy())
                 .replace("${LIBRARY}", &library.to_string_lossy());
         }
