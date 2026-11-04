@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <LabRoot>$([System.IO.Path]::Combine($([System.IO.Path]::GetTempPath()), 'shapez-lab'))</LabRoot>
+    <BaseIntermediateOutputPath>$(LabRoot)/obj/$(MSBuildProjectName)/</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(LabRoot)/bin/$(MSBuildProjectName)/</BaseOutputPath>
+    <GameRoot Condition="'$(GameRoot)' == ''">C:/Program Files (x86)/Steam/steamapps/common/shapez 2</GameRoot>
+    <ManagedPath>$(GameRoot)/shapez 2_Data/Managed</ManagedPath>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+</Project>
+
