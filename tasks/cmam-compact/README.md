@@ -17,13 +17,13 @@
 
 ```powershell
 $library=Join-Path $env:USERPROFILE 'AppData\LocalLow\tobspr Games\shapez 2\blueprints'
-cargo run --release -- compact "$library\CMAM not connected.spz2bp" `
+cargo run --release -p cmam-compact -- build "$library\CMAM not connected.spz2bp" `
   --rgb "$library\personal\09 流体运输 Fluid Transfer\RBG三口转三层 RGB Transposer.spz2bp"
 ```
 
 每次生成写入 `%TEMP%/shapez-lab/runs/<run-id>`，包含源蓝图与 RGB 模板快照、完整蓝图、`manifest.json` 和任务自己的 `review.html`。成功后更新 `tasks/cmam-compact/latest.json` 指针。测试套件使用 `${TASK:cmam-compact}` 解析已发布的产物。
 
-使用 `--previous <blueprint>` 显式提供旧版对比输入。旧版 `connect` 输出发布为 `cmam-legacy`；对应验收套件为 `tasks/cmam-compact/tests/legacy.json`。
+使用 `--previous <blueprint>` 显式提供旧版对比输入。旧版 `legacy` 输出发布为 `cmam-legacy`；对应验收套件为 `tasks/cmam-compact/tests/legacy.json`。
 
 原生生产和旧版接入实验由本目录的 `interop/CmamTask.csproj` 提供。套件声明构建项目及实验类型，公共 LabMod 通过 `IBlueprintExperiment` 加载。速率测试直接使用公共端口测量能力。
 
@@ -32,7 +32,7 @@ cargo run --release -- compact "$library\CMAM not connected.spz2bp" `
 ## 满速验收
 
 ```powershell
-cargo run -- batch tasks/cmam-compact/tests/compact.json --timeout 300
+cargo run -p cmam-compact -- test tasks/cmam-compact/tests/compact.json --timeout 300
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ```
@@ -51,7 +51,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## 完整生产测试与销钉/晶体故障
 
-`cargo run -- batch tasks/cmam-compact/tests/production.json --timeout 300` 保留完整 CMAM 电路和加工链，持续补充原生卸货站货仓，将目标形状信号送入原有全局接收器的输出导线，按原生信号时钟更新。只监听现有垃圾桶事件；不切断生产带、不替换筛选器。当前 CMAM 的合格品出口是 `(9,4)` 平台，其他位置的销毁记录为中间产物或筛选废品。该出口位置是此设计专用的约定。
+`cargo run -p cmam-compact -- test tasks/cmam-compact/tests/production.json --timeout 300` 保留完整 CMAM 电路和加工链，持续补充原生卸货站货仓，将目标形状信号送入原有全局接收器的输出导线，按原生信号时钟更新。只监听现有垃圾桶事件；不切断生产带、不替换筛选器。当前 CMAM 的合格品出口是 `(9,4)` 平台，其他位置的销毁记录为中间产物或筛选废品。该出口位置是此设计专用的约定。
 
 参数 `production_manifest` 指定供料卸货站，`target` 指定目标，`seconds` 指定完整模拟时长，`min_produced` 规定合格成品下限。每例输出 `<name>-production.json`，含合格输出计数、全部销毁形状和销毁坐标。达到模拟时长并不等于生产成功，生产验收必须设置 `min_produced`。
 
@@ -68,7 +68,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 半形状配方记录：`%TEMP%/shapez-lab/runs/1793798197194-12116/half-windmill-circle-production.json`。
 
-读取现场快照：设置 `SHAPEZ_LAB_SAVE` 为 `.spz2` 自动存档路径，再运行 `cargo run -- probe --operation inspect-save`。宿主先将文件复制到本次临时目录的 `inspection.spz2`，通过原生存档加载器恢复地图，输出常量/全局/可控无线目标信号、卸货站存货和模拟节点类型计数。默认不推进地图；批量用例可通过 `seconds` 推进副本以恢复无线信号传播。始终不保存回源存档；使用后清除该环境变量即可恢复新地图测试。
+读取现场快照：设置 `SHAPEZ_LAB_SAVE` 为 `.spz2` 自动存档路径，再运行 `cargo run -p cmam-compact -- probe --operation inspect-save`。宿主先将文件复制到本次临时目录的 `inspection.spz2`，通过原生存档加载器恢复地图，输出常量/全局/可控无线目标信号、卸货站存货和模拟节点类型计数。默认不推进地图；批量用例可通过 `seconds` 推进副本以恢复无线信号传播。始终不保存回源存档；使用后清除该环境变量即可恢复新地图测试。
 
 21:22 自动存档副本推进 5 秒后，四台 CMAM 的可控无线接收器分别读取频道 5250–5253，目标均不是 `WrWr----:CuCu----`。现场记录在 `%TEMP%/shapez-lab/runs/1793798827562-19796/result-1.json`；需取得故障目标正在运行的存档，才能继续沿该现场追踪。
 
@@ -77,7 +77,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ```powershell
 cargo run -p cmam-compact -- build <source.spz2bp> --rgb <rgb.spz2bp>
-cargo run -- batch tasks/cmam-compact/tests/compact.json --timeout 300
+cargo run -p cmam-compact -- test tasks/cmam-compact/tests/compact.json --timeout 300
 ```
 
 `src/compact.rs` 暴露 `build_compact(&Blueprint, &Blueprint, Option<&Blueprint>, &CmamDesign)`，返回内存中的 `CompactBuild`；调用 `.write(output)` 才写文件。CLI 编排与输入快照在任务自己的 `src/commands.rs`。
@@ -91,3 +91,5 @@ cargo run -- batch tasks/cmam-compact/tests/compact.json --timeout 300
 - 完整生产套件仍有两个既有失败：`pin-crystal-target` 和 `isolated-pin-crystal` 产量为 0。保留 `min_produced: 1` 与非零退出状态。
 
 验证报告分别位于 `%TEMP%/shapez-lab/runs/1793824872171-25928-0`（满速）、`1793825012233-27136-0`（生产冒烟）、`1793825069516-19576-0`（旧版插件）和 `1793824542364-23936-0`（完整生产套件）。
+
+拆分为 model/routing/blueprint 独立库后，通过任务自己的 `build` 和默认 `test` 入口重新生成并完成六项原生验收。新蓝图目录为 `%TEMP%/shapez-lab/runs/1793825517539-25628-0`，验收报告为 `%TEMP%/shapez-lab/runs/1793825533926-15484-0/report.json`。

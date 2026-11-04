@@ -4,13 +4,14 @@
 
 ## 代码边界
 
-通用部分提供模型与能力；每个设计任务拥有自己的输入约定、策略、编排、模板与验收规则。任务可重复少量胶水代码。依赖方向固定为任务调用公共库，公共库独立于任务。
+通用部分提供模型与能力；每个设计任务拥有自己的输入约定、策略、编排、模板与验收规则。任务可重复少量胶水代码。依赖方向固定为任务调用公共库，公共库独立于任务。公共模块私有，所有 API 从各 crate 的 `lib.rs` 显式重导出，使用者直接从 crate 根导入。
 
 ```text
 crates/
-  shapez-core/       形状、坐标、工厂端口、配方 DAG、空间布线、蓝图编解码
+  shapez-model/      形状、坐标、工厂端口、配方 DAG、运输问题与结果模型
+  shapez-routing/    空间布线算法，依赖 model
+  shapez-blueprint/  蓝图编解码与游戏建筑编码，依赖 model
   shapez-runtime/    宿主生命周期、请求协议、批量执行、运行目录
-  shapez-lab/        兼容 CLI，分派公共命令与既有任务入口
 interop/
   HostPrep/          临时游戏副本与启动裁剪
   LabMod/            世界生命周期、原生运算、供料、测量、连接图和扩展接口
@@ -27,11 +28,11 @@ tasks/
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
-cargo run -- prepare
-cargo run -- probe
+cargo run -p cmam-compact -- prepare
+cargo run -p cmam-compact -- probe
 ```
 
-`cargo run` 默认启动兼容 CLI。任务也有自己的可执行入口：`cargo run -p cmam-compact -- --help`、`cargo run -p scaffold-recipe -- --help`。
+公共部分全部为库，任务提供可执行入口：`cargo run -p cmam-compact -- --help`、`cargo run -p scaffold-recipe -- --help`。
 
 构建产物、SDK、游戏副本、生成蓝图和运行日志统一置于 `%TEMP%/shapez-lab`。每次生成或执行使用 `runs/<run-id>`；输入快照与执行报告随运行保存。成功任务通过 `tasks/<task>/latest.json` 发布产物，历史运行保留。
 
@@ -45,8 +46,8 @@ cargo run -- probe
 
 ```powershell
 .\scripts\bootstrap.ps1  # SDK 已安装时跳过
-cargo run -- prepare
-cargo run -- probe
+cargo run -p cmam-compact -- prepare
+cargo run -p cmam-compact -- probe
 ```
 
 `SHAPEZ_GAME_ROOT` 可覆盖安装目录，`SHAPEZ_LAB_DOTNET` 可指定 SDK 的 `dotnet.exe`。游戏升级或 HostPrep 修改后重新 `prepare`。每次 `probe` / `batch` 自动构建 Mod。
@@ -60,10 +61,20 @@ cargo run -- probe
 Managed DLL 是独立副本，其他只读发行资源使用硬链接。HostPrep 只处理带标记的暂存目录，并输出 `patch-audit.json`；游戏 DLL 不提交或分发。
 
 
-## 通用命令
+## 任务命令
 
-`inspect` 输出蓝图摘要，`decode` 解压到独立运行目录，`probe --operation capacities` 查询原生速度及运输类型。`batch <suite.json>` 在同一宿主中执行用例，错误请求可通过 `expected_ok: false` 验收。
+CMAM 入口的 `inspect` 输出蓝图摘要，`decode` 解压到独立运行目录；两个任务都提供 `prepare`、`probe` 和 `test`。`probe --operation capacities` 查询原生速度及运输类型。任务的 `test [suite.json]` 在同一宿主中执行用例，错误请求可通过 `expected_ok: false` 验收。
 
 读取存档副本时设置 `SHAPEZ_LAB_SAVE`，再运行 `probe --operation inspect-save`。原生宿主复制存档后加载，不保存回源文件；批量请求可通过 `seconds` 推进副本。
 
 `.cargo/config.toml` 为本机设置临时构建目录；换机器时调整它，或通过 `CARGO_TARGET_DIR` 覆盖。`scripts/dev.ps1` 自动根据系统临时目录设置该变量。
+
+```powershell
+cargo run -p cmam-compact -- test
+cargo run -p cmam-compact -- test tasks/cmam-compact/tests/production-smoke.json
+cargo run -p scaffold-recipe -- plan 'WwcbWwcb:P-cwP-cw:WgP---P-'
+cargo run -p scaffold-recipe -- check
+cargo run -p scaffold-recipe -- test
+```
+
+CMAM 的 `test` 默认执行本任务的紧凑接入套件；配方任务的 `test` 默认读取最近一次 `check` 生成的套件。`prepare` 与 `probe` 也可从配方任务独立执行。

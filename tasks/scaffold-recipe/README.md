@@ -1,10 +1,10 @@
 # 脚手架竖列配方任务
 
-本目录拥有单层及脚手架竖列构造策略、可接受输入范围和用例枚举。公共 `shapez-core::recipe` 提供加工 DAG 和验证后端口模型，原生宿主提供设备运算执行。
+本目录拥有单层及脚手架竖列构造策略、可接受输入范围和用例枚举。公共 `shapez-model` 提供加工 DAG 和验证后端口模型，原生宿主提供设备运算执行。
 
 ## 配方编译器原型
 
-`cargo run -- recipe 'WwcbWwcb:P-cwP-cw:WgP---P-'` 使用 Rust 生成加工 DAG，再由独立游戏实例逐节点执行原生形状运算。输出位于本次运行目录：`recipe.json`、`recipe-verification.json`、`verified-recipe.json` 和 `recipe.txt`。节点记录设备操作、上游节点、期望形状和原生输出端口。真实原料只允许四种未染色完整基础形状与完整销钉；颜色限定 RGB 可混合的七色。没有把目标或中间形状作为原料注入。
+`cargo run -p scaffold-recipe -- plan 'WwcbWwcb:P-cwP-cw:WgP---P-'` 使用 Rust 生成加工 DAG，再由独立游戏实例逐节点执行原生形状运算。输出位于本次运行目录：`recipe.json`、`recipe-verification.json`、`verified-recipe.json` 和 `recipe.txt`。节点记录设备操作、上游节点、期望形状和原生输出端口。真实原料只允许四种未染色完整基础形状与完整销钉；颜色限定 RGB 可混合的七色。没有把目标或中间形状作为原料注入。
 
 这是自动配方/加工网表原型，尚未生成摆放在地图上的自动控制工厂。它验证形状变换，不测机器吞吐；DAG 的共享节点需要在布局阶段配置分流和设备数量。流体颜色参数假定上游已有相应 RGB 混色供应。
 
@@ -14,7 +14,7 @@
 
 当前多层适用范围：至多四层，每列自底向上无内部空洞，且保留的销钉上方没有之后还要结晶的位置。不符合此条件会拒绝这条构造策略，含义是“需要其他配方策略”，不代表形状不可制造。里程碑 `WwcbWwcb:P-cwP-cw:WgP---P-` 的 61 节点配方已逐节点通过原生运算。直接按层堆叠的旧候选在第二层丢失晶体，已由竖列策略取代。
 
-`cargo run -- recipe-check` 生成 624 个非空单层结构用例，符号集为空、销钉、圆形、白晶、红晶；`cargo run -- batch <本次输出目录>/suite.json` 在同一宿主内验证。该集合覆盖不同空位/销钉/普通材料/晶体的四象限组合以及异色晶体接合；不是全部颜色与普通形状的穷举。
+`cargo run -p scaffold-recipe -- check` 生成 624 个非空单层结构用例，符号集为空、销钉、圆形、白晶、红晶；`cargo run -p scaffold-recipe -- test` 在同一宿主内验证。该集合覆盖不同空位/销钉/普通材料/晶体的四象限组合以及异色晶体接合；不是全部颜色与普通形状的穷举。
 
 ### 一般可制造性判定
 
@@ -39,3 +39,5 @@ cargo run -p scaffold-recipe -- check
 61 节点目标 `WwcbWwcb:P-cwP-cw:WgP---P-` 通过原生运算，并输出带端口引用的 `verified-recipe.json`。任务独立入口生成的 624 个单层用例在同一原生宿主内全部通过。
 
 61 节点产物位于 `%TEMP%/shapez-lab/runs/1793824486511-4584-0`；624 用例报告位于 `%TEMP%/shapez-lab/runs/1793824926542-15576-0/report.json`。
+
+拆分公共库并统一 crate 根级导入后，独立 `plan` 入口再次通过 61 节点原生验证，产物位于 `%TEMP%/shapez-lab/runs/1793825569004-16000-0`。
