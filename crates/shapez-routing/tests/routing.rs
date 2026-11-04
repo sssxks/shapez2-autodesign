@@ -1,7 +1,8 @@
-use shapez_core::{
-    geometry::{ChunkPos, Direction, GridBounds},
-    routing::*,
+use shapez_model::{
+    ChunkPos, Direction, GridBounds, SearchOptions, TransportEndpoint, TransportNet,
+    TransportProblem,
 };
+use shapez_routing::solve_transport;
 use std::collections::{HashMap, HashSet};
 
 #[test]

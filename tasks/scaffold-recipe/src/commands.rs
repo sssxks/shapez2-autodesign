@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde_json::json;
-use shapez_core::recipe::RecipeReport;
-use shapez_runtime::{Host, LabPaths, artifacts::RunDirectory};
+use shapez_model::RecipeReport;
+use shapez_runtime::{Host, LabPaths, RunDirectory};
 use std::{fs, time::Duration};
 pub fn run_check(p: &LabPaths) -> Result<()> {
     let run = RunDirectory::create(&p.root, "scaffold-recipe-check")?;

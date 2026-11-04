@@ -1,5 +1,5 @@
-use crate::{geometry::ChunkPos, routing::RouteNode};
 use serde_json::{Value, json};
+use shapez_model::{ChunkPos, RouteNode};
 use std::collections::BTreeSet;
 pub fn space_island(p: ChunkPos, node: &RouteNode, fluid: bool) -> Value {
     let r = node.incoming.index();

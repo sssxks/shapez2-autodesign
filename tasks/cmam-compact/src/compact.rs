@@ -1,13 +1,12 @@
-use crate::design::CmamDesign;
+use crate::CmamDesign;
 use anyhow::{Result, ensure};
 use serde_json::{Value, json};
-use shapez_core::interface::{DemandPort, FactoryInterface, RateManifest, SupplyPort};
-use shapez_core::{
-    Blueprint, encode_blueprint,
-    geometry::{ChunkPos, Direction, TilePos},
-    routing::{TransportEndpoint, TransportNet, TransportProblem, solve_transport},
-    space::space_island,
+use shapez_blueprint::{Blueprint, encode_blueprint, space_island};
+use shapez_model::{
+    ChunkPos, DemandPort, Direction, FactoryInterface, RateManifest, SupplyPort, TilePos,
+    TransportEndpoint, TransportNet, TransportProblem,
 };
+use shapez_routing::solve_transport;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fs,

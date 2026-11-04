@@ -1,7 +1,4 @@
-use shapez_core::{
-    geometry::{ChunkPos, GridBounds},
-    routing::SearchOptions,
-};
+use shapez_model::{ChunkPos, GridBounds, SearchOptions};
 use std::ops::Range;
 
 /// All assumptions about this supplied CMAM live in its task.

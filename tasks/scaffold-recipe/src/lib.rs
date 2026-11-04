@@ -1,8 +1,5 @@
 use anyhow::{Result, ensure};
-use shapez_core::{
-    recipe::{NodeId, Operation, Recipe, RecipeNode},
-    shape::{Color, Shape},
-};
+use shapez_model::{Color, NodeId, Operation, Recipe, RecipeNode, Shape};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -258,4 +255,5 @@ pub fn write_check_suite(dir: &std::path::Path) -> Result<std::path::PathBuf> {
     fs::write(&path, serde_json::to_vec_pretty(&json!({"cases":cases}))?)?;
     Ok(path)
 }
-pub mod commands;
+mod commands;
+pub use commands::{run_check, run_recipe};

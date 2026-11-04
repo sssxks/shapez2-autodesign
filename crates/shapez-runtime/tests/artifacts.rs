@@ -1,4 +1,4 @@
-use shapez_runtime::{LabPaths, artifacts::RunDirectory, protocol::Suite, suite::expand_paths};
+use shapez_runtime::{LabPaths, RunDirectory, Suite, expand_paths};
 use std::fs;
 
 #[test]

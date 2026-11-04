@@ -124,7 +124,9 @@ dependencies = [
  "clap",
  "serde",
  "serde_json",
- "shapez-core",
+ "shapez-blueprint",
+ "shapez-model",
+ "shapez-routing",
  "shapez-runtime",
 ]
 
@@ -220,7 +222,7 @@ dependencies = [
  "clap",
  "serde",
  "serde_json",
- "shapez-core",
+ "shapez-model",
  "shapez-runtime",
 ]
 
@@ -268,27 +270,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "shapez-core"
+name = "shapez-blueprint"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64",
  "flate2",
+ "serde_json",
+ "shapez-model",
+]
+
+[[package]]
+name = "shapez-model"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "shapez-lab"
+name = "shapez-routing"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap",
- "cmam-compact",
- "scaffold-recipe",
- "serde_json",
- "shapez-core",
- "shapez-runtime",
+ "shapez-model",
 ]
 
 [[package]]

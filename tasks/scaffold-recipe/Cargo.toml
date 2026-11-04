@@ -7,6 +7,6 @@ edition.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-shapez-core = { path = "../../crates/shapez-core" }
-shapez-runtime = {path="../../crates/shapez-runtime"}
 clap.workspace = true
+shapez-model.workspace = true
+shapez-runtime.workspace = true

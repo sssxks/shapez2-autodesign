@@ -1,31 +1,14 @@
 //! Deterministic routing of shared transport trees in a bounded island grid.
-use crate::geometry::{ChunkPos, Direction, GridBounds};
 use anyhow::{Result, bail, ensure};
+use shapez_model::{
+    ChunkPos, Direction, GridBounds, RouteNode, RoutePlan, SearchOptions, TransportEndpoint,
+    TransportNet, TransportProblem,
+};
 use std::{
     cmp::Reverse,
     collections::{BTreeSet, BinaryHeap, HashMap, HashSet},
 };
 type State = (ChunkPos, Direction);
-/// Direction of travel entering a source tile or leaving a sink tile.
-#[derive(Clone, Copy, Debug)]
-pub struct TransportEndpoint {
-    pub position: ChunkPos,
-    pub direction: Direction,
-}
-#[derive(Clone)]
-pub struct TransportNet {
-    pub source: TransportEndpoint,
-    pub sinks: Vec<TransportEndpoint>,
-    pub fluid: bool,
-}
-#[derive(Clone)]
-pub struct RouteNode {
-    pub net: usize,
-    pub incoming: Direction,
-    pub output_layer: i32,
-    pub outgoing: BTreeSet<Direction>,
-}
-pub type RoutePlan = HashMap<ChunkPos, RouteNode>;
 fn route(
     netid: usize,
     net: &TransportNet,
@@ -147,19 +130,6 @@ fn route(
         node.outgoing.insert(d);
     }
     Ok(())
-}
-
-/// The caller owns endpoint reservations, obstacles and the search envelope.
-pub struct TransportProblem {
-    pub nets: Vec<TransportNet>,
-    pub blocked: HashSet<ChunkPos>,
-    pub reserved: HashMap<ChunkPos, usize>,
-    pub bounds: GridBounds,
-}
-#[derive(Clone, Copy)]
-pub struct SearchOptions {
-    pub attempts: usize,
-    pub seed: u64,
 }
 
 pub fn solve_transport(problem: &TransportProblem, options: SearchOptions) -> Result<RoutePlan> {

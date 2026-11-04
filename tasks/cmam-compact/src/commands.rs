@@ -1,6 +1,6 @@
 use crate::{compact_cmam, connect_cmam};
 use anyhow::Result;
-use shapez_runtime::{LabPaths, artifacts::RunDirectory};
+use shapez_runtime::{LabPaths, RunDirectory};
 use std::path::Path;
 pub fn run_compact(
     p: &LabPaths,

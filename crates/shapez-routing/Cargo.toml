@@ -1,0 +1,8 @@
+[package]
+name = "shapez-routing"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+shapez-model.workspace = true

@@ -1,4 +1,4 @@
-use shapez_core::{recipe::*, shape::Shape};
+use shapez_model::{NodeId, Operation, Recipe, RecipeNode, RecipeReport, RecipeTrace, Shape};
 
 #[test]
 fn resolves_second_native_output_into_downstream_connection() {
