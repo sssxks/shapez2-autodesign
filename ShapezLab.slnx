@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="interop/HostPrep/HostPrep.csproj" />
+  <Project Path="interop/LabMod/LabMod.csproj" />
+</Solution>
