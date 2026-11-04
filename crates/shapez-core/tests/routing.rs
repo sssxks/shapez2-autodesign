@@ -9,11 +9,19 @@ fn routes_shared_tree_around_obstacles_and_across_layers() {
     let root = ChunkPos(0, 0, 0);
     let problem = TransportProblem {
         nets: vec![TransportNet {
-            root,
-            heading: Direction::East,
-            ends: vec![
-                (ChunkPos(3, 0, 0), Direction::East),
-                (ChunkPos(3, 2, 0), Direction::South),
+            source: TransportEndpoint {
+                position: root,
+                direction: Direction::East,
+            },
+            sinks: vec![
+                TransportEndpoint {
+                    position: ChunkPos(3, 0, 0),
+                    direction: Direction::East,
+                },
+                TransportEndpoint {
+                    position: ChunkPos(3, 2, 0),
+                    direction: Direction::South,
+                },
             ],
             fluid: false,
         }],
@@ -32,12 +40,12 @@ fn routes_shared_tree_around_obstacles_and_across_layers() {
         },
     )
     .unwrap();
-    assert!(plan.values().all(|n| n.owner == 0));
+    assert!(plan.values().all(|n| n.net == 0));
     assert!(plan.contains_key(&root));
-    assert!(plan.values().any(|n| n.outputs.len() > 1));
-    assert!(plan.iter().any(|(p, n)| p.2 != n.zout));
+    assert!(plan.values().any(|n| n.outgoing.len() > 1));
+    assert!(plan.iter().any(|(p, n)| p.2 != n.output_layer));
     for (p, n) in &plan {
-        for z in p.2.min(n.zout)..=p.2.max(n.zout) {
+        for z in p.2.min(n.output_layer)..=p.2.max(n.output_layer) {
             assert!(!problem.blocked.contains(&ChunkPos(p.0, p.1, z)));
         }
     }
@@ -49,9 +57,14 @@ fn routes_shared_tree_around_obstacles_and_across_layers() {
 fn rejects_unreachable_endpoint() {
     let problem = TransportProblem {
         nets: vec![TransportNet {
-            root: ChunkPos(0, 0, 0),
-            heading: Direction::East,
-            ends: vec![(ChunkPos(2, 0, 0), Direction::East)],
+            source: TransportEndpoint {
+                position: ChunkPos(0, 0, 0),
+                direction: Direction::East,
+            },
+            sinks: vec![TransportEndpoint {
+                position: ChunkPos(2, 0, 0),
+                direction: Direction::East,
+            }],
             fluid: false,
         }],
         blocked: HashSet::from([ChunkPos(1, 0, 0)]),

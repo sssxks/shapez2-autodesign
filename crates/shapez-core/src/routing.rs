@@ -6,25 +6,30 @@ use std::{
     collections::{BTreeSet, BinaryHeap, HashMap, HashSet},
 };
 type State = (ChunkPos, Direction);
+/// Direction of travel entering a source tile or leaving a sink tile.
+#[derive(Clone, Copy, Debug)]
+pub struct TransportEndpoint {
+    pub position: ChunkPos,
+    pub direction: Direction,
+}
 #[derive(Clone)]
 pub struct TransportNet {
-    pub root: ChunkPos,
-    pub heading: Direction,
-    pub ends: Vec<(ChunkPos, Direction)>,
+    pub source: TransportEndpoint,
+    pub sinks: Vec<TransportEndpoint>,
     pub fluid: bool,
 }
 #[derive(Clone)]
 pub struct RouteNode {
-    pub owner: usize,
-    pub input: Direction,
-    pub zout: i32,
-    pub outputs: BTreeSet<Direction>,
+    pub net: usize,
+    pub incoming: Direction,
+    pub output_layer: i32,
+    pub outgoing: BTreeSet<Direction>,
 }
 pub type RoutePlan = HashMap<ChunkPos, RouteNode>;
 fn route(
     netid: usize,
     net: &TransportNet,
-    end: (ChunkPos, Direction),
+    end: TransportEndpoint,
     blocked: &HashSet<ChunkPos>,
     reserved: &HashMap<ChunkPos, usize>,
     nodes: &mut RoutePlan,
@@ -32,7 +37,7 @@ fn route(
 ) -> Result<()> {
     let mut occupied = HashMap::new();
     for (&p, node) in nodes.iter() {
-        for z in p.2.min(node.zout)..=p.2.max(node.zout) {
+        for z in p.2.min(node.output_layer)..=p.2.max(node.output_layer) {
             occupied.insert(ChunkPos(p.0, p.1, z), p);
         }
     }
@@ -44,7 +49,7 @@ fn route(
     let mut heap = BinaryHeap::new();
     let mut cost = HashMap::<State, i32>::new();
     let mut prev = HashMap::<State, (State, Direction, i32)>::new();
-    let start = (net.root, net.heading);
+    let start = (net.source.position, net.source.direction);
     cost.insert(start, 0);
     heap.push(Reverse((0, start)));
     let mut finish = None;
@@ -53,15 +58,15 @@ fn route(
             continue;
         }
         let (p, h) = s;
-        if (p.0, p.1) == (end.0.0, end.0.1)
-            && (p.2 != end.0.2 || end.1 != h.opposite())
-            && (p.2.min(end.0.2)..=p.2.max(end.0.2)).all(|z| {
+        if (p.0, p.1) == (end.position.0, end.position.1)
+            && (p.2 != end.position.2 || end.direction != h.opposite())
+            && (p.2.min(end.position.2)..=p.2.max(end.position.2)).all(|z| {
                 allowed(ChunkPos(p.0, p.1, z))
                     && occupied.get(&ChunkPos(p.0, p.1, z)).is_none_or(|base| {
                         *base == p
-                            && nodes[base].owner == netid
-                            && nodes[base].input == h
-                            && nodes[base].zout == end.0.2
+                            && nodes[base].net == netid
+                            && nodes[base].incoming == h
+                            && nodes[base].output_layer == end.position.2
                     })
             })
         {
@@ -72,7 +77,7 @@ fn route(
             continue;
         }
         if let Some(base) = occupied.get(&p)
-            && (*base != p || nodes[base].owner != netid || nodes[base].input != h)
+            && (*base != p || nodes[base].net != netid || nodes[base].incoming != h)
         {
             continue;
         }
@@ -83,7 +88,7 @@ fn route(
                     continue;
                 }
                 if let Some(node) = nodes.get(&p)
-                    && (node.zout != z || z != p.2 && !node.outputs.contains(&d))
+                    && (node.output_layer != z || z != p.2 && !node.outgoing.contains(&d))
                 {
                     continue;
                 }
@@ -99,7 +104,7 @@ fn route(
                 if !allowed(next.0) {
                     continue;
                 }
-                let step = if nodes.get(&p).is_some_and(|v| v.outputs.contains(&d)) {
+                let step = if nodes.get(&p).is_some_and(|v| v.outgoing.contains(&d)) {
                     1
                 } else {
                     10 + if z != p.2 { 8 + 4 * (z - p.2).abs() } else { 0 }
@@ -117,7 +122,7 @@ fn route(
     let Some(mut s) = finish else {
         bail!("Cannot route net {netid} to {end:?}")
     };
-    let mut steps = vec![(s, end.1, end.0.2)];
+    let mut steps = vec![(s, end.direction, end.position.2)];
     while s != start {
         let &(parent, d, z) = prev.get(&s).unwrap();
         steps.push((parent, d, z));
@@ -134,12 +139,12 @@ fn route(
     }
     for ((p, h), d, z) in steps {
         let node = nodes.entry(p).or_insert_with(|| RouteNode {
-            owner: netid,
-            input: h,
-            zout: z,
-            outputs: BTreeSet::new(),
+            net: netid,
+            incoming: h,
+            output_layer: z,
+            outgoing: BTreeSet::new(),
         });
-        node.outputs.insert(d);
+        node.outgoing.insert(d);
     }
     Ok(())
 }
@@ -171,8 +176,11 @@ pub fn solve_transport(problem: &TransportProblem, options: SearchOptions) -> Re
     let nets = &problem.nets;
     for net in nets {
         ensure!(
-            problem.bounds.contains(net.root)
-                && net.ends.iter().all(|e| problem.bounds.contains(e.0)),
+            problem.bounds.contains(net.source.position)
+                && net
+                    .sinks
+                    .iter()
+                    .all(|e| problem.bounds.contains(e.position)),
             "Endpoint outside routing bounds"
         );
     }
@@ -190,7 +198,7 @@ pub fn solve_transport(problem: &TransportProblem, options: SearchOptions) -> Re
         let mut nodes = RoutePlan::new();
         let mut good = true;
         for id in order {
-            for &end in &nets[id].ends {
+            for &end in &nets[id].sinks {
                 if let Err(e) = route(
                     id,
                     &nets[id],

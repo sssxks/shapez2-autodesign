@@ -5,7 +5,7 @@ use shapez_core::interface::{DemandPort, FactoryInterface, RateManifest, SupplyP
 use shapez_core::{
     Blueprint, encode_blueprint,
     geometry::{ChunkPos, Direction, TilePos},
-    routing::{TransportNet, TransportProblem, solve_transport},
+    routing::{TransportEndpoint, TransportNet, TransportProblem, solve_transport},
     space::space_island,
 };
 use std::{
@@ -110,12 +110,17 @@ pub fn build_compact(
                     6 => (-16, -3, 1),
                     _ => (-15, -3, 1),
                 };
-                ends.push((ChunkPos(col + offset, y, 0), Direction::ALL[d]));
+                ends.push(TransportEndpoint {
+                    position: ChunkPos(col + offset, y, 0),
+                    direction: Direction::ALL[d],
+                });
             }
             nets.push(TransportNet {
-                root: ChunkPos(x, -5, 0),
-                heading: Direction::South,
-                ends,
+                source: TransportEndpoint {
+                    position: ChunkPos(x, -5, 0),
+                    direction: Direction::South,
+                },
+                sinks: ends,
                 fluid,
             });
         }
@@ -130,9 +135,14 @@ pub fn build_compact(
     for &offset in &design.module_offsets {
         for (port, col, y, d) in [(0, -18, 5, 3), (1, -16, 1, 1), (2, -15, 1, 1)] {
             nets.push(TransportNet {
-                root: ChunkPos(-17 + offset + port, -1, 0),
-                heading: Direction::South,
-                ends: vec![(ChunkPos(col + offset, y, 0), Direction::ALL[d])],
+                source: TransportEndpoint {
+                    position: ChunkPos(-17 + offset + port, -1, 0),
+                    direction: Direction::South,
+                },
+                sinks: vec![TransportEndpoint {
+                    position: ChunkPos(col + offset, y, 0),
+                    direction: Direction::ALL[d],
+                }],
                 fluid: true,
             });
         }
@@ -161,7 +171,7 @@ pub fn build_compact(
     }
     let mut reserved = HashMap::new();
     for (id, net) in nets.iter().enumerate() {
-        for p in std::iter::once(net.root).chain(net.ends.iter().map(|e| e.0)) {
+        for p in std::iter::once(net.source.position).chain(net.sinks.iter().map(|e| e.position)) {
             for z in 0..=1 {
                 ensure!(
                     reserved.insert(ChunkPos(p.0, p.1, z), id).is_none(),
@@ -180,8 +190,8 @@ pub fn build_compact(
     let mut routing = vec![];
     let ordered: BTreeMap<_, _> = nodes.iter().collect();
     for (&p, node) in ordered {
-        islands.push(space_island(p, node, problem.nets[node.owner].fluid));
-        routing.push(json!({"p":p,"net":node.owner,"input":node.input.index(),"out_z":node.zout,"outputs":node.outputs.iter().map(|d|d.index()).collect::<Vec<_>>()}));
+        islands.push(space_island(p, node, problem.nets[node.net].fluid));
+        routing.push(json!({"p":p,"net":node.net,"input":node.incoming.index(),"out_z":node.output_layer,"outputs":node.outgoing.iter().map(|d|d.index()).collect::<Vec<_>>()}));
     }
     let mut bp = original.value.clone();
     bp["BP"]["Entries"] = json!(islands);

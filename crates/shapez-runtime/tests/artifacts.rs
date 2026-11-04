@@ -14,7 +14,10 @@ fn task_artifacts_publish_atomically_and_resolve_in_suites() {
     expand_paths(&mut suite, &paths).unwrap();
     let suite: Suite = serde_json::from_value(suite).unwrap();
     suite.validate().unwrap();
-    assert_eq!(std::path::Path::new(suite.cases[0].args["blueprint"].as_str().unwrap()),second.path.join("factory.spz2bp"));
+    assert_eq!(
+        std::path::Path::new(suite.cases[0].args["blueprint"].as_str().unwrap()),
+        second.path.join("factory.spz2bp")
+    );
     for run in [first, second] {
         fs::remove_file(run.path.join("run.json")).unwrap();
         fs::remove_dir(run.path).unwrap();

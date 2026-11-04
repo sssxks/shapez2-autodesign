@@ -2,17 +2,21 @@ use crate::{geometry::ChunkPos, routing::RouteNode};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 pub fn space_island(p: ChunkPos, node: &RouteNode, fluid: bool) -> Value {
-    let r = node.input.index();
+    let r = node.incoming.index();
     let out: Vec<usize> = node
-        .outputs
+        .outgoing
         .iter()
         .map(|d| (d.index() + 4 - r) % 4)
         .collect();
-    let suffix = if node.zout != p.2 {
+    let suffix = if node.output_layer != p.2 {
         format!(
             "Lift{}{}{}",
-            (node.zout - p.2).abs(),
-            if node.zout > p.2 { "Up" } else { "Down" },
+            (node.output_layer - p.2).abs(),
+            if node.output_layer > p.2 {
+                "Up"
+            } else {
+                "Down"
+            },
             match out[0] {
                 0 => "Forward",
                 1 => "Right",

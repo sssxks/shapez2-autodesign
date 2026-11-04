@@ -8,11 +8,11 @@ pub struct ChunkPos(pub i32, pub i32, pub i32);
 pub struct TilePos(pub i32, pub i32, pub i32);
 
 impl TilePos {
-    pub fn chunk(self, tiles_per_chunk: i32) -> ChunkPos {
+    pub fn chunk(self, tiles_per_chunk: i32, layers_per_chunk: i32) -> ChunkPos {
         ChunkPos(
             self.0.div_euclid(tiles_per_chunk),
             self.1.div_euclid(tiles_per_chunk),
-            self.2,
+            self.2.div_euclid(layers_per_chunk),
         )
     }
 }
