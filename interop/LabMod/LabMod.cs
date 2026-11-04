@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Linq;
 using Game.Core.Content;
 using Game.Content.BuildingPath.Simulation;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 
@@ -17,23 +16,23 @@ public sealed class ShapezLabMod : IMod {
  public void Dispose(){if(host!=null)UnityEngine.Object.Destroy(host);}
 }
 public sealed class LabService:MonoBehaviour {
- private string root;private bool ready;
- void Awake(){root=Environment.GetEnvironmentVariable("SHAPEZ_LAB_RUN");Application.runInBackground=true;}
+ private string root;private bool ready;private LabPipe pipe;
+ void Awake(){root=Environment.GetEnvironmentVariable("SHAPEZ_LAB_RUN");Application.runInBackground=true;pipe=new LabPipe(Environment.GetEnvironmentVariable("SHAPEZ_LAB_PIPE"));}
+ void OnDestroy(){pipe?.Dispose();}
  void Update(){try{
-  if(File.Exists(Path.Combine(root,"shutdown"))){Application.Quit();return;}
+  if(pipe.QuitRequested){if(pipe.Failure!=null)UnityEngine.Debug.LogException(pipe.Failure);Application.Quit();return;}
   if(!ready){
    if(LabBootstrap.Session==null)return;
-   var process=Process.GetCurrentProcess();Write("ready.json",new{pid=process.Id,data_path=GameEnvironment.DataPath,version=Application.version,startup_seconds=(DateTime.Now-process.StartTime).TotalSeconds});ready=true;
+   var process=Process.GetCurrentProcess();pipe.Reply(new{kind="ready",protocol=1,pid=process.Id,data_path=GameEnvironment.DataPath,version=Application.version,startup_seconds=(DateTime.Now-process.StartTime).TotalSeconds});ready=true;
   }
-  var path=Path.Combine(root,"request.json");if(!File.Exists(path))return;
-  string requestText;
-  try{requestText=File.ReadAllText(path);File.Delete(path);}catch(IOException){return;}
-  var request=JObject.Parse(requestText);var id=(int)request["id"];
-  try{var timer=Stopwatch.StartNew();var result=Execute((string)request["operation"],(JObject)request["args"]);Write("result-"+id+".json",new{id,ok=true,wall_seconds=timer.Elapsed.TotalSeconds,result});}
-  catch(Exception e){Write("result-"+id+".json",new{id,ok=false,error=e.ToString()});}
- }catch(Exception e){Write("fatal.json",new{error=e.ToString()});enabled=false;}}
+  if(!pipe.TryReceive(out var request))return;
+  var id=(ulong)request["id"];
+  try{var timer=Stopwatch.StartNew();var result=Execute((string)request["operation"],(JObject)request["args"]);pipe.Reply(new{id,ok=true,wall_seconds=timer.Elapsed.TotalSeconds,result});}
+  catch(Exception e){pipe.Reply(new{id,ok=false,error=e.ToString()});}
+ }catch(Exception e){UnityEngine.Debug.LogException(e);pipe?.Dispose();enabled=false;Application.Quit();}}
  private object Execute(string operation,JObject args){
   switch(operation){
+   case "shutdown":return new{shutdown=true};
    case "recipe":return RecipeProbe.Run(args,root);
    case "inspect-save":return SaveInspection.Read(args);
    case "capacities":
@@ -55,5 +54,4 @@ public sealed class LabService:MonoBehaviour {
    default:throw new ArgumentException("Unknown operation: "+operation);
   }
  }
- private void Write(string name,object value){var dest=Path.Combine(root,name);var temp=dest+".tmp";File.WriteAllText(temp,JsonConvert.SerializeObject(value,Formatting.Indented));File.Move(temp,dest);}
 }

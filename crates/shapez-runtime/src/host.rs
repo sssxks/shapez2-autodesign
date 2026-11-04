@@ -7,9 +7,15 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc::RecvTimeoutError,
+    },
     thread,
     time::{Duration, Instant},
 };
+
+static PIPE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 pub struct LabPaths {
     pub root: PathBuf,
@@ -119,6 +125,7 @@ pub struct Host {
     lock: PathBuf,
     lease: Option<fs::File>,
     seq: u64,
+    connection: Option<crate::transport::Connection>,
     #[cfg(windows)]
     _job: Job,
 }
@@ -142,9 +149,15 @@ impl Host {
                 fs::copy(built.join(f), mods.join(f))?;
             }
             let mut cmd = Command::new(host.join("shapez 2.exe"));
+            let pipe_name = format!(
+                "shapez-lab-{}-{}",
+                std::process::id(),
+                PIPE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+            );
             cmd.current_dir(&host)
                 .env("SHAPEZ_LAB_DATA", &data)
                 .env("SHAPEZ_LAB_RUN", &run)
+                .env("SHAPEZ_LAB_PIPE", &pipe_name)
                 .args([
                     "--disable-store-sdk",
                     "--qa",
@@ -185,10 +198,38 @@ impl Host {
                 lock: lock.clone(),
                 lease: Some(lock_file),
                 seq: 0,
+                connection: None,
                 #[cfg(windows)]
                 _job: job,
             };
-            let ready = h.wait_file("ready.json", timeout)?;
+            let deadline = Instant::now() + timeout;
+            let pipe_path = format!(r"\\.\pipe\{pipe_name}");
+            let pipe = loop {
+                match fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(&pipe_path)
+                {
+                    Ok(pipe) => break pipe,
+                    Err(error)
+                        if error.kind() == std::io::ErrorKind::NotFound
+                            || error.raw_os_error() == Some(231) => {}
+                    Err(error) => return Err(error).context("Connecting to host pipe"),
+                }
+                h.check_alive()?;
+                ensure!(
+                    Instant::now() < deadline,
+                    "Timeout connecting to host pipe; log: {}",
+                    h.run.join("player.log").display()
+                );
+                thread::sleep(Duration::from_millis(10));
+            };
+            h.connection = Some(crate::transport::Connection::new(pipe));
+            let ready = h.receive(deadline.saturating_duration_since(Instant::now()))?;
+            ensure!(
+                ready["kind"] == "ready" && ready["protocol"] == 1,
+                "Unsupported host handshake: {ready}"
+            );
             ensure!(
                 ready["pid"].as_u64() == Some(h.child.id() as u64),
                 "Readiness PID mismatch"
@@ -197,6 +238,8 @@ impl Host {
                 Path::new(ready["data_path"].as_str().unwrap_or("")) == data,
                 "Data isolation mismatch: {ready}"
             );
+            // An archive of the handshake, never used for synchronization.
+            fs::write(h.run.join("ready.json"), serde_json::to_vec_pretty(&ready)?)?;
             Ok(h)
         })();
         if result.is_err() {
@@ -204,31 +247,50 @@ impl Host {
         }
         result
     }
-    fn wait_file(&mut self, name: &str, timeout: Duration) -> Result<Value> {
-        let start = Instant::now();
-        let file = self.run.join(name);
-        loop {
-            if file.exists() {
-                return Ok(serde_json::from_slice(&fs::read(file)?)?);
-            }
-            if let Some(status) = self.child.try_wait()? {
-                bail!(
-                    "Game exited {status}; log: {}",
-                    self.run.join("player.log").display()
-                )
-            }
-            if self.run.join("fatal.json").exists() {
-                bail!(
-                    "Host fatal: {}",
-                    fs::read_to_string(self.run.join("fatal.json"))?
-                )
-            }
-            ensure!(
-                start.elapsed() < timeout,
-                "Timeout waiting for {name}; log: {}",
+    fn check_alive(&mut self) -> Result<()> {
+        if let Some(status) = self.child.try_wait()? {
+            bail!(
+                "Game exited {status}; log: {}",
                 self.run.join("player.log").display()
             );
-            thread::sleep(Duration::from_millis(100));
+        }
+        Ok(())
+    }
+    fn receive(&mut self, timeout: Duration) -> Result<Value> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            let incoming = &self
+                .connection
+                .as_ref()
+                .context("Host pipe closed")?
+                .incoming;
+            match incoming.recv_timeout(remaining.min(Duration::from_millis(100))) {
+                Ok(Ok(value)) => {
+                    ensure!(value["kind"] != "fatal", "Host fatal: {value}");
+                    return Ok(value);
+                }
+                Ok(Err(error)) => bail!(
+                    "Host pipe failed: {error}; log: {}",
+                    self.run.join("player.log").display()
+                ),
+                Err(RecvTimeoutError::Disconnected) => bail!(
+                    "Host pipe disconnected; log: {}",
+                    self.run.join("player.log").display()
+                ),
+                Err(RecvTimeoutError::Timeout) => {
+                    self.check_alive()?;
+                    if Instant::now() >= deadline {
+                        // A partially sent/requested operation cannot be reused safely.
+                        let _ = self.child.kill();
+                        let _ = self.child.wait();
+                        bail!(
+                            "Timeout waiting for host pipe response; log: {}",
+                            self.run.join("player.log").display()
+                        );
+                    }
+                }
+            }
         }
     }
     pub fn request<T: Serialize, R: DeserializeOwned>(
@@ -244,16 +306,21 @@ impl Host {
             operation,
             args,
         };
-        let tmp = self.run.join("request.tmp");
-        fs::write(&tmp, serde_json::to_vec(&message)?)?;
-        fs::rename(tmp, self.run.join("request.json"))?;
-        let result = self.wait_file(&format!("result-{id}.json"), timeout)?;
+        self.connection
+            .as_ref()
+            .context("Host pipe closed")?
+            .send(serde_json::to_value(message)?)?;
+        let result = self.receive(timeout)?;
         let response: Response<R> = serde_json::from_value(result)?;
         ensure!(response.id == id, "Response ID mismatch");
         Ok(response)
     }
     pub fn shutdown(&mut self) -> Result<()> {
-        fs::write(self.run.join("shutdown"), b"")?;
+        if self.child.try_wait()?.is_some() {
+            return Ok(());
+        }
+        self.request::<_, Value>("shutdown", serde_json::json!({}), Duration::from_secs(10))?
+            .into_result()?;
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(10) {
             if self.child.try_wait()?.is_some() {
@@ -270,6 +337,7 @@ impl Drop for Host {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        self.connection.take();
         self.lease.take();
         let _ = fs::remove_file(&self.lock);
     }

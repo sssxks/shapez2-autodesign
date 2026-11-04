@@ -2,6 +2,7 @@ mod artifacts;
 mod host;
 mod protocol;
 mod suite;
+mod transport;
 pub use artifacts::RunDirectory;
 pub use host::{Host, LabPaths, prepare_host};
 pub use protocol::{Request, Response, Suite, TestCase};
