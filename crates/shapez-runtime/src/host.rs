@@ -1,12 +1,14 @@
+use crate::protocol::{Request, Response};
 use anyhow::{Context, Result, bail, ensure};
-use serde_json::{Value, json};
+use serde::{Serialize, de::DeserializeOwned};
+use serde_json::Value;
 use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 pub struct LabPaths {
@@ -122,16 +124,16 @@ pub struct Host {
 }
 impl Host {
     pub fn start(p: &LabPaths, timeout: Duration) -> Result<Self> {
+        let run = crate::artifacts::RunDirectory::create(&p.root, "host")?;
+        Self::start_in(p, &run.path, timeout)
+    }
+    pub fn start_in(p: &LabPaths, run: &Path, timeout: Duration) -> Result<Self> {
         let host = p.host();
         ensure!(host.join("patch-audit.json").exists(), "Run prepare first");
         let lock = host.join("running.lock");
         let mut lock_file = acquire_lease(&lock)?;
         let result = (|| {
-            let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
-            let run = p
-                .root
-                .join("runs")
-                .join(format!("{stamp}-{}", std::process::id()));
+            let run = run.to_owned();
             let data = run.join("data");
             let mods = data.join("mods/ShapezLab");
             fs::create_dir_all(&mods)?;
@@ -229,15 +231,26 @@ impl Host {
             thread::sleep(Duration::from_millis(100));
         }
     }
-    pub fn request(&mut self, operation: &str, args: Value, timeout: Duration) -> Result<Value> {
+    pub fn request<T: Serialize, R: DeserializeOwned>(
+        &mut self,
+        operation: &str,
+        args: T,
+        timeout: Duration,
+    ) -> Result<Response<R>> {
         self.seq += 1;
         let id = self.seq;
-        let message = json!({"id":id,"operation":operation,"args":args});
+        let message = Request {
+            id,
+            operation,
+            args,
+        };
         let tmp = self.run.join("request.tmp");
         fs::write(&tmp, serde_json::to_vec(&message)?)?;
         fs::rename(tmp, self.run.join("request.json"))?;
         let result = self.wait_file(&format!("result-{id}.json"), timeout)?;
-        Ok(result)
+        let response: Response<R> = serde_json::from_value(result)?;
+        ensure!(response.id == id, "Response ID mismatch");
+        Ok(response)
     }
     pub fn shutdown(&mut self) -> Result<()> {
         fs::write(self.run.join("shutdown"), b"")?;
