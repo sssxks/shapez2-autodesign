@@ -1,71 +1,89 @@
 # Shapez Lab
 
-Rust 蓝图工具与独立 Shapez 2 原生测试实例。针对本机 **1.2.0-rc3**。
+Rust 蓝图求解/生成工具与独立 Shapez 2 原生测试实例。当前适配本机 **1.2.0-rc3**。
 
-## 项目结构
+## 当前设计：CMAM 紧凑满速接入
 
-- `crates/shapez-lab`：蓝图解码、CMAM 接线生成、实例生命周期、JSON 批量测试。
-- `interop/HostPrep`：Mono.Cecil 工程，只修改临时游戏副本的数据目录和自动启动入口。
-- `interop/LabMod`：游戏 Mod 工程，原生导入蓝图、创建独立模拟世界、连接图导出与带料测试。
-- `tests/suites`：可重复执行的测试定义。
-- `scripts`：PowerShell 构建入口与本地 SDK 安装入口。
+输入为原始 `CMAM not connected.spz2bp` 与蓝图库中的 RGB 转置器。
 
-仓库不含 Python、松散 C# 程序、游戏 DLL、生成蓝图或运行日志。旧实验文件已迁至 `%TEMP%/shapez-lab/legacy-20261104-175213`。生成内容统一写入 `%TEMP%/shapez-lab`：Rust `target`、C# `bin/obj`、游戏副本 `host`、每次运行的 `runs`、蓝图 `adapter`。
+- 两组卸货站，每组保持 **销钉、圆形、方形、星形、风车、R、G、B** 顺序，兼容原来的八货种列车编组。沿同一条向西行驶的铁路串联，两组车站分别供应三个、两个 CMAM 模块。
+- 原生星际带/管道为普通带速度的 **4 倍**，每口三层四宽相当于 48 条普通带。一口最多供四个 12 带入口，五个同类入口需要至少两口。此版按所有入口同时满速设计，无需依赖形状互斥。
+- 分流全部在星际带/管道上进行。普通平台内新增建筑仅有 **5 个 RGB 转置器，共 5,265 个建筑**；无平台内分带。
+- 使用三个空间层，升降带跨越其他线路及生产主体。CMAM 保持原始坐标和内部建筑；铁路位于其北侧。
+- 整张蓝图 **54,906 建筑、422 个空间实体**：20 个实体建筑平台、375 个星际运输段、27 个铁路/车站实体。平面包围框 **30×15**。
+- 旧版为 142,208 建筑、500 空间实体、45×19 包围框。新版建筑数减少 **61.4%**，包围框面积减少 **47.4%**。面积包括所有岛屿锚点和建筑实际占用格；不是简单以锚点计算多格平台。
 
-## 启动与测试
-
-需要 Rust 工具链和本地 Shapez 2 安装。首次准备 .NET SDK（已安装时可跳过）：
-
-```powershell
-.\scripts\bootstrap.ps1
-.\scripts\dev.ps1 run -- prepare
-.\scripts\dev.ps1 run -- probe
-```
-
-`SHAPEZ_GAME_ROOT` 可指定游戏安装目录，`SHAPEZ_LAB_DOTNET` 可指定 SDK 的 `dotnet.exe`。`.cargo/config.toml` 已将本机编辑器后台构建也定向到系统临时目录；换机器时调整该路径或设置 `CARGO_TARGET_DIR`。游戏升级后重新执行 `prepare`。每次 `probe` / `batch` 都先重新构建 Mod。
-
-```powershell
-.\scripts\dev.ps1 run -- batch tests/suites/cmam.json --timeout 300
-.\scripts\dev.ps1 test
-.\scripts\dev.ps1 @('clippy', '--all-targets', '--', '-D', 'warnings')
-```
-
-测试套件支持 `${LAB}`、`${LIBRARY}` 路径变量。每项默认 `operation: blueprint`；可指定 `expected_buildings`、模拟 `seconds`。`expected_ok: false` 用于错误恢复用例。失败返回非零退出码，详细结果保存在当前运行目录的 `report.json`，另有 `player.log`、逐项响应和模拟连接图。
-
-Rust 管理子进程与 Windows Job Object。实例启动后验证 PID 和临时数据目录；正常结束先请求退出，10 秒后强制回收；超时和错误也会回收进程。单个暂存游戏目录只允许一个实例。测试进程通过自己的临时 `data/mods/ShapezLab` 加载 Mod，使用新的地图和模拟系统；每个蓝图用例有单独的世界及信号注册表。用户运行中的游戏和存档不参与测试。
-
-游戏的 Managed DLL 是独立副本；其他只读发行资源用硬链接节省空间。`HostPrep` 要求临时目录标记，并写出 `patch-audit.json`。游戏 DLL 不提交或分发。
-
-## 生成 CMAM 接线
-
-输入为用户提供的 108 平台 CMAM，以及蓝图库现有分离器和已完成的 RGB 转置器：
+生成命令：
 
 ```powershell
 $library=Join-Path $env:USERPROFILE 'AppData\LocalLow\tobspr Games\shapez 2\blueprints'
-.\scripts\dev.ps1 run -- connect "$library\CMAM not connected.spz2bp" `
-  --splitter "$library\personal\08 形状运输 Shape Transfer\带分离器 Belt Spliter.spz2bp" `
+cargo run --release -- compact "$library\CMAM not connected.spz2bp" `
   --rgb "$library\personal\09 流体运输 Fluid Transfer\RBG三口转三层 RGB Transposer.spz2bp"
 ```
 
-输出 `%TEMP%/shapez-lab/adapter/CMAM connected.spz2bp` 和 `adapter.json`。后者包含逐平台输入、输出方向与总线编号。方向 `0=东, 1=南, 2=西, 3=北`。
+输出统一在 `%TEMP%/shapez-lab/compact`：
 
-接线按原蓝图的卸货站标记：**销钉、圆形、方形、星形、风车、R、G、B**，从左到右。铁路保持原坐标，CMAM 和输出部分整体向南移动四个空间格。CMAM 的输入标记平台被走线替代，内部生产建筑保持原样。生成版共 **500 平台、142,208 建筑**，其中新增走线平台 431 个，另放置一个 RGB 转置平台。此版选择宽松总线布局，未以占地最小化为目标。
+- `CMAM compact full-rate.spz2bp`：完整蓝图。
+- `manifest.json`：供料来源、480 条目标通道、生产主体边界、逐段三维路由与统计。
+- `review.html`：可切换空间层的交互线路图和旧版对比。
+- `validation.json`、`rate-report.json`：交付时复制的原生验证结果。
 
-每个 CMAM 层模块对应以下接口；五组模块水平重复：
+求解器在有障碍的三维网格中搜索共享运输树，支持同层转弯、星际分流、上下升降及升降转弯；保留终端进入空间。固定枚举 80 种布线顺序，选择星际段数量最少的可行解。此次解为 375 段；这是有界搜索结果，未声明全局最优。
 
-| 位置 | 左到右输入 |
-|---|---|
-| 北面 | 星形、销钉、风车、RGB、RGB |
-| 南面 | 圆形、RGB、方形 |
+## 满速验收
 
-每个形状口有 3 层 × 4 通道，每个 RGB 口同样有 12 通道，颜色自上而下为 R、G、B。北面总线直接向南分配；圆、方和第三个 RGB 从右侧绕至南面。交叉使用跨度 5 的跳带/跳管，分支使用库中的分离器布局。
+```powershell
+cargo run -- batch tests/suites/compact.json --timeout 300
+cargo test
+cargo clippy --all-targets -- -D warnings
+```
 
-一个卸货口分配到多个模块，分流不会增加总供给能力。带料用例验证所有目标口的内容与可达性，不测最终 CMAM 配方产率。
+本机通过以下原生测试：
 
-## 原生带料测试边界
+1. 读取游戏当前速度配置，普通带 1 世界单位/秒，星际带/管道 4 世界单位/秒。
+2. 原始 52,375 建筑及新版 54,906 建筑完整导入并模拟。
+3. **全部 40 个输入口同时持续拉满**：25 个形状口 × 12 通道、15 个流体口 × 12 通道。
+4. 预热 300 模拟秒，测量 120 模拟秒。300 条形状通道全部 **2 件/秒**；180 条流体通道全部 **20 升/秒**。最慢通道均为额定速度的 **100%**。
+5. 同一宿主内连续创建/释放世界、错误请求恢复、实例正常回收。
 
-`adapter_probe: true` 专用于上述 CMAM 布局。测试从八个真实卸货站的 96 条已连接输出通道注入五种形状和三种流体；将生产电路截断在 CMAM 的物理接收器处，收集全部 **300 条形状通道 + 180 条流体通道**。每条形状通道校验完整形状码，每条流体通道校验色码；连接缺失、串料或规定时间内未到达都会失败。
+测试持续补充真实卸货站的出料仓，保留其原生出料、空间运输、分流和平台接收器；符合“列车供货足够”的条件。生产电路在真实入口接收器后接测试收集器，以逐条检查内容与稳态速率。形状收集器按一条普通带的额定速度持续请求物料。形状校验完整形状码，流体校验 RGB 色码。没有用直接向目标注入的方式计算速率。
 
-本机已完成一次 760 模拟秒的带料测试，480 条通道全部通过。整张蓝图另以全部 142,208 建筑原生导入并运行。测试套件同时覆盖原始 CMAM、错误请求恢复和世界释放后的继续运行。
+`rate_manifest` 指定输入/输出边界，`warmup_seconds` 指定预热时间，`seconds` 指定测量窗口。普通带额定速率由原生 `BeltSpeed` 和 `LaneConstants.ItemSpacing` 计算；本版本流体一包 10 升，流体额定量据此计算。低于额定值的 99% 或出现串料即失败。该测试验收的是整个接入网络的输送能力。
 
-RGB 转置器作为用户蓝图库中的输入资源读取；本仓库保留使用和测试入口，不依赖已归档的旧 Python 求解器。
+## 项目与临时文件
+
+- `crates/shapez-lab`：Rust workspace 中的正式 crate；蓝图读写、实例管理、CLI 和当前设计求解器。
+- `interop/HostPrep`：Mono.Cecil 工程，仅修改临时游戏副本。
+- `interop/LabMod`：游戏 Mod 工程；原生世界、导入、通道测试及启动桥接。
+- `ShapezLab.slnx`：两个 C# 工程的 solution。
+- `tests/suites`：批量用例。
+
+本轮将新设计放在独立 `compact` 模块内，仍使用同一个 crate。通用蓝图读写、进程管理和设计代码已分文件；后续可按用户要求拆分 crate，本轮未做跨项目重构。
+
+仓库无 Python、松散 C# 程序或游戏 DLL。旧实验归档在 `%TEMP%/shapez-lab/legacy-20261104-175213`。所有构建产物、生成蓝图、SDK、游戏副本和日志均在 `%TEMP%/shapez-lab`。交付蓝图另复制到用户蓝图库。`.cargo/config.toml` 已将本机编辑器后台构建也定向到系统临时目录；换机器时调整该路径或设置 `CARGO_TARGET_DIR`。
+
+## 独立实例与启动裁剪
+
+首次需要本地游戏安装、Rust 工具链以及 .NET SDK：
+
+```powershell
+.\scripts\bootstrap.ps1  # SDK 已安装时跳过
+cargo run -- prepare
+cargo run -- probe
+```
+
+`SHAPEZ_GAME_ROOT` 可覆盖安装目录，`SHAPEZ_LAB_DOTNET` 可指定 SDK 的 `dotnet.exe`。游戏升级或 HostPrep 修改后重新 `prepare`。每次 `probe` / `batch` 自动构建 Mod。
+
+实例使用自己的临时数据目录和 Mod 目录。Rust 校验 readiness PID/路径，通过独占文件租约和 Windows Job Object 管理生命周期；退出、超时及父进程异常时均回收游戏。每个用例重新建立地图、资源地图、模拟器和信号注册表。不会操作个人游戏进程或存档。
+
+临时副本的启动桥接只运行原生设置、玩家基础对象、游戏模式/核心数据初始化；跳过交互控制、音频系统、渲染系统、HUD、成就和调试控制台初始化，禁用摄像机与宿主地图每帧 Tick。保留内容加载所需的图形设备。此版本的资源加载不能直接使用 Unity `-nographics`，因此采用停止渲染而保留资源加载的方式。
+
+本次裁剪实例启动约 **3–4 秒**；新版的 420 模拟秒满速用例（含导入、测量和图导出）实测约 **5.6 秒**。完整六项套件结果在运行目录 `report.json`，各项含 `wall_seconds`，启动数据在 `ready.json`。
+
+Managed DLL 是独立副本，其他只读发行资源使用硬链接。HostPrep 只处理带标记的暂存目录，并输出 `patch-audit.json`；游戏 DLL 不提交或分发。
+
+## 通用命令与旧设计
+
+`inspect` 输出蓝图摘要，`decode` 解压到临时目录。`probe --operation capacities` 查询速度和空间运输类型。批量套件支持 `${LAB}`、`${LIBRARY}` 路径变量，`expected_ok: false` 可测试错误恢复。失败返回非零状态，日志和响应保留在当前运行目录。
+
+旧版 `connect --splitter ... --rgb ...`、`tests/suites/cmam.json` 和原有输出保留供对比；其可达性测试不作为新设计的吞吐验收。

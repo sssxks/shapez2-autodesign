@@ -82,20 +82,20 @@ fn route(
         if !allowed(p) {
             continue;
         }
-        if let Some(base) = occupied.get(&p) {
-            if *base != p || nodes[base].owner != netid || nodes[base].input != h {
-                continue;
-            }
+        if let Some(base) = occupied.get(&p)
+            && (*base != p || nodes[base].owner != netid || nodes[base].input != h)
+        {
+            continue;
         }
         for z in 0..=2 {
-            for d in 0..4 {
+            for (d, &(dx, dy)) in D.iter().enumerate() {
                 if z == p.2 && d == (h + 2) % 4 {
                     continue;
                 }
-                if let Some(node) = nodes.get(&p) {
-                    if node.zout != z || z != p.2 && !node.outputs.contains(&d) {
-                        continue;
-                    }
+                if let Some(node) = nodes.get(&p)
+                    && (node.zout != z || z != p.2 && !node.outputs.contains(&d))
+                {
+                    continue;
                 }
                 if (p.2.min(z)..=p.2.max(z)).any(|zz| {
                     !allowed((p.0, p.1, zz))
@@ -103,7 +103,7 @@ fn route(
                 }) {
                     continue;
                 }
-                let next = ((p.0 + D[d].0, p.1 + D[d].1, z), d);
+                let next = ((p.0 + dx, p.1 + dy, z), d);
                 if !allowed(next.0) {
                     continue;
                 }
@@ -231,13 +231,13 @@ pub fn compact_cmam(input: &Path, rgb: &Path, out: &Path) -> Result<Value> {
     ];
     for group in 0..2 {
         let start = if group == 0 { -18 } else { -3 };
-        for kind in 0..8 {
+        for (kind, label) in labels.iter().enumerate() {
             let x = start + kind as i32;
             let fluid = kind >= 5;
             islands.push(json!({"T":if fluid{"Layout_TrainUnloader_Fluids"}else{"Layout_TrainUnloader_Shapes"},"X":x,"Y":-7,"R":2}));
             blocked.insert((x, -7, 0));
             blocked.insert((x, -6, 0));
-            sources.push(json!({"chunk":[x,-7,0],"item":labels[kind]}));
+            sources.push(json!({"chunk":[x,-7,0],"item":label}));
             let mut ends = vec![];
             for j in if group == 0 { 0..3 } else { 3..5 } {
                 let (col, y, d) = match kind {
@@ -336,10 +336,9 @@ pub fn compact_cmam(input: &Path, rgb: &Path, out: &Path) -> Result<Value> {
                 break;
             }
         }
-        if good {
+        if good && best.as_ref().is_none_or(|b| nodes.len() < b.len()) {
             eprintln!("routing attempt {attempt}: {} space nodes", nodes.len());
             best = Some(nodes);
-            break;
         }
     }
     let nodes = best.ok_or_else(|| anyhow::anyhow!("Routing failed: {last_error}"))?;
@@ -355,10 +354,41 @@ pub fn compact_cmam(input: &Path, rgb: &Path, out: &Path) -> Result<Value> {
     fs::create_dir_all(out)?;
     let path = out.join("CMAM compact full-rate.spz2bp");
     fs::write(&path, encode_blueprint(&result.value)?)?;
-    let manifest = json!({"sources":sources,"targets":targets,"cut_islands":cuts,"space_ratio":4,"production_buildings":production_buildings,"space_nodes":nodes.len(),"routing":routing,"summary":result.summary()});
+    let previous = out.parent().unwrap().join("adapter/CMAM connected.spz2bp");
+    let previous = if previous.exists() {
+        Some(Blueprint::read(previous)?)
+    } else {
+        None
+    };
+    let manifest = json!({"sources":sources,"targets":targets,"cut_islands":cuts,"space_ratio":4,"production_buildings":production_buildings,"space_nodes":nodes.len(),"routing":routing,"summary":result.summary(),"bounds":bounds(&result),"previous":previous.as_ref().map(|p|json!({"summary":p.summary(),"bounds":bounds(p)}))});
     fs::write(
         out.join("manifest.json"),
         serde_json::to_vec_pretty(&manifest)?,
     )?;
+    fs::write(
+        out.join("review.html"),
+        include_str!("compact_review.html").replace("__DATA__", &serde_json::to_string(&manifest)?),
+    )?;
     Ok(manifest)
+}
+
+fn bounds(bp: &Blueprint) -> Value {
+    let mut points = vec![];
+    for i in bp.islands() {
+        let (x, y) = (n(i, "X"), n(i, "Y"));
+        points.push((x, y));
+        if let Some(bs) = i["B"]["Entries"].as_array() {
+            for b in bs {
+                points.push((
+                    (x * 20 + n(b, "X")).div_euclid(20),
+                    (y * 20 + n(b, "Y")).div_euclid(20),
+                ));
+            }
+        }
+    }
+    let x0 = points.iter().map(|p| p.0).min().unwrap();
+    let x1 = points.iter().map(|p| p.0).max().unwrap();
+    let y0 = points.iter().map(|p| p.1).min().unwrap();
+    let y1 = points.iter().map(|p| p.1).max().unwrap();
+    json!({"min_x":x0,"min_y":y0,"width":x1-x0+1,"height":y1-y0+1,"area":(x1-x0+1)*(y1-y0+1)})
 }
