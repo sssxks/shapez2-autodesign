@@ -35,7 +35,7 @@ fn stage(from:&Path,to:&Path)->Result<()> {
   else if !dest.exists(){fs::hard_link(e.path(),&dest).or_else(|_|fs::copy(e.path(),&dest).map(|_|()))?;}
  }Ok(())
 }
-pub struct Host {child:Child,pub run:PathBuf,lock:PathBuf,seq:u64,#[cfg(windows)]job:Job}
+pub struct Host {child:Child,pub run:PathBuf,lock:PathBuf,seq:u64,#[cfg(windows)]_job:Job}
 impl Host {
  pub fn start(p:&LabPaths,timeout:Duration)->Result<Self>{
   let host=p.host();ensure!(host.join("patch-audit.json").exists(),"Run prepare first");
@@ -47,9 +47,9 @@ impl Host {
    let mut cmd=Command::new(host.join("shapez 2.exe"));
    cmd.current_dir(&host).env("SHAPEZ_LAB_DATA",&data).env("SHAPEZ_LAB_RUN",&run).args(["--disable-store-sdk","--qa","-batchmode","-screen-fullscreen","0","-screen-width","640","-screen-height","360","-logFile"]).arg(run.join("player.log")).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
    #[cfg(windows)]{use std::os::windows::process::CommandExt;cmd.creation_flags(0x08000000);}
-   let child=cmd.spawn()?;
-   #[cfg(windows)]let job=Job::attach(&child)?;
-   let mut h=Self{child,run,lock:lock.clone(),seq:0,#[cfg(windows)]job};
+   let mut child=cmd.spawn()?;
+   #[cfg(windows)]let job=match Job::attach(&child){Ok(job)=>job,Err(e)=>{let _=child.kill();let _=child.wait();return Err(e)}};
+   let mut h=Self{child,run,lock:lock.clone(),seq:0,#[cfg(windows)]_job:job};
    fs::write(&lock,h.child.id().to_string())?;
    let ready=h.wait_file("ready.json",timeout)?;
    ensure!(ready["pid"].as_u64()==Some(h.child.id() as u64),"Readiness PID mismatch");

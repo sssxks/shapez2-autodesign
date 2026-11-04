@@ -30,7 +30,16 @@ public sealed class LabService:MonoBehaviour {
  }catch(Exception e){Write("fatal.json",new{error=e.ToString()});enabled=false;}}
  private object Execute(string operation,JObject args){
   switch(operation){
-   case "capabilities":return new{game=Application.version,data=GameEnvironment.DataPath,simulator=StaticGameCoreAccessor.G.LocalPlayer.CurrentMap.Simulator.GetType().FullName,operations=new[]{"capabilities"}};
+   case "capabilities":return new{game=Application.version,data=GameEnvironment.DataPath,simulator=StaticGameCoreAccessor.G.LocalPlayer.CurrentMap.Simulator.GetType().FullName,operations=new[]{"capabilities","blueprint","catalog"}};
+   case "blueprint":using(var world=new LabWorld())return world.Run(args,root);
+   case "catalog":
+    var definitions=new JObject();
+    foreach(var obj in Resources.FindObjectsOfTypeAll<ScriptableObject>()){
+     if(obj.GetType().Name.Contains("Metadata")||obj.GetType().Name.Contains("BuildingInternalVariant")){
+      try{definitions[obj.name]=JObject.Parse(JsonUtility.ToJson(obj));}catch{}
+     }
+    }
+    var output=Path.Combine(root,"definitions.json");File.WriteAllText(output,definitions.ToString());return new{path=output,count=definitions.Count};
    default:throw new ArgumentException("Unknown operation: "+operation);
   }
  }

@@ -15,7 +15,8 @@ var audit=new List<object>();
 foreach(var file in Directory.GetFiles(managed,"*.dll")) {
  var name=Path.GetFileName(file);
  if(!(name.StartsWith("Game.")||name.StartsWith("SPZ")||name=="MainMenuAssembly.dll")) continue;
- using var asm=AssemblyDefinition.ReadAssembly(file,new ReaderParameters{AssemblyResolver=resolver});
+ using var input=new MemoryStream(File.ReadAllBytes(file));
+ using var asm=AssemblyDefinition.ReadAssembly(input,new ReaderParameters{AssemblyResolver=resolver});
  int paths=0,boot=0;
  foreach(var type in Flatten(asm.MainModule.Types)) foreach(var method in type.Methods) {
   if(!method.HasBody) continue;
