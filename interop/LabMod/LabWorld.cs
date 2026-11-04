@@ -23,7 +23,7 @@ internal sealed class LabWorld:IDisposable {
  readonly SimulationGraph graph;readonly ISimulationSystem[] systems;readonly ProcessingUpdateStrategy strategy;
  readonly GameMode mode;readonly ILogger logger;readonly BlueprintRawDataConverter converter;readonly IBlueprintImporter importer;
  public static object Session {
-  get{var orchestrator=typeof(GameBootstrapper).GetField("GameOrchestrator",BindingFlags.Static|BindingFlags.NonPublic).GetValue(null);
+  get{if(LabBootstrap.Session!=null)return LabBootstrap.Session;var orchestrator=typeof(GameBootstrapper).GetField("GameOrchestrator",BindingFlags.Static|BindingFlags.NonPublic).GetValue(null);
    var session=Field<object>(orchestrator,"CurrentSubOrchestrator");if(!(session is GameSessionOrchestrator))throw new InvalidOperationException("Game session is not ready");return session;}
  }
  internal static T Field<T>(object obj,string name)=>(T)obj.GetType().GetField(name,BindingFlags.NonPublic|BindingFlags.Public|BindingFlags.Instance).GetValue(obj);
@@ -45,7 +45,7 @@ internal sealed class LabWorld:IDisposable {
   layout=new MapLayout(logger);map=new Map(layout,resources,logger);graph=new SimulationGraph(Ticks.Zero,false,logger);
   simulator=new Simulator(graph,systems,layout,logger);model=new MapModel(map,simulator,new MapLayers(mode.MaxBuildingLayer,mode.MinIslandLayer,mode.MaxIslandLayer),logger);
   strategy=new ProcessingUpdateStrategy(SimulationConstants.MaxSimulationUpdateDelta,SimulationConstants.MaxSimulatorIncrement,new[]{Ticks.Zero});
-  importer=deps.Resolve<IBlueprintImporter>();
+  importer=LabBootstrap.Importer??deps.Resolve<IBlueprintImporter>();
   converter=new BlueprintRawDataConverter(((GameSessionOrchestrator)session).DataSerializers,logger);
  }
  public object Run(JObject args,string root){
@@ -53,6 +53,8 @@ internal sealed class LabWorld:IDisposable {
   if(!importer.TryImport(File.ReadAllText(path),out var annotated,out var version,out var error))throw error;
   if(!(annotated.Blueprint is IslandBlueprint blueprint))throw new ArgumentException("Island blueprint required");
   var originalCount=blueprint.BuildingCount;
+  var rateManifest=args["rate_manifest"]==null?null:JObject.Parse(File.ReadAllText((string)args["rate_manifest"]));
+  var rateProbe=rateManifest==null?null:new RateProbe(rateManifest);
   using(layout.StartBunchEdit()){
   foreach(var entry in blueprint.Entries){
    var transform=new GlobalChunkTransform(new GlobalChunkCoordinate(entry.Chunk_L.x,entry.Chunk_L.y,entry.Chunk_L.z),entry.Rotation);
@@ -67,6 +69,7 @@ internal sealed class LabWorld:IDisposable {
     building.Definition.TryCreateConfiguration(out var config);
     if(building.AdditionalConfigData!=null&&config!=null)converter.DeserializeByteArrayIntoData(building.AdditionalConfigData,GameVersionEnvironment.CurrentVersion,config.Sync);
     var t=new LocalTileTransform(building.Tile_L,building.Rotation).ToGlobal(new GlobalChunkTransform(transform.Position,default(GridRotation)));
+    if(rateProbe!=null&&rateProbe.CutIslands.Contains((entry.Chunk_L.x,entry.Chunk_L.y,entry.Chunk_L.z))&&!rateProbe.Targets.ContainsKey((t.Position.x,t.Position.y,t.Position.z)))continue;
     if((bool?)args["adapter_probe"]==true&&!AdapterProbe.KeepBuilding(t.Position))continue;
     model.CreateBuilding(building.Definition,t,config);
    }
@@ -77,7 +80,12 @@ internal sealed class LabWorld:IDisposable {
   var lods=model.Islands.SelectMany(i=>i.Definition.Layout.GetChunkPositions().Select(c=>SimulationLOD.Highest(c.ToGlobal(i.Transform)))).ToArray();
   var update=new SimulationUpdateConfiguration(lods,TimeSpan.Zero,1);
   object probeReport=null;
-  if((bool?)args["adapter_probe"]==true){
+  if(rateProbe!=null){
+   rateProbe.Attach(simulator,rateManifest);var warmup=(int?)args["warmup_seconds"]??300;
+   for(int i=0;i<(warmup+seconds)*10;i++){if(i==warmup*10)rateProbe.ResetMeters();rateProbe.BeforeTick();simulator.SynchronousUpdate(Ticks.OneSecond/10,update,strategy);rateProbe.AfterTick();}
+   var report=rateProbe.Report(seconds);probeReport=report;File.WriteAllText(Path.Combine(root,"rate-report.json"),report.ToString());
+   if((double)report["min_shape_ratio"]<0.99||(double)report["min_fluid_ratio"]<0.99)throw new Exception("Full-rate test failed. Shape minimum="+report["min_shape_ratio"]+", fluid minimum="+report["min_fluid_ratio"]);
+  }else if((bool?)args["adapter_probe"]==true){
    var probe=new AdapterProbe(simulator);bool complete=false;
    for(int i=0;i<seconds*10;i++){probe.BeforeTick();simulator.SynchronousUpdate(Ticks.OneSecond/10,update,strategy);if(probe.AfterTick()){complete=true;break;}}
    probeReport=probe.Report();File.WriteAllText(Path.Combine(root,"adapter-flow.json"),JsonConvert.SerializeObject(probeReport));
