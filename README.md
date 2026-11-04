@@ -69,7 +69,9 @@ cargo clippy --all-targets -- -D warnings
 
 半形状配方记录：`%TEMP%/shapez-lab/runs/1793798197194-12116/half-windmill-circle-production.json`。
 
-读取现场快照：设置 `SHAPEZ_LAB_SAVE` 为 `.spz2` 自动存档路径，再运行 `cargo run -- probe --operation inspect-save`。宿主先将文件复制到本次临时目录的 `inspection.spz2`，通过原生存档加载器恢复地图，输出常量/全局目标信号和卸货站存货。此模式不推进地图、不保存回源存档；使用后清除该环境变量即可恢复新地图测试。
+读取现场快照：设置 `SHAPEZ_LAB_SAVE` 为 `.spz2` 自动存档路径，再运行 `cargo run -- probe --operation inspect-save`。宿主先将文件复制到本次临时目录的 `inspection.spz2`，通过原生存档加载器恢复地图，输出常量/全局/可控无线目标信号、卸货站存货和模拟节点类型计数。默认不推进地图；批量用例可通过 `seconds` 推进副本以恢复无线信号传播。始终不保存回源存档；使用后清除该环境变量即可恢复新地图测试。
+
+21:22 自动存档副本推进 5 秒后，四台 CMAM 的可控无线接收器分别读取频道 5250–5253，目标均不是 `WrWr----:CuCu----`。现场记录在 `%TEMP%/shapez-lab/runs/1793798827562-19796/result-1.json`；需取得故障目标正在运行的存档，才能继续沿该现场追踪。
 
 ## 项目与临时文件
 

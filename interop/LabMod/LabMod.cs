@@ -32,7 +32,7 @@ public sealed class LabService:MonoBehaviour {
  }catch(Exception e){Write("fatal.json",new{error=e.ToString()});enabled=false;}}
  private object Execute(string operation,JObject args){
   switch(operation){
-   case "inspect-save":return SaveInspection.Read();
+   case "inspect-save":return SaveInspection.Read(args);
    case "capacities":
     var mode=LabWorld.Field<GameMode>(LabWorld.Session,"Mode");
     BeltSpeed belt=mode.Buildings.ForwardBelt.ConfigAs<IConveyorConfiguration>().ConveyorSpeed;
