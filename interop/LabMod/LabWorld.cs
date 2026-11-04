@@ -23,9 +23,9 @@ public sealed class LabWorld:IDisposable {
  readonly SimulationGraph graph;readonly ISimulationSystem[] systems;readonly ProcessingUpdateStrategy strategy;
  readonly GameMode mode;readonly ILogger logger;readonly BlueprintRawDataConverter converter;readonly IBlueprintImporter importer;
  public LabWorld(){
-  var session=GameBindings.Session;logger=GameBindings.Field<ILogger>(session,"Logger");mode=GameBindings.Field<GameMode>(session,"Mode");
+  var session=GameBindings.Session;logger=GameBindings.Field<ILogger>(session,"Logger");mode=GameBindings.Mode;
   var deps=GameBindings.Field<DependencyContainer>(session,"DependencyContainer");
-  var generator=new DefaultMapGenerator(mode.Seed,mode.MapGenerationParameters,mode.Scenario.StartingLocation,mode.ShapesConfiguration,mode.ShapeColorScheme,GameBindings.Field<ShapeRegistry>(session,"ShapeRegistry"),GameBindings.Field<IShapeIdManager>(session,"ShapeIdManager"));
+  var generator=new DefaultMapGenerator(mode.Seed,mode.MapGenerationParameters,mode.Scenario.StartingLocation,mode.ShapesConfiguration,mode.ShapeColorScheme,GameBindings.Shapes,GameBindings.ShapeIds);
   var resources=new GameResourcesMap(generator);
   // Construct a new system collection. Stateful systems must never be shared with the host map.
   var constructor=typeof(BuiltinSimulationSystems).GetConstructors().Single();
@@ -86,21 +86,9 @@ public sealed class LabWorld:IDisposable {
   if(experiment!=null)probeReport=experiment.Run(this,args,root);
   else if(rateProbe!=null)probeReport=RateScenario.Run(this,rateProbe,rateManifest,args,root);
   else Advance(seconds,60);
-  var nodes=new List<object>();var open=new List<object>();
-  foreach(var sim in ((ISimulator)simulator).Simulations){
-   var positions=new List<int[]>();if(sim is ILocalizedTileSimulation tile)for(int i=0;i<tile.NumOccupiedTiles;i++){var p=tile.GetOccupiedTile(i);positions.Add(new[]{p.x,p.y,(int)p.z});}
-   var links=new List<object>();if(sim is IConnectableSimulation connectable)for(int i=0;i<connectable.NumConnectors;i++){
-    var connector=connectable.GetConnector(i);bool connected=simulator.TryGetConnectedSimulation(sim,i,out var other);
-    links.Add(new{port=i,type=connector.GetType().FullName,socket=connector.ConnectorSocket.ToString(),target=connected?Id(other):null});
-    if(!connected)open.Add(new{node=Id(sim),port=i,type=connector.GetType().FullName,socket=connector.ConnectorSocket.ToString()});
-   }
-   nodes.Add(new{id=Id(sim),type=sim.Simulation.GetType().FullName,positions,links});
-  }
-  var name=((string)args["name"]??"blueprint");if(name.IndexOfAny(Path.GetInvalidFileNameChars())>=0)throw new ArgumentException("Invalid case name");
-  var graphPath=Path.Combine(root,name+"-graph.json");File.WriteAllText(graphPath,JsonConvert.SerializeObject(nodes));
-  return new{islands=model.IslandCount,buildings=model.BuildingCount,imported_buildings=originalCount,simulated_seconds=simulator.SimulationTime.FloatSeconds,simulations=nodes.Count,open_connectors=open,graph=graphPath,probe=probeReport};
+  var export=(bool?)args["export_graph"]!=false?GraphExporter.Write(simulator,args,root):(((ISimulator)simulator).Simulations.Count(),new List<object>(),(string)null);
+  return new{islands=model.IslandCount,buildings=model.BuildingCount,imported_buildings=originalCount,simulated_seconds=simulator.SimulationTime.FloatSeconds,simulations=export.Item1,open_connectors=export.Item2,graph=export.Item3,probe=probeReport};
  }
- static string Id(ILocalizedSimulation sim){if(sim is ILocalizedTileSimulation t){var p=t.GetOccupiedTile(0);return p.x+":"+p.y+":"+p.z+":"+sim.Simulation.GetType().Name;}var c=sim.GetOccupiedChunk(0);return "chunk:"+c.x+":"+c.y+":"+c.z+":"+sim.Simulation.GetType().Name;}
  public void Dispose(){model.Dispose();simulator.Dispose();foreach(var s in systems)if(s is IDisposable disposable)disposable.Dispose();graph.Dispose();map.Dispose();layout.Dispose();}
 }
 

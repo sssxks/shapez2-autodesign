@@ -37,7 +37,7 @@ public sealed class LabService:MonoBehaviour {
    case "recipe":return RecipeProbe.Run(args,root);
    case "inspect-save":return SaveInspection.Read(args);
    case "capacities":
-    var mode=GameBindings.Field<GameMode>(GameBindings.Session,"Mode");
+    var mode=GameBindings.Mode;
     BeltSpeed belt=mode.Buildings.ForwardBelt.ConfigAs<IConveyorConfiguration>().ConveyorSpeed;
     BeltSpeed space=mode.Islands.SpaceBelts.First().ConfigAs<SpacePathConfiguration>().SpaceConveyorSpeed;
     BeltSpeed pipe=mode.Islands.SpacePipes.First().ConfigAs<SpacePathConfiguration>().SpaceConveyorSpeed;

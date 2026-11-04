@@ -29,7 +29,7 @@ internal sealed class RateProbe {
  }
  internal void Attach(ISimulator simulator,JObject manifest){
   supply=new UnloaderSupply(simulator,manifest);
-  var mode=GameBindings.Field<GameMode>(GameBindings.Session,"Mode");BeltSpeed speed=mode.Buildings.ForwardBelt.ConfigAs<IConveyorConfiguration>().ConveyorSpeed;
+  var mode=GameBindings.Mode;BeltSpeed speed=mode.Buildings.ForwardBelt.ConfigAs<IConveyorConfiguration>().ConveyorSpeed;
   ExpectedBeltRate=(speed.StepsPerTick*Ticks.OneSecond).Value/(double)LaneConstants.ItemSpacing.Value;
   foreach(var localized in simulator.Simulations){var sim=localized.Simulation;
    if(!(localized is ILocalizedTileSimulation tile))continue;

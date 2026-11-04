@@ -23,7 +23,7 @@ internal static class SaveInspection {
    for(int i=0;i<seconds*10;i++)((Simulator)simulator).SynchronousUpdate(Ticks.OneSecond/10,update,strategy);
   }
   var channels=GameBindings.Field<SignalChannelRegistry>(session,"SignalChannelRegistry");
-  var shapesRegistry=GameBindings.Field<ShapeRegistry>(session,"ShapeRegistry");
+  var shapesRegistry=GameBindings.Shapes;
   var receivers=new List<object>();var unloaders=new List<object>();
   foreach(var localized in simulator.Simulations){
    var s=localized.Simulation;var p=localized.GetOccupiedChunk(0);
@@ -34,8 +34,8 @@ internal static class SaveInspection {
     var signal=channels.TryGetReadOnlyChannel(config.ChannelId,out var channel)?channel.ReadSignal(SignalTicks.FromTicks(simulator.SimulationTime)).ToString():null;
     receivers.Add(new{chunk=new[]{p.x,p.y,(int)p.z},channel=config.ChannelId.ToString(),signal});
    }
-   if(s is TrainCargoUnloaderSimulation<ShapeId> shapes)unloaders.Add(new{chunk=new[]{p.x,p.y,(int)p.z},type="shape",packages=GameBindings.Field<TrainCargoToBeltFillingContainer<ShapeId>[]>(shapes,"_FillingContainers").Select(f=>new{f.Package.Amount,item=f.Package.Item.IsValid?shapesRegistry.GetItem(f.Package.Item).ToString():null}).ToArray()});
-   if(s is TrainCargoUnloaderSimulation<FluidId> fluids)unloaders.Add(new{chunk=new[]{p.x,p.y,(int)p.z},type="fluid",packages=GameBindings.Field<TrainCargoToBeltFillingContainer<FluidId>[]>(fluids,"_FillingContainers").Select(f=>JToken.FromObject(f.Package)).ToArray()});
+   if(s is TrainCargoUnloaderSimulation<ShapeId> shapes)unloaders.Add(new{chunk=new[]{p.x,p.y,(int)p.z},type="shape",packages=GameBindings.ShapeCargo(shapes).Select(f=>new{f.Package.Amount,item=f.Package.Item.IsValid?shapesRegistry.GetItem(f.Package.Item).ToString():null}).ToArray()});
+   if(s is TrainCargoUnloaderSimulation<FluidId> fluids)unloaders.Add(new{chunk=new[]{p.x,p.y,(int)p.z},type="fluid",packages=GameBindings.FluidCargo(fluids).Select(f=>JToken.FromObject(f.Package)).ToArray()});
   }
   return new{map.BuildingCount,map.IslandCount,receivers,unloaders,simulation_types=simulator.Simulations.GroupBy(s=>s.Simulation.GetType().FullName).ToDictionary(g=>g.Key,g=>g.Count())};
  }
