@@ -26,12 +26,15 @@ public sealed class LabService:MonoBehaviour {
    var process=Process.GetCurrentProcess();Write("ready.json",new{pid=process.Id,data_path=GameEnvironment.DataPath,version=Application.version,startup_seconds=(DateTime.Now-process.StartTime).TotalSeconds});ready=true;
   }
   var path=Path.Combine(root,"request.json");if(!File.Exists(path))return;
-  var request=JObject.Parse(File.ReadAllText(path));File.Delete(path);var id=(int)request["id"];
+  string requestText;
+  try{requestText=File.ReadAllText(path);File.Delete(path);}catch(IOException){return;}
+  var request=JObject.Parse(requestText);var id=(int)request["id"];
   try{var timer=Stopwatch.StartNew();var result=Execute((string)request["operation"],(JObject)request["args"]);Write("result-"+id+".json",new{id,ok=true,wall_seconds=timer.Elapsed.TotalSeconds,result});}
   catch(Exception e){Write("result-"+id+".json",new{id,ok=false,error=e.ToString()});}
  }catch(Exception e){Write("fatal.json",new{error=e.ToString()});enabled=false;}}
  private object Execute(string operation,JObject args){
   switch(operation){
+   case "recipe":return RecipeProbe.Run(args,root);
    case "inspect-save":return SaveInspection.Read(args);
    case "capacities":
     var mode=LabWorld.Field<GameMode>(LabWorld.Session,"Mode");

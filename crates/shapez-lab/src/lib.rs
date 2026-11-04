@@ -1,4 +1,6 @@
 mod adapter;
+mod recipe;
+pub use recipe::plan_recipe;
 mod compact;
 pub use compact::compact_cmam;
 mod blueprint;

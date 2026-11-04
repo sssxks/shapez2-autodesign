@@ -10,6 +10,10 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Cmd {
+    RecipeCheck,
+    Recipe {
+        target: String,
+    },
     Inspect {
         blueprint: PathBuf,
     },
@@ -45,6 +49,66 @@ fn main() -> Result<()> {
     let p = LabPaths::discover();
     fs::create_dir_all(&p.root)?;
     match Cli::parse().command {
+        Cmd::RecipeCheck => {
+            let dir = p.root.join("recipe-check");
+            fs::create_dir_all(&dir)?;
+            let mut cases = Vec::new();
+            let symbols = ["--", "P-", "Cu", "cw", "cr"];
+            for n in 1..625 {
+                let mut k = n;
+                let mut target = String::new();
+                for _ in 0..4 {
+                    target.push_str(symbols[k % 5]);
+                    k /= 5;
+                }
+                let path = dir.join(format!("{n}.json"));
+                fs::write(
+                    &path,
+                    serde_json::to_vec_pretty(&shapez_lab::plan_recipe(&target)?)?,
+                )?;
+                cases.push(json!({"name":target,"operation":"recipe","recipe":path}));
+            }
+            let path = dir.join("suite.json");
+            fs::write(&path, serde_json::to_vec_pretty(&json!({"cases":cases}))?)?;
+            println!("{}", path.display());
+        }
+        Cmd::Recipe { target } => {
+            let recipe = shapez_lab::plan_recipe(&target)?;
+            let path = p.root.join("recipe.json");
+            fs::write(&path, serde_json::to_vec_pretty(&recipe)?)?;
+            p.build("LabMod")?;
+            let t = Duration::from_secs(180);
+            let mut h = Host::start(&p, t)?;
+            let report = h.request("recipe", json!({"recipe":path}), t)?;
+            let mut readable = format!(
+                "Target: {target}\nVerified: {}\n",
+                report["result"]["verified"]
+            );
+            if let Some(trace) = report["result"]["trace"].as_array() {
+                for step in trace {
+                    let id = step["id"].as_u64().unwrap() as usize;
+                    readable.push_str(&format!(
+                        "{} {} inputs={} output={} port={}\n",
+                        id,
+                        step["op"],
+                        recipe["nodes"][id]["inputs"],
+                        step["expected"],
+                        step["selected_port"]
+                    ));
+                }
+            }
+            fs::write(h.run.join("recipe.txt"), readable)?;
+            println!(
+                "verified={} steps={}",
+                report["result"]["verified"], report["result"]["steps"]
+            );
+            println!("artifacts: {}", h.run.display());
+            h.shutdown()?;
+            ensure!(
+                report["ok"] == true && report["result"]["verified"] == true,
+                "Candidate recipe did not pass native operations"
+            );
+        }
         Cmd::Compact { blueprint, rgb } => {
             let report = compact_cmam(&blueprint, &rgb, &p.root.join("compact"))?;
             println!("{}", report["summary"]);
@@ -103,6 +167,7 @@ fn main() -> Result<()> {
                 result["name"] = case["name"].clone();
                 result["passed"] = json!(
                     result["ok"].as_bool() == Some(case["expected_ok"].as_bool().unwrap_or(true))
+                        && result["result"]["verified"].as_bool() != Some(false)
                 );
                 println!(
                     "{}: {}",
