@@ -34,6 +34,10 @@ CMAM 任务负责接入布局、旧版生成、生产/接入实验插件和套�
 
 公共 `LabWorld` 管理世界与模拟器，`Advance` 显式推进模拟；`UnloaderSupply` 供料，`RateScenario` 测量通道，`GraphExporter` 导出连接图，`GameBindings` 集中游戏版本适配。
 
+运行入口仍通过 Rust 调用 `dotnet build`。宿主启动时使用 `SHAPEZ_LAB_PIPE` 指定专属命名管道；C# 创建服务端，Rust 连接并校验协议版本、宿主 PID 和隔离数据路径。双方交换 4 字节小端长度前缀的 UTF-8 JSON 帧，单帧上限 64 MiB，一次执行一个请求。C# 的 `LabPipe` 在线程中收发，`LabService.Update` 在 Unity 主线程执行请求；退出也作为请求确认后执行。管道断连使宿主退出，请求超时使 Rust 终止宿主。Rust 的 I/O 线程随宿主退出解除阻塞并回收。运行目录只承担输入与产物存储，`ready.json` 只归档已收到的握手。
+
+协议分帧测试随 `cargo test -p shapez-runtime` 执行。准备好本地宿主后，可运行 `cargo test -p shapez-runtime live_pipe -- --ignored`，验证错误请求后的继续使用、控制端断连退出、请求超时回收和游戏异常退出。
+
 任务特殊实验实现 `IBlueprintExperiment`：
 
 ```csharp

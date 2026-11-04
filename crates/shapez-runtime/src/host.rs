@@ -401,6 +401,65 @@ impl Drop for Job {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "starts the prepared local Shapez 2 host"]
+    fn live_pipe_handles_errors_disconnects_timeouts_and_host_exit() {
+        let paths = LabPaths::discover();
+        paths.build("LabMod").unwrap();
+        let timeout = Duration::from_secs(30);
+
+        let mut host = Host::start(&paths, timeout).unwrap();
+        let response: Response = host
+            .request("invalid", serde_json::json!({}), timeout)
+            .unwrap();
+        assert!(!response.ok);
+        let response: Response = host
+            .request("capabilities", serde_json::json!({}), timeout)
+            .unwrap();
+        assert!(response.ok);
+        assert!(host.run.join("ready.json").is_file());
+        for name in [
+            "request.json",
+            "request.tmp",
+            "result-1.json",
+            "result-2.json",
+            "shutdown",
+            "fatal.json",
+        ] {
+            assert!(
+                !host.run.join(name).exists(),
+                "Unexpected control file {name}"
+            );
+        }
+        // Closing an idle controller pipe must make the game quit on its own.
+        host.connection.take();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while host.child.try_wait().unwrap().is_none() {
+            assert!(
+                Instant::now() < deadline,
+                "Host did not quit after controller disconnect"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        drop(host);
+
+        let mut host = Host::start(&paths, timeout).unwrap();
+        let result: Result<Response> =
+            host.request("catalog", serde_json::json!({}), Duration::ZERO);
+        assert!(result.unwrap_err().to_string().contains("Timeout"));
+        assert!(host.child.try_wait().unwrap().is_some());
+        drop(host); // Also joins the pipe worker after interrupting its I/O.
+
+        let mut host = Host::start(&paths, timeout).unwrap();
+        host.child.kill().unwrap();
+        host.child.wait().unwrap();
+        let start = Instant::now();
+        let result: Result<Response> = host.request("capabilities", serde_json::json!({}), timeout);
+        assert!(result.is_err());
+        assert!(start.elapsed() < Duration::from_secs(2));
+    }
+
     #[test]
     fn lease_excludes_concurrent_owners_and_recovers_stale_file() {
         let root = std::env::temp_dir().join("shapez-lab");
