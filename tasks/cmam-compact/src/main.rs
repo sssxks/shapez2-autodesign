@@ -79,7 +79,7 @@ fn main() -> Result<()> {
             let output = run.path.join("decoded.json");
             fs::write(
                 &output,
-                serde_json::to_vec_pretty(&Blueprint::read(input)?.value)?,
+                serde_json::to_vec_pretty(&Blueprint::read(input)?)?,
             )?;
             println!("{}", output.display());
             Ok(())

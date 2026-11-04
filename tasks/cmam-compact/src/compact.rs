@@ -1,7 +1,9 @@
 use crate::CmamDesign;
 use anyhow::{Result, ensure};
 use serde_json::{Value, json};
-use shapez_blueprint::{Blueprint, encode_blueprint, space_island};
+use shapez_blueprint::{
+    Blueprint, Configuration, Island, Rotation, encode_blueprint, space_island,
+};
 use shapez_model::{
     ChunkPos, DemandPort, Direction, FactoryInterface, RateManifest, SupplyPort, TilePos,
     TransportEndpoint, TransportNet, TransportProblem,
@@ -12,9 +14,6 @@ use std::{
     fs,
     path::Path,
 };
-fn n(v: &Value, k: &str) -> i32 {
-    v[k].as_i64().unwrap_or(0) as i32
-}
 pub struct CompactBuild {
     pub blueprint: Blueprint,
     pub manifest: Value,
@@ -42,37 +41,34 @@ pub fn build_compact(
     let mut blocked = HashSet::new();
     let mut cuts = vec![];
     for i in original.islands() {
-        if n(i, "Y") < 1 {
+        if i.y < 1 {
             continue;
         }
-        let Some(bs) = i["B"]["Entries"].as_array() else {
+        let Some(buildings) = &i.buildings else {
             continue;
         };
-        if bs.iter().all(|v| {
-            v["T"]
-                .as_str()
-                .is_some_and(|t| t.starts_with("Trash") || t.starts_with("Pipe"))
-        }) {
+        let bs = &buildings.entries;
+        if bs
+            .iter()
+            .all(|v| v.definition.starts_with("Trash") || v.definition.starts_with("Pipe"))
+        {
             continue;
         }
-        cuts.push(ChunkPos(n(i, "X"), n(i, "Y"), 0));
+        cuts.push(ChunkPos(i.x, i.y, 0));
         for b in bs {
             blocked.insert(ChunkPos(
-                (n(i, "X") * 20 + n(b, "X")).div_euclid(20),
-                (n(i, "Y") * 20 + n(b, "Y")).div_euclid(20),
+                (i.x * 20 + b.x).div_euclid(20),
+                (i.y * 20 + b.y).div_euclid(20),
                 0,
             ));
         }
         islands.push(i.clone());
     }
-    let production_buildings: usize = islands
-        .iter()
-        .map(|i| i["B"]["Entries"].as_array().unwrap().len())
-        .sum();
+    let production_buildings: usize = islands.iter().map(|i| i.buildings().len()).sum();
     for &offset in &design.module_offsets {
         let mut i = rgb.islands()[0].clone();
-        i["X"] = json!(-16 + offset);
-        i["Y"] = json!(-2);
+        i.x = -16 + offset;
+        i.y = -2;
         for x in -17 + offset..=-15 + offset {
             blocked.insert(ChunkPos(x, -2, 0));
         }
@@ -89,7 +85,17 @@ pub fn build_compact(
         for (kind, label) in labels.iter().enumerate() {
             let x = start + kind as i32;
             let fluid = kind >= 5;
-            islands.push(json!({"T":if fluid{"Layout_TrainUnloader_Fluids"}else{"Layout_TrainUnloader_Shapes"},"X":x,"Y":-7,"R":2}));
+            islands.push(Island::new(
+                if fluid {
+                    "Layout_TrainUnloader_Fluids"
+                } else {
+                    "Layout_TrainUnloader_Shapes"
+                },
+                x,
+                -7,
+                0,
+                Rotation::new(2),
+            ));
             blocked.insert(ChunkPos(x, -7, 0));
             blocked.insert(ChunkPos(x, -6, 0));
             sources.push(SupplyPort {
@@ -128,7 +134,19 @@ pub fn build_compact(
         if blocked.contains(&ChunkPos(x, -7, 0)) {
             continue;
         }
-        islands.push(json!({"T":if x== -19||x== -4{"Layout_TrainQuickStation"}else{"Rail_Forward"},"X":x,"Y":-7,"R":2,"S":"AQAAAAA="}));
+        let mut rail = Island::new(
+            if x == -19 || x == -4 {
+                "Layout_TrainQuickStation"
+            } else {
+                "Rail_Forward"
+            },
+            x,
+            -7,
+            0,
+            Rotation::new(2),
+        );
+        rail.configuration = Some(Configuration(vec![1, 0, 0, 0, 0]));
+        islands.push(rail);
         blocked.insert(ChunkPos(x, -7, 0));
     }
     for &offset in &design.module_offsets {
@@ -192,9 +210,8 @@ pub fn build_compact(
         islands.push(space_island(p, node, problem.nets[node.net].fluid));
         routing.push(json!({"p":p,"net":node.net,"input":node.incoming.index(),"out_z":node.output_layer,"outputs":node.outgoing.iter().map(|d|d.index()).collect::<Vec<_>>()}));
     }
-    let mut bp = original.value.clone();
-    bp["BP"]["Entries"] = json!(islands);
-    let result = Blueprint { value: bp };
+    let mut result = original.clone();
+    result.replace_islands(islands)?;
     let boundary = RateManifest {
         interface: FactoryInterface { sources, targets },
         cut_islands: cuts,
@@ -210,7 +227,7 @@ impl CompactBuild {
         fs::create_dir_all(out)?;
         fs::write(
             out.join("CMAM compact full-rate.spz2bp"),
-            encode_blueprint(&self.blueprint.value)?,
+            encode_blueprint(&self.blueprint)?,
         )?;
         fs::write(
             out.join("manifest.json"),
@@ -241,15 +258,10 @@ pub fn compact_cmam(
 fn bounds(bp: &Blueprint) -> Value {
     let mut points = vec![];
     for i in bp.islands() {
-        let (x, y) = (n(i, "X"), n(i, "Y"));
+        let (x, y) = (i.x, i.y);
         points.push((x, y));
-        if let Some(bs) = i["B"]["Entries"].as_array() {
-            for b in bs {
-                points.push((
-                    (x * 20 + n(b, "X")).div_euclid(20),
-                    (y * 20 + n(b, "Y")).div_euclid(20),
-                ));
-            }
+        for b in i.buildings() {
+            points.push(((x * 20 + b.x).div_euclid(20), (y * 20 + b.y).div_euclid(20)));
         }
     }
     let x0 = points.iter().map(|p| p.0).min().unwrap();

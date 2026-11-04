@@ -276,6 +276,7 @@ dependencies = [
  "anyhow",
  "base64",
  "flate2",
+ "serde",
  "serde_json",
  "shapez-model",
 ]

@@ -1,6 +1,8 @@
 use anyhow::{Result, bail, ensure};
 use serde_json::{Value, json};
-use shapez_blueprint::{Blueprint, encode_blueprint};
+use shapez_blueprint::{
+    Blueprint, Building, BuildingBlueprint, Island, Rotation, encode_blueprint,
+};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -15,9 +17,6 @@ struct Flow {
     outputs: BTreeSet<usize>,
 }
 type Grid = BTreeMap<Point, BTreeMap<usize, Flow>>;
-fn n(v: &Value, k: &str) -> i32 {
-    v[k].as_i64().unwrap_or(0) as i32
-}
 fn dir(a: Point, b: Point) -> usize {
     D.iter()
         .position(|&(x, y)| (b.0 - a.0, b.1 - a.1) == (x, y))
@@ -48,10 +47,10 @@ fn route(grid: &mut Grid, net: usize, waypoints: &[Point]) -> Result<()> {
     }
     Ok(())
 }
-fn put(b: &mut Vec<Value>, p: Point, z: i32, r: usize, t: &str) {
-    b.push(json!({"X":p.0,"Y":p.1,"L":z,"R":r,"T":t}));
+fn put(b: &mut Vec<Building>, p: Point, z: i16, r: usize, t: &str) {
+    b.push(Building::new(t, p.0, p.1, z, Rotation::new(r)));
 }
-fn port(b: &mut Vec<Value>, p: Point, z: i32, r: usize, fluid: bool, send: bool) {
+fn port(b: &mut Vec<Building>, p: Point, z: i16, r: usize, fluid: bool, send: bool) {
     put(
         b,
         p,
@@ -64,7 +63,7 @@ fn port(b: &mut Vec<Value>, p: Point, z: i32, r: usize, fluid: bool, send: bool)
         ),
     );
 }
-fn turn(b: &mut Vec<Value>, p: Point, z: i32, in_dir: usize, out: usize, fluid: bool) {
+fn turn(b: &mut Vec<Building>, p: Point, z: i16, in_dir: usize, out: usize, fluid: bool) {
     let delta = (out + 4 - in_dir) % 4;
     let (t, r) = if fluid {
         if delta == 0 {
@@ -95,7 +94,7 @@ fn edge(side: usize, k: i32) -> Point {
         _ => (8 + k, 2),
     }
 }
-fn straight(b: &mut Vec<Value>, input: usize, output: usize, fluid: bool, jump: bool) {
+fn straight(b: &mut Vec<Building>, input: usize, output: usize, fluid: bool, jump: bool) {
     for z in 0..3 {
         for k in 0..4 {
             let a = edge(input, k);
@@ -120,7 +119,7 @@ fn straight(b: &mut Vec<Value>, input: usize, output: usize, fluid: bool, jump: 
         }
     }
 }
-fn corner(b: &mut Vec<Value>, input: usize, output: usize, fluid: bool) {
+fn corner(b: &mut Vec<Building>, input: usize, output: usize, fluid: bool) {
     // Rotate a north -> west nested corner; mirror for north -> east.
     let rot = (input + 1) % 4;
     let mirror = output == rot;
@@ -161,8 +160,8 @@ fn corner(b: &mut Vec<Value>, input: usize, output: usize, fluid: bool) {
     }
 }
 fn split(
-    b: &mut Vec<Value>,
-    template: &[Value],
+    b: &mut Vec<Building>,
+    template: &[Building],
     input: usize,
     outputs: &BTreeSet<usize>,
     fluid: bool,
@@ -171,9 +170,9 @@ fn split(
     let canonical_side = rot;
     let mirror = !outputs.contains(&canonical_side);
     for e in template {
-        let (mut x, mut y) = (n(e, "X"), n(e, "Y"));
-        let mut r = n(e, "R") as usize;
-        let mut t = e["T"].as_str().unwrap().to_owned();
+        let (mut x, mut y) = (e.x, e.y);
+        let mut r = e.rotation.index();
+        let mut t = e.definition.clone();
         if mirror {
             x = 19 - x;
             r = (2 + 4 - r) % 4;
@@ -203,7 +202,12 @@ fn split(
                 t = t.replace("BeltPort", "FluidPort");
             }
         }
-        put(b, (x, y), n(e, "L"), r, &t);
+        let mut building = e.clone();
+        building.x = x;
+        building.y = y;
+        building.rotation = Rotation::new(r);
+        building.definition = t;
+        b.push(building);
     }
     Ok(())
 }
@@ -217,31 +221,35 @@ pub fn connect_cmam(input: &Path, splitter: &Path, rgb: &Path, out: &Path) -> Re
         original.islands().len() == 108,
         "Expected the supplied 108-island CMAM layout"
     );
-    let template = split_bp.islands()[0]["B"]["Entries"]
-        .as_array()
+    let template = split_bp
+        .islands()
+        .first()
+        .and_then(|i| i.buildings.as_ref())
         .ok_or_else(|| anyhow::anyhow!("Splitter template missing buildings"))?;
     let mut islands = vec![];
     for i in original.islands() {
         let mut i = i.clone();
-        let y = n(&i, "Y");
+        let y = i.y;
         if y >= 1 {
-            let marker = i["B"]["Entries"].as_array().is_some_and(|b| {
-                b.iter().all(|v| {
-                    v["T"]
-                        .as_str()
-                        .is_some_and(|t| t.starts_with("Trash") || t.starts_with("Pipe"))
-                })
+            let marker = i.buildings.as_ref().is_some_and(|b| {
+                b.entries
+                    .iter()
+                    .all(|v| v.definition.starts_with("Trash") || v.definition.starts_with("Pipe"))
             });
             if marker {
                 continue;
             }
-            i["Y"] = json!(y + 4);
+            i.y = y + 4;
         }
         islands.push(i);
     }
-    let mut trans = rgb_bp.islands()[0].clone();
-    trans["X"] = json!(20);
-    trans["Y"] = json!(-3);
+    let mut trans = rgb_bp
+        .islands()
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("RGB template missing island"))?
+        .clone();
+    trans.x = 20;
+    trans.y = -3;
     islands.push(trans);
     let mut grid = Grid::new();
     // North bus: pins, stars, windmills, RGB painter A, RGB painter B.
@@ -294,7 +302,7 @@ pub fn connect_cmam(input: &Path, splitter: &Path, rgb: &Path, out: &Path) -> Re
             let fluid = [3, 4, 7].contains(&net);
             if f.outputs.len() == 2 {
                 ensure!(nets.len() == 1, "Branch and crossover overlap at {pos:?}");
-                split(&mut b, template, input, &f.outputs, fluid)?;
+                split(&mut b, &template.entries, input, &f.outputs, fluid)?;
             } else {
                 let output = *f.outputs.first().unwrap();
                 if (input + 2) % 4 == output {
@@ -316,24 +324,21 @@ pub fn connect_cmam(input: &Path, splitter: &Path, rgb: &Path, out: &Path) -> Re
         let mut occupied = BTreeSet::new();
         for e in &b {
             ensure!(
-                occupied.insert((n(e, "X"), n(e, "Y"), n(e, "L"))),
-                "Building collision in {pos:?}: {e}"
+                occupied.insert((e.x, e.y, e.layer)),
+                "Building collision in {pos:?}: {e:?}"
             );
         }
-        if islands
-            .iter()
-            .any(|i| n(i, "X") == pos.0 && n(i, "Y") == pos.1)
-        {
+        if islands.iter().any(|i| i.x == pos.0 && i.y == pos.1) {
             bail!("Generated platform overlaps existing island at {pos:?}")
         }
-        islands.push(
-            json!({"T":"Foundation_1x1","X":pos.0,"Y":pos.1,"B":{"$type":"Building","Entries":b}}),
-        );
+        let mut island = Island::new("Foundation_1x1", pos.0, pos.1, 0, Rotation::default());
+        island.buildings = Some(BuildingBlueprint::new(b));
+        islands.push(island);
     }
-    original.value["BP"]["Entries"] = json!(islands);
+    original.replace_islands(islands)?;
     fs::create_dir_all(out)?;
     let path = out.join("CMAM connected.spz2bp");
-    fs::write(&path, encode_blueprint(&original.value)?)?;
+    fs::write(&path, encode_blueprint(&original)?)?;
     let report = json!({"blueprint":path,"generated_platforms":grid.len(),"summary":original.summary(),"connections":connections});
     fs::write(
         out.join("adapter.json"),

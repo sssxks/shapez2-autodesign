@@ -1,7 +1,7 @@
-use serde_json::{Value, json};
+use crate::{Island, Rotation};
 use shapez_model::{ChunkPos, RouteNode};
 use std::collections::BTreeSet;
-pub fn space_island(p: ChunkPos, node: &RouteNode, fluid: bool) -> Value {
+pub fn space_island(p: ChunkPos, node: &RouteNode, fluid: bool) -> Island {
     let r = node.incoming.index();
     let out: Vec<usize> = node
         .outgoing
@@ -38,5 +38,11 @@ pub fn space_island(p: ChunkPos, node: &RouteNode, fluid: bool) -> Value {
         }
         .to_owned()
     };
-    json!({"T":format!("Space{}_{}",if fluid{"Pipe"}else{"Belt"},suffix),"X":p.0,"Y":p.1,"Z":p.2,"R":r})
+    Island::new(
+        format!("Space{}_{}", if fluid { "Pipe" } else { "Belt" }, suffix),
+        p.0,
+        p.1,
+        i16::try_from(p.2).expect("routing layer fits game coordinates"),
+        Rotation::new(r),
+    )
 }
