@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>netstandard2.1</TargetFramework><Nullable>disable</Nullable><AssemblyName>ShapezLab.Cmam</AssemblyName></PropertyGroup>
+  <PropertyGroup><TargetFramework>netstandard2.1</TargetFramework><AssemblyName>ShapezLab.Cmam</AssemblyName></PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../interop/LabMod/LabMod.csproj" />
     <GameAssembly Include="$(ManagedPath)/Game*.dll;$(ManagedPath)/Core*.dll;$(ManagedPath)/SPZGameAssembly.dll;$(ManagedPath)/MainMenuAssembly.dll;$(ManagedPath)/Newtonsoft.Json.dll;$(ManagedPath)/UnityEngine*.dll;$(ManagedPath)/Unity.Mathematics.dll;$(ManagedPath)/UniTask.dll" />

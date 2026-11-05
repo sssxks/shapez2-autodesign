@@ -16,14 +16,14 @@ internal sealed class AdapterProbe
     {
         var t = new Dictionary<(int, int, int), string>();
         for (int j = 0; j < 5; j++)
-        for (int z = 0; z < 3; z++)
-        for (int k = 0; k < 4; k++)
-        {
-            foreach (var p in new[] { (-19, 122, "SuSuSuSu"), (-18, 122, "P-P-P-P-"), (-17, 122, "WuWuWuWu"), (-19, 177, "CuCuCuCu"), (-17, 177, "RuRuRuRu") })
-                t.Add(((p.Item1 + 5 * j) * 20 + 8 + k, p.Item2, z), p.Item3);
-            foreach (var p in new[] { (-16, 122), (-15, 122), (-18, 177) })
-                t.Add(((p.Item1 + 5 * j) * 20 + 8 + k, p.Item2, z), "bgr"[z].ToString());
-        }
+            for (int z = 0; z < 3; z++)
+                for (int k = 0; k < 4; k++)
+                {
+                    foreach (var p in new[] { (-19, 122, "SuSuSuSu"), (-18, 122, "P-P-P-P-"), (-17, 122, "WuWuWuWu"), (-19, 177, "CuCuCuCu"), (-17, 177, "RuRuRuRu") })
+                        t.Add(((p.Item1 + 5 * j) * 20 + 8 + k, p.Item2, z), p.Item3);
+                    foreach (var p in new[] { (-16, 122), (-15, 122), (-18, 177) })
+                        t.Add(((p.Item1 + 5 * j) * 20 + 8 + k, p.Item2, z), "bgr"[z].ToString());
+                }
         return t;
     }
     internal static bool KeepBuilding(GlobalTileCoordinate p) => p.x < -380 || p.x >= 200 || p.y < 120 || p.y >= 180 || Targets.ContainsKey((p.x, p.y, p.z));
@@ -76,13 +76,13 @@ internal sealed class AdapterProbe
                     continue;
                 var bundle = ((IItemBundleSimulation)sim).GetItemProviderBundle(0);
                 for (short z = 0; z < 3; z++)
-                for (short k = 0; k < 4; k++)
-                {
-                    var lane = bundle.GetSender(k, z).NextLane;
-                    if (lane == null)
-                        throw new Exception("Disconnected train outlet " + x);
-                    sources.Add((lane, item));
-                }
+                    for (short k = 0; k < 4; k++)
+                    {
+                        var lane = bundle.GetSender(k, z).NextLane;
+                        if (lane == null)
+                            throw new Exception("Disconnected train outlet " + x);
+                        sources.Add((lane, item));
+                    }
             }
             if (!(localized is ILocalizedTileSimulation tile))
                 continue;
@@ -108,11 +108,11 @@ internal sealed class AdapterProbe
     internal void BeforeTick()
     {
         foreach (var source in sources)
-        if (source.lane.CanAcceptItem(source.item))
-        {
-            source.lane.HandOverItem(source.item, Ticks.Zero);
-            injected++;
-        }
+            if (source.lane.CanAcceptItem(source.item))
+            {
+                source.lane.HandOverItem(source.item, Ticks.Zero);
+                injected++;
+            }
     }
     internal bool AfterTick()
     {

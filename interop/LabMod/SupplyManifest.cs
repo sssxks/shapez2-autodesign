@@ -4,7 +4,10 @@ using Newtonsoft.Json.Linq;
 
 public sealed class SupplyManifest
 {
-    public IReadOnlyDictionary<ChunkPosition, string> Sources { get; }
+    public IReadOnlyDictionary<ChunkPosition, string> Sources
+    {
+        get;
+    }
 
     public SupplyManifest(JObject input)
     {
@@ -21,9 +24,18 @@ public sealed class SupplyManifest
 
 internal sealed class RateManifest
 {
-    internal SupplyManifest Supply { get; }
-    internal IReadOnlyDictionary<TilePosition, string> Targets { get; }
-    internal HashSet<ChunkPosition> CutIslands { get; }
+    internal SupplyManifest Supply
+    {
+        get;
+    }
+    internal IReadOnlyDictionary<TilePosition, string> Targets
+    {
+        get;
+    }
+    internal HashSet<ChunkPosition> CutIslands
+    {
+        get;
+    }
 
     internal RateManifest(JObject input)
     {
@@ -35,7 +47,8 @@ internal sealed class RateManifest
             var p = JsonInput.Coordinate(JsonInput.Required(target, "tile"), "tile");
             targets.Add(new TilePosition(p.X, p.Y, p.Z), JsonInput.String(target, "item"));
         }
-        if (targets.Count == 0) throw new ArgumentException("Rate measurement requires targets");
+        if (targets.Count == 0)
+            throw new ArgumentException("Rate measurement requires targets");
         Targets = targets;
         CutIslands = new HashSet<ChunkPosition>();
         foreach (var value in JsonInput.Array(input, "cut_islands"))

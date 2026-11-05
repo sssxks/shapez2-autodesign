@@ -17,7 +17,8 @@ public static class JsonInput
     public static string? OptionalString(JObject input, string name)
     {
         var value = input[name];
-        if (value == null || value.Type == JTokenType.Null) return null;
+        if (value == null || value.Type == JTokenType.Null)
+            return null;
         if (value.Type != JTokenType.String || string.IsNullOrWhiteSpace((string?)value))
             throw new ArgumentException($"{name} must be a nonempty string");
         return (string?)value;
@@ -33,7 +34,8 @@ public static class JsonInput
     public static double? Number(JObject input, string name)
     {
         var value = input[name];
-        if (value == null || value.Type == JTokenType.Null) return null;
+        if (value == null || value.Type == JTokenType.Null)
+            return null;
         if (value.Type != JTokenType.Float && value.Type != JTokenType.Integer)
             throw new ArgumentException($"{name} must be a number");
         var result = (double)value;
@@ -45,8 +47,10 @@ public static class JsonInput
     private static T? Scalar<T>(JObject input, string name, JTokenType kind) where T : struct
     {
         var value = input[name];
-        if (value == null || value.Type == JTokenType.Null) return null;
-        if (value.Type != kind) throw new ArgumentException($"{name} must be {kind}");
+        if (value == null || value.Type == JTokenType.Null)
+            return null;
+        if (value.Type != kind)
+            throw new ArgumentException($"{name} must be {kind}");
         return value.ToObject<T>();
     }
 
@@ -57,7 +61,8 @@ public static class JsonInput
 
     public static int Nonnegative(int value, string name)
     {
-        if (value < 0) throw new ArgumentOutOfRangeException(name, "Must be nonnegative");
+        if (value < 0)
+            throw new ArgumentOutOfRangeException(name, "Must be nonnegative");
         return value;
     }
 
@@ -74,7 +79,8 @@ public static class JsonInput
         if (!(value is JArray items) || items.Count != 3)
             throw new ArgumentException($"{name} must contain three integer coordinates");
         foreach (var item in items)
-            if (item.Type != JTokenType.Integer) throw new ArgumentException($"{name} coordinates must be integers");
+            if (item.Type != JTokenType.Integer)
+                throw new ArgumentException($"{name} coordinates must be integers");
         return ((int)items[0], (int)items[1], (int)items[2]);
     }
 }

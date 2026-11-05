@@ -5,7 +5,11 @@
     <BaseOutputPath>$(LabRoot)/bin/$(MSBuildProjectName)/</BaseOutputPath>
     <GameRoot Condition="'$(GameRoot)' == ''">C:/Program Files (x86)/Steam/steamapps/common/shapez 2</GameRoot>
     <ManagedPath>$(GameRoot)/shapez 2_Data/Managed</ManagedPath>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>10.0</AnalysisLevel>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 </Project>
 

@@ -2,21 +2,43 @@ using System;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 
-internal enum RecipeOperation { Source, Cut, Swap, RotateCw, RotateCcw, Stack, Paint, Crystallize }
+internal enum RecipeOperation
+{
+    Source, Cut, Swap, RotateCw, RotateCcw, Stack, Paint, Crystallize
+}
 
 internal sealed class RecipeNode
 {
-    internal int Id { get; }
-    internal RecipeOperation Operation { get; }
-    internal string OperationName { get; }
-    internal int[] Inputs { get; }
-    internal string Expected { get; }
-    internal string? Color { get; }
+    internal int Id
+    {
+        get;
+    }
+    internal RecipeOperation Operation
+    {
+        get;
+    }
+    internal string OperationName
+    {
+        get;
+    }
+    internal int[] Inputs
+    {
+        get;
+    }
+    internal string Expected
+    {
+        get;
+    }
+    internal string? Color
+    {
+        get;
+    }
 
     internal RecipeNode(JObject input, int index)
     {
         Id = JsonInput.Integer(input, "id") ?? throw new ArgumentException("Recipe node id required");
-        if (Id != index) throw new ArgumentException("Recipe IDs must follow execution order");
+        if (Id != index)
+            throw new ArgumentException("Recipe IDs must follow execution order");
         OperationName = JsonInput.String(input, "op");
         Operation = OperationName switch
         {
@@ -34,7 +56,8 @@ internal sealed class RecipeNode
             Operation == RecipeOperation.Swap || Operation == RecipeOperation.Stack ? 2 : 1;
         Inputs = JsonInput.Array(input, "inputs").Select(value =>
         {
-            if (value.Type != JTokenType.Integer) throw new ArgumentException("Recipe input must be an integer");
+            if (value.Type != JTokenType.Integer)
+                throw new ArgumentException("Recipe input must be an integer");
             return (int)value;
         }).ToArray();
         if (Inputs.Length != arity || Inputs.Any(value => value < 0 || value >= index))
@@ -52,16 +75,27 @@ internal sealed class RecipeNode
 
 internal sealed class RecipePlan
 {
-    internal string Target { get; }
-    internal int Root { get; }
-    internal RecipeNode[] Nodes { get; }
+    internal string Target
+    {
+        get;
+    }
+    internal int Root
+    {
+        get;
+    }
+    internal RecipeNode[] Nodes
+    {
+        get;
+    }
     internal RecipePlan(JObject input)
     {
         Target = JsonInput.String(input, "target");
         Root = JsonInput.Integer(input, "root") ?? throw new ArgumentException("Recipe root required");
         Nodes = JsonInput.Array(input, "nodes")
             .Select((node, index) => new RecipeNode(JsonInput.Object(node, "node"), index)).ToArray();
-        if (Root < 0 || Root >= Nodes.Length) throw new ArgumentException("Recipe root is missing");
-        if (Nodes[Root].Expected != Target) throw new ArgumentException("Recipe root differs from target");
+        if (Root < 0 || Root >= Nodes.Length)
+            throw new ArgumentException("Recipe root is missing");
+        if (Nodes[Root].Expected != Target)
+            throw new ArgumentException("Recipe root differs from target");
     }
 }
