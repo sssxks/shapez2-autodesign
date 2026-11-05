@@ -419,6 +419,64 @@ mod tests {
             .unwrap();
         assert!(response.ok);
         assert!(host.run.join("ready.json").is_file());
+        // A rejected shutdown must not make the pipe worker terminate.
+        for malformed in [
+            serde_json::json!({"id":1000,"operation":"capabilities"}),
+            serde_json::json!({"id":1000,"operation":42,"args":{}}),
+            serde_json::json!({"id":1000,"operation":"shutdown","args":null}),
+        ] {
+            host.connection.as_ref().unwrap().send(malformed).unwrap();
+            let response: Response =
+                serde_json::from_value(host.receive(timeout).unwrap()).unwrap();
+            assert_eq!(response.id, 1000);
+            assert!(!response.ok);
+        }
+        for (args, expected) in [
+            (serde_json::json!({}), "blueprint is required"),
+            (
+                serde_json::json!({"blueprint":"unused","seconds":-1}),
+                "seconds",
+            ),
+            (
+                serde_json::json!({"blueprint":"unused","seconds":"1"}),
+                "seconds",
+            ),
+            (
+                serde_json::json!({"blueprint":"unused","export_graph":"false"}),
+                "export_graph",
+            ),
+            (
+                serde_json::json!({"blueprint":"unused","name":"../escape"}),
+                "case name",
+            ),
+            (
+                serde_json::json!({"blueprint":"unused","rate_manifest":"unused","seconds":0}),
+                "positive",
+            ),
+            (
+                serde_json::json!({"blueprint":"unused","rate_manifest":"unused","minimum_rate_ratio":2}),
+                "minimum_rate_ratio",
+            ),
+        ] {
+            let response: Response = host.request("blueprint", args, timeout).unwrap();
+            assert!(!response.ok);
+            assert!(response.error.unwrap().contains(expected));
+        }
+        let invalid_recipe = host.run.join("invalid-recipe.json");
+        fs::write(&invalid_recipe, br#"{"target":"CuCuCuCu","root":0,"nodes":[{"id":0,"op":"cut","inputs":[0],"expected":"CuCuCuCu"}]}"#).unwrap();
+        let response: Response = host
+            .request(
+                "recipe",
+                serde_json::json!({"recipe":invalid_recipe}),
+                timeout,
+            )
+            .unwrap();
+        assert!(!response.ok);
+        assert!(response.error.unwrap().contains("Invalid inputs"));
+        let response: Response = host
+            .request("capabilities", serde_json::json!({}), timeout)
+            .unwrap();
+        assert!(response.ok);
         for name in [
             "request.json",
             "request.tmp",

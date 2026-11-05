@@ -7,13 +7,14 @@ using Newtonsoft.Json.Linq;
 
 internal static class BlueprintRunner
 {
-    internal static object Run(LabWorld world, JObject args, string root)
+    internal static object Run(JObject args, string root)
     {
         var options = new BlueprintRunOptions(args);
         var experiment = BlueprintExperiment.Load(options.Experiment);
         experiment?.Configure(args);
         var blueprint = BlueprintLoader.Read(options.Path);
         var manifest = options.Rate?.Manifest;
+        using var world = new LabWorld();
         BlueprintLoader.Place(world, blueprint, (chunk, tile) =>
             (manifest == null || !manifest.CutIslands.Contains(chunk) ||
                 manifest.Targets.ContainsKey(new TilePosition(tile.x, tile.y, tile.z))) &&

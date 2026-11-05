@@ -15,10 +15,12 @@ internal sealed class LabPipe : IDisposable
     private const int MaxFrame = 64 * 1024 * 1024;
     private readonly NamedPipeServerStream pipe;
     private readonly CancellationTokenSource stop = new CancellationTokenSource();
-    private readonly BlockingCollection<JObject> requests = new BlockingCollection<JObject>(1);
-    private readonly BlockingCollection<object> replies = new BlockingCollection<object>(1);
+    private readonly ConcurrentQueue<LabRequest> requests = new ConcurrentQueue<LabRequest>();
+    private readonly BlockingCollection<LabReply> replies = new BlockingCollection<LabReply>(1);
+    private readonly Task worker;
+    private int disposed;
     internal volatile bool QuitRequested;
-    internal Exception Failure
+    internal Exception? Failure
     {
         get; private set;
     }
@@ -26,24 +28,28 @@ internal sealed class LabPipe : IDisposable
     internal LabPipe(string name)
     {
         pipe = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte);
-        Task.Run((Action)Pump);
+        worker = Task.Run((Action)Pump);
     }
 
-    internal bool TryReceive(out JObject request) => requests.TryTake(out request);
-    internal void Reply(object response) => replies.Add(response, stop.Token);
+    internal bool TryReceive(out LabRequest request) => requests.TryDequeue(out request);
+    internal void Reply(object response, bool shutdown = false)
+    {
+        if (!replies.TryAdd(new LabReply(response, shutdown)))
+            throw new InvalidOperationException("A pipe reply is already pending");
+    }
 
     private void Pump()
     {
         try
         {
             pipe.WaitForConnection();
-            Write(replies.Take(stop.Token)); // Main-thread readiness after initialization.
+            Write(replies.Take(stop.Token).Value); // Main-thread readiness after initialization.
             while (!stop.IsCancellationRequested)
             {
-                var request = Read();
-                requests.Add(request, stop.Token);
-                Write(replies.Take(stop.Token));
-                if ((string)request["operation"] == "shutdown")
+                requests.Enqueue(new LabRequest(Read()));
+                var reply = replies.Take(stop.Token);
+                Write(reply.Value);
+                if (reply.Shutdown)
                     break;
             }
         }
@@ -98,7 +104,14 @@ internal sealed class LabPipe : IDisposable
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref disposed, 1) != 0)
+            return;
         stop.Cancel();
-        pipe.Dispose();
+        pipe.Dispose(); // Interrupt WaitForConnection/Read/Write without blocking Unity.
+        _ = worker.ContinueWith(_ =>
+        {
+            replies.Dispose();
+            stop.Dispose();
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 }

@@ -1,6 +1,7 @@
 using System;
-using System.IO;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using Game.Core.Content;
 using Game.Content.BuildingPath.Simulation;
@@ -9,7 +10,7 @@ using UnityEngine;
 
 public sealed class ShapezLabMod : IMod
 {
-    private readonly GameObject host;
+    private readonly GameObject? host;
     public ShapezLabMod()
     {
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHAPEZ_LAB_RUN")))
@@ -18,71 +19,105 @@ public sealed class ShapezLabMod : IMod
         UnityEngine.Object.DontDestroyOnLoad(host);
         host.AddComponent<LabService>();
     }
+
     public void Dispose()
     {
         if (host != null)
             UnityEngine.Object.Destroy(host);
     }
 }
+
 public sealed class LabService : MonoBehaviour
 {
-    private string root; private bool ready; private LabPipe pipe;
-    void Awake()
-    {
-        root = Environment.GetEnvironmentVariable("SHAPEZ_LAB_RUN");
-        Application.runInBackground = true;
-        pipe = new LabPipe(Environment.GetEnvironmentVariable("SHAPEZ_LAB_PIPE"));
-    }
-    void OnDestroy()
-    {
-        pipe?.Dispose();
-    }
-    void Update()
+    private string root = string.Empty;
+    private bool ready;
+    private LabPipe? pipe;
+
+    private void Awake()
     {
         try
         {
-            if (pipe.QuitRequested)
+            root = Environment.GetEnvironmentVariable("SHAPEZ_LAB_RUN")
+                ?? throw new InvalidOperationException("SHAPEZ_LAB_RUN is required");
+            var name = Environment.GetEnvironmentVariable("SHAPEZ_LAB_PIPE")
+                ?? throw new InvalidOperationException("SHAPEZ_LAB_PIPE is required");
+            Application.runInBackground = true;
+            pipe = new LabPipe(name);
+        }
+        catch (Exception error) { Stop(error); }
+    }
+
+    private void OnDestroy() => pipe?.Dispose();
+
+    private void Update()
+    {
+        var connection = pipe;
+        if (connection == null)
+            return;
+        try
+        {
+            if (connection.QuitRequested)
             {
-                if (pipe.Failure != null)
-                    UnityEngine.Debug.LogException(pipe.Failure);
-                Application.Quit();
+                Stop(connection.Failure);
                 return;
             }
             if (!ready)
             {
                 if (LabBootstrap.Session == null)
                     return;
-                var process = Process.GetCurrentProcess();
-                pipe.Reply(new
-                {
-                    kind = "ready",
-                    protocol = 1,
-                    pid = process.Id,
-                    data_path = GameEnvironment.DataPath,
-                    version = Application.version,
-                    startup_seconds = (DateTime.Now - process.StartTime).TotalSeconds
-                });
+                SendReady(connection);
                 ready = true;
             }
-            if (!pipe.TryReceive(out var request))
-                return;
-            var id = (ulong)request["id"];
-            try
-            {
-                var timer = Stopwatch.StartNew();
-                var result = Execute((string)request["operation"], (JObject)request["args"]);
-                pipe.Reply(new
-                {
-                    id,
-                    ok = true,
-                    wall_seconds = timer.Elapsed.TotalSeconds,
-                    result
-                });
-            }
-            catch (Exception e) { pipe.Reply(new { id, ok = false, error = e.ToString() }); }
+            if (connection.TryReceive(out var request))
+                ExecuteRequest(connection, request);
         }
-        catch (Exception e) { UnityEngine.Debug.LogException(e); pipe?.Dispose(); enabled = false; Application.Quit(); }
+        catch (Exception error) { Stop(error); }
     }
+
+    private static void SendReady(LabPipe connection)
+    {
+        using var process = Process.GetCurrentProcess();
+        connection.Reply(new
+        {
+            kind = "ready",
+            protocol = 1,
+            pid = process.Id,
+            data_path = GameEnvironment.DataPath,
+            version = Application.version,
+            startup_seconds = (DateTime.Now - process.StartTime).TotalSeconds
+        });
+    }
+
+    private void ExecuteRequest(LabPipe connection, LabRequest request)
+    {
+        var timer = Stopwatch.StartNew();
+        LabResponse response;
+        var shutdown = false;
+        string operation = "request";
+        try
+        {
+            operation = request.Operation;
+            var result = Execute(operation, request.Arguments);
+            shutdown = operation == "shutdown";
+            response = new LabResponse(request.Id, timer.Elapsed.TotalSeconds, result, null);
+        }
+        catch (Exception error)
+        {
+            response = new LabResponse(request.Id, timer.Elapsed.TotalSeconds, null, $"{operation}: {error}");
+        }
+        connection.Reply(response, shutdown);
+    }
+
+    private void Stop(Exception? error)
+    {
+        if (error != null)
+            UnityEngine.Debug.LogException(error);
+        pipe?.Dispose();
+        pipe = null;
+        enabled = false;
+        Application.Quit();
+    }
+
     private object Execute(string operation, JObject args)
     {
         switch (operation)
@@ -99,21 +134,7 @@ public sealed class LabService : MonoBehaviour
             case "inspect-blueprint":
                 return BlueprintInspection.Read(args, root);
             case "capacities":
-                var mode = GameBindings.Mode;
-                BeltSpeed belt = mode.Buildings.ForwardBelt.ConfigAs<IConveyorConfiguration>().ConveyorSpeed;
-                BeltSpeed space = mode.Islands.SpaceBelts.First().ConfigAs<SpacePathConfiguration>().SpaceConveyorSpeed;
-                BeltSpeed pipe = mode.Islands.SpacePipes.First().ConfigAs<SpacePathConfiguration>().SpaceConveyorSpeed;
-                return new
-                {
-                    belt = belt.ToString(),
-                    space = space.ToString(),
-                    pipe = pipe.ToString(),
-                    space_ratio = (double)space.StepsPerTick.Value / belt.StepsPerTick.Value,
-                    mode.MinIslandLayer,
-                    mode.MaxIslandLayer,
-                    space_ids = mode.Islands.SpaceBelts.Select(x => x.Id.ToString()).ToArray(),
-                    pipe_ids = mode.Islands.SpacePipes.Select(x => x.Id.ToString()).ToArray()
-                };
+                return ReadCapacities();
             case "capabilities":
                 return new
                 {
@@ -124,30 +145,55 @@ public sealed class LabService : MonoBehaviour
                     operations = new[] { "capabilities", "blueprint", "catalog", "capacities", "recipe", "inspect-save", "inspect-blueprint" }
                 };
             case "blueprint":
-                using (var world = new LabWorld())
-                    return world.Run(args, root);
+                return BlueprintRunner.Run(args, root);
             case "catalog":
-                var definitions = new JObject();
-                foreach (var obj in Resources.FindObjectsOfTypeAll<ScriptableObject>())
-                {
-                    if (obj.GetType().Name.Contains("Metadata") || obj.GetType().Name.Contains("BuildingInternalVariant"))
-                    {
-                        try
-                        {
-                            definitions[obj.name] = JObject.Parse(JsonUtility.ToJson(obj));
-                        }
-                        catch { }
-                    }
-                }
-                var output = Path.Combine(root, "definitions.json");
-                File.WriteAllText(output, definitions.ToString());
-                return new
-                {
-                    path = output,
-                    count = definitions.Count
-                };
+                return ExportCatalog();
             default:
                 throw new ArgumentException("Unknown operation: " + operation);
         }
+    }
+
+    private static object ReadCapacities()
+    {
+        var mode = GameBindings.Mode;
+        BeltSpeed belt = mode.Buildings.ForwardBelt.ConfigAs<IConveyorConfiguration>().ConveyorSpeed;
+        BeltSpeed space = mode.Islands.SpaceBelts.First().ConfigAs<SpacePathConfiguration>().SpaceConveyorSpeed;
+        BeltSpeed pipeSpeed = mode.Islands.SpacePipes.First().ConfigAs<SpacePathConfiguration>().SpaceConveyorSpeed;
+        return new
+        {
+            belt = belt.ToString(),
+            space = space.ToString(),
+            pipe = pipeSpeed.ToString(),
+            space_ratio = (double)space.StepsPerTick.Value / belt.StepsPerTick.Value,
+            mode.MinIslandLayer,
+            mode.MaxIslandLayer,
+            space_ids = mode.Islands.SpaceBelts.Select(x => x.Id.ToString()).ToArray(),
+            pipe_ids = mode.Islands.SpacePipes.Select(x => x.Id.ToString()).ToArray()
+        };
+    }
+
+    private object ExportCatalog()
+    {
+        var definitions = new JObject();
+        var skipped = new List<object>();
+        foreach (var obj in Resources.FindObjectsOfTypeAll<ScriptableObject>())
+        {
+            var type = obj.GetType();
+            if (!type.Name.Contains("Metadata") && !type.Name.Contains("BuildingInternalVariant"))
+                continue;
+            try
+            {
+                definitions[obj.name] = JObject.Parse(JsonUtility.ToJson(obj));
+            }
+            catch (Exception error) { skipped.Add(new { name = obj.name, type = type.FullName, error = error.Message }); }
+        }
+        var output = Path.Combine(root, "definitions.json");
+        File.WriteAllText(output, definitions.ToString());
+        return new
+        {
+            path = output,
+            count = definitions.Count,
+            skipped
+        };
     }
 }

@@ -7,7 +7,6 @@ using Game.Core;
 using Game.Core.Map.Simulation;
 using Game.Core.Map.Simulation.Clustering;
 using Game.Core.Simulation;
-using Newtonsoft.Json.Linq;
 
 public sealed class LabWorld : IDisposable
 {
@@ -64,8 +63,6 @@ public sealed class LabWorld : IDisposable
     public void Advance(int seconds, int ticksPerSecond, Action<Ticks, Ticks>? before = null,
         Action<Ticks, Ticks>? after = null, Func<bool>? stop = null) =>
         SimulationStepper.Advance(model, seconds, ticksPerSecond, before, after, stop);
-
-    public object Run(JObject args, string root) => BlueprintRunner.Run(this, args, root);
 
     public void Dispose()
     {
