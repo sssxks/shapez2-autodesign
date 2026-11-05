@@ -519,6 +519,49 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "reads the installed game and runs HostPrep against an incomplete temporary clone"]
+    fn live_prepare_rejects_missing_targets_before_writing_assemblies() {
+        let paths = LabPaths::discover();
+        let prep = paths.build("HostPrep").unwrap();
+        let run = crate::artifacts::RunDirectory::create(&paths.root, "patch-rejection").unwrap();
+        let managed = run.path.join("shapez 2_Data/Managed");
+        fs::create_dir_all(&managed).unwrap();
+        fs::write(run.path.join(".shapez-lab-staged"), b"test clone").unwrap();
+        let audit = run.path.join("patch-audit.json");
+        fs::write(&audit, b"stale success").unwrap();
+        let source = paths.game.join("shapez 2_Data/Managed");
+        // Cecil needs dependency metadata while serializing the pending patch.
+        // Omit only the required orchestration target; other DLLs stay read-only.
+        for entry in fs::read_dir(&source).unwrap() {
+            let entry = entry.unwrap();
+            if entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "dll")
+                && entry.file_name() != "Game.Orchestration.dll"
+            {
+                fs::hard_link(entry.path(), managed.join(entry.file_name())).unwrap();
+            }
+        }
+        let original = fs::read(source.join("Game.Core.dll")).unwrap();
+        let target = managed.join("Game.Core.dll");
+        let result = Command::new(&paths.dotnet)
+            .arg(prep.join("HostPrep.dll"))
+            .arg(&run.path)
+            .output()
+            .unwrap();
+        assert!(!result.status.success());
+        assert!(
+            String::from_utf8_lossy(&result.stderr).contains("Expected one session Prepare"),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert_eq!(fs::read(target).unwrap(), original);
+        assert!(!audit.exists());
+        assert!(!managed.join("Game.Core.dll.lab-patched").exists());
+    }
+
+    #[test]
     fn lease_excludes_concurrent_owners_and_recovers_stale_file() {
         let root = std::env::temp_dir().join("shapez-lab");
         fs::create_dir_all(&root).unwrap();
