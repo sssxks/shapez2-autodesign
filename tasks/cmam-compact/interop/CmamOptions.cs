@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Newtonsoft.Json.Linq;
 
 internal sealed class CmamOptions
@@ -71,8 +72,8 @@ internal sealed class ProductionOptions
         Target = target;
         var production = JsonInput.Object(JsonInput.Required(manifest, "production"), "production");
         var chunk = JsonInput.Array(production, "output_chunk");
-        if (chunk.Count != 2 || chunk[0].Type != JTokenType.Integer || chunk[1].Type != JTokenType.Integer)
-            throw new ArgumentException("output_chunk must contain two integer coordinates");
+        if (chunk.Count != 3 || chunk.Any(value => value.Type != JTokenType.Integer))
+            throw new ArgumentException("output_chunk must contain three integer coordinates");
         OutputX = checked((int)chunk[0] * 20);
         OutputY = checked((int)chunk[1] * 20);
         SignalReceivers = JsonInput.Nonnegative(JsonInput.Integer(production, "signal_receivers")
