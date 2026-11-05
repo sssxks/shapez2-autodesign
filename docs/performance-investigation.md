@@ -35,3 +35,11 @@ Inspected the installed `Game.Core.Map.Simulation.dll` with the existing ilspycm
 The foreground frame capture establishes CPU-side frame pacing as the first target. No optimization patch has been applied. Next capture needs CPU stacks or in-game timings for `PrepareClustersByLOD`, `PrepareRemainingClusters`, `UpdateClusters`, render preparation and simulation completion waits, together with cluster size/cost distribution. Choose the dominant stage and implement that architectural change; do not optimize every listed candidate.
 
 The old FactoryProbe source provides a command-loading bridge, but its status file is dated November 4 and the current Player.log does not report that probe. A live bridge is not established for this process. Use an external CPU trace or an explicitly loaded performance mod for the next capture.
+
+## Captured ETW trace
+
+WPR GeneralProfile + GPU capture completed successfully for the live game (PID 28180). File: `%TEMP%/shapez-lab/performance/shapez-cpu-gpu.etl`, 1,570,766,848 bytes. PresentMon successfully parsed this ETL offline into `trace-frames.csv`: 1,964 game presents across about 54 seconds. A concurrent 25-second PresentMon recording is `profile-frames.csv`.
+
+The ETL contains the system-wide WPR capture; filter analysis to PID 28180. This is a Windows Performance Analyzer trace, not a Unity Editor `.data` capture. Mono JIT method symbolization and Unity per-marker timings are separate follow-up work; this capture does not enable them. WPR is stopped. A slower full tracerpt CSV conversion was stopped after the offline PresentMon parse succeeded; the source ETL is intact.
+
+Repeat with `./scripts/capture-performance.ps1 -Seconds 30`. WPR uses Windows sudo and saves into a timestamped directory. Keep the game foreground during capture. The script was PowerShell syntax-checked; the underlying capture commands were exercised in this session. Large ETLs stay outside Git. Analysis and optimization are deferred for discussion.
