@@ -9,20 +9,21 @@ using Newtonsoft.Json.Linq;
 public sealed class UnloaderSupply
 {
     readonly List<Action> refill = new List<Action>();
-    static (int, int, int) Key(JToken p) => ((int)p[0], (int)p[1], (int)p[2]);
-    public UnloaderSupply(ISimulator simulator, JObject manifest)
+    public UnloaderSupply(ISimulator simulator, JObject manifest) : this(simulator, new SupplyManifest(manifest)) { }
+
+    public UnloaderSupply(ISimulator simulator, SupplyManifest manifest)
     {
-        var session = GameBindings.Session;
         var ids = GameBindings.ShapeIds;
         var registry = GameBindings.Fluids;
         var colors = GameBindings.Colors;
-        var sources = ((JArray)manifest["sources"]).ToDictionary(t => Key(t["chunk"]), t => (string)t["item"]);
+        var sources = manifest.Sources;
         int found = 0;
         foreach (var localized in simulator.Simulations)
         {
             var sim = localized.Simulation;
             var p0 = localized.GetOccupiedChunk(0);
-            if (sim.GetType().Name.StartsWith("TrainCargoUnloaderSimulation") && sources.TryGetValue((p0.x, p0.y, p0.z), out var item))
+            if ((sim is TrainCargoUnloaderSimulation<ShapeId> || sim is TrainCargoUnloaderSimulation<FluidId>) &&
+                sources.TryGetValue(new ChunkPosition(p0.x, p0.y, p0.z), out var item))
             {
                 found++;
                 if (sim is TrainCargoUnloaderSimulation<ShapeId> shape)

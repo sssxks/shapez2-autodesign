@@ -19,15 +19,9 @@ internal static class SaveInspection
         var session = GameBindings.Session;
         var map = GameBindings.Field<MapModel>(session, "MapModel");
         var simulator = map.Simulator;
-        var seconds = (int?)args["seconds"] ?? 0;
+        var seconds = JsonInput.Nonnegative(JsonInput.Integer(args, "seconds") ?? 0, "seconds");
         if (seconds > 0)
-        {
-            var lods = map.Islands.SelectMany(i => i.Definition.Layout.GetChunkPositions().Select(c => SimulationLOD.Highest(c.ToGlobal(i.Transform)))).ToArray();
-            var update = new SimulationUpdateConfiguration(lods, TimeSpan.Zero, 1);
-            var strategy = new ProcessingUpdateStrategy(SimulationConstants.MaxSimulationUpdateDelta, SimulationConstants.MaxSimulatorIncrement, new[] { Ticks.Zero });
-            for (int i = 0; i < seconds * 10; i++)
-                ((Simulator)simulator).SynchronousUpdate(Ticks.OneSecond / 10, update, strategy);
-        }
+            SimulationStepper.Advance(map, seconds, 10);
         var channels = GameBindings.Field<SignalChannelRegistry>(session, "SignalChannelRegistry");
         var shapesRegistry = GameBindings.Shapes;
         var receivers = new List<object>();

@@ -11,19 +11,11 @@ using Newtonsoft.Json.Linq;
 
 internal sealed class RateProbe
 {
-    internal readonly Dictionary<(int, int, int), string> Targets;
-    internal readonly HashSet<(int, int, int)> CutIslands;
-    UnloaderSupply supply;
-    readonly Dictionary<(int, int, int), Meter> shapes = new Dictionary<(int, int, int), Meter>();
-    readonly Dictionary<(int, int, int), (ProvidingFluidContainer container, string expected)> fluids = new Dictionary<(int, int, int), (ProvidingFluidContainer, string)>();
-    readonly Dictionary<(int, int, int), long> volumes = new Dictionary<(int, int, int), long>();
-    internal double ExpectedBeltRate;
-    internal static (int, int, int) Key(JToken p) => ((int)p[0], (int)p[1], (int)p[2]);
-    internal RateProbe(JObject manifest)
-    {
-        Targets = ((JArray)manifest["targets"]).ToDictionary(t => Key(t["tile"]), t => (string)t["item"]);
-        CutIslands = new HashSet<(int, int, int)>(((JArray)manifest["cut_islands"]).Select(Key));
-    }
+    private readonly UnloaderSupply supply;
+    private readonly Dictionary<TilePosition, Meter> shapes = new Dictionary<TilePosition, Meter>();
+    private readonly Dictionary<TilePosition, (ProvidingFluidContainer container, string expected)> fluids = new Dictionary<TilePosition, (ProvidingFluidContainer, string)>();
+    private readonly Dictionary<TilePosition, long> volumes = new Dictionary<TilePosition, long>();
+    private readonly double expectedBeltRate;
     sealed class Meter : IItemReceiver
     {
         internal long Count; readonly string expected; readonly Ticks interval; Ticks credit;
@@ -48,12 +40,12 @@ internal sealed class RateProbe
             Count++;
         }
     }
-    internal void Attach(ISimulator simulator, JObject manifest)
+    internal RateProbe(ISimulator simulator, RateManifest manifest)
     {
-        supply = new UnloaderSupply(simulator, manifest);
+        supply = new UnloaderSupply(simulator, manifest.Supply);
         var mode = GameBindings.Mode;
         BeltSpeed speed = mode.Buildings.ForwardBelt.ConfigAs<IConveyorConfiguration>().ConveyorSpeed;
-        ExpectedBeltRate = (speed.StepsPerTick * Ticks.OneSecond).Value / (double)LaneConstants.ItemSpacing.Value;
+        expectedBeltRate = (speed.StepsPerTick * Ticks.OneSecond).Value / (double)LaneConstants.ItemSpacing.Value;
         foreach (var localized in simulator.Simulations)
         {
             var sim = localized.Simulation;
@@ -62,12 +54,12 @@ internal sealed class RateProbe
             for (int i = 0; i < tile.NumOccupiedTiles; i++)
             {
                 var p = tile.GetOccupiedTile(i);
-                var key = (p.x, p.y, (int)p.z);
-                if (!Targets.TryGetValue(key, out var expected))
+                var key = new TilePosition(p.x, p.y, p.z);
+                if (!manifest.Targets.TryGetValue(key, out var expected))
                     continue;
                 if (expected.Length > 1 && sim is IItemSimulation belt && belt.NumItemProviders == 1)
                 {
-                    var meter = new Meter(expected, ExpectedBeltRate);
+                    var meter = new Meter(expected, expectedBeltRate);
                     belt.GetItemProvider(0).NextLane = meter;
                     shapes.Add(key, meter);
                 }
@@ -78,18 +70,18 @@ internal sealed class RateProbe
                 }
             }
         }
-        var expectedShapes = Targets.Count(p => p.Value.Length > 1);
-        var expectedFluids = Targets.Count - expectedShapes;
+        var expectedShapes = manifest.Targets.Count(p => p.Value.Length > 1);
+        var expectedFluids = manifest.Targets.Count - expectedShapes;
         if (shapes.Count != expectedShapes || fluids.Count != expectedFluids)
             throw new Exception($"Endpoint mismatch: shape lanes {shapes.Count}/{expectedShapes}, fluid lanes {fluids.Count}/{expectedFluids}");
     }
-    internal void BeforeTick()
+    internal void BeforeTick(Ticks start, Ticks delta)
     {
         supply.BeforeTick();
         foreach (var meter in shapes.Values)
-            meter.Supply(Ticks.OneSecond / 10);
+            meter.Supply(delta);
     }
-    internal void AfterTick()
+    internal void AfterTick(Ticks end, Ticks delta)
     {
         foreach (var pair in fluids)
         {
@@ -109,19 +101,13 @@ internal sealed class RateProbe
         foreach (var key in volumes.Keys.ToArray())
             volumes[key] = 0;
     }
-    internal JObject Report(int seconds)
+    internal RateReport Report(int seconds)
     {
-        var s = shapes.Select(p => new { tile = p.Key, rate = p.Value.Count / (double)seconds, ratio = p.Value.Count / (seconds * ExpectedBeltRate) }).ToArray();
-        var f = volumes.Select(p => new { tile = p.Key, liters_per_second = p.Value / (double)FluidUnit.UnitsPerLiter / seconds, ratio = p.Value / (double)FluidUnit.UnitsPerLiter / seconds / (ExpectedBeltRate * 10) }).ToArray();
-        return JObject.FromObject(new
-        {
-            window_seconds = seconds,
-            expected_items_per_second = ExpectedBeltRate,
-            expected_liters_per_second = ExpectedBeltRate * 10,
-            min_shape_ratio = s.Length == 0 ? 1 : s.Min(x => x.ratio),
-            min_fluid_ratio = f.Length == 0 ? 1 : f.Min(x => x.ratio),
-            shape_lanes = s,
-            fluid_lanes = f
-        });
+        var s = shapes.Select(p => new ShapeLaneReport(p.Key, p.Value.Count / (double)seconds,
+            p.Value.Count / (seconds * expectedBeltRate))).ToArray();
+        var f = volumes.Select(p => new FluidLaneReport(p.Key,
+            p.Value / (double)FluidUnit.UnitsPerLiter / seconds,
+            p.Value / (double)FluidUnit.UnitsPerLiter / seconds / (expectedBeltRate * 10))).ToArray();
+        return new RateReport(seconds, expectedBeltRate, s, f);
     }
 }

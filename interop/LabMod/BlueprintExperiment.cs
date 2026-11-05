@@ -13,12 +13,15 @@ public interface IBlueprintExperiment
 
 internal static class BlueprintExperiment
 {
-    internal static IBlueprintExperiment Load(JObject definition)
+    internal static IBlueprintExperiment? Load(ExperimentDefinition? definition)
     {
         if (definition == null)
             return null;
-        var assembly = Assembly.LoadFrom((string)definition["assembly"]);
-        var type = assembly.GetType((string)definition["type"], true);
-        return (IBlueprintExperiment)Activator.CreateInstance(type);
+        var assembly = Assembly.LoadFrom(definition.Assembly);
+        var type = assembly.GetType(definition.Type, true);
+        if (!typeof(IBlueprintExperiment).IsAssignableFrom(type) || type.IsAbstract)
+            throw new ArgumentException($"{definition.Type} must implement IBlueprintExperiment");
+        return Activator.CreateInstance(type) as IBlueprintExperiment
+            ?? throw new InvalidOperationException($"Cannot create experiment {definition.Type}");
     }
 }

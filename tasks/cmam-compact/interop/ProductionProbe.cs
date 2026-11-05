@@ -14,11 +14,10 @@ internal sealed class ProductionProbe
     readonly Dictionary<string, long> trash = new Dictionary<string, long>(); readonly Dictionary<string, long> output = new Dictionary<string, long>();
     readonly string target;
     readonly Dictionary<string, long> discardedAt = new Dictionary<string, long>();
-    internal ProductionProbe(ISimulator simulator, JObject manifest, string target)
+    internal ProductionProbe(ISimulator simulator, ProductionOptions options)
     {
-        this.target = target;
-        supply = new UnloaderSupply(simulator, manifest);
-        var session = GameBindings.Session;
+        target = options.Target;
+        supply = new UnloaderSupply(simulator, options.Supply);
         var registry = GameBindings.Shapes;
         var ids = GameBindings.ShapeIds;
         var signal = BeltItemSignal.From(registry.GetItem(ids.Resolve(target)));
@@ -28,9 +27,8 @@ internal sealed class ProductionProbe
             // conductor at native signal ticks, preserving all downstream control logic.
             if (localized.Simulation is GlobalSignalReceiverSimulation receiver)
                 drivers.Add(new ConstantSignalSimulation(new ConstantSignalConfiguration { Value = signal }) { OutputConductor = receiver.OutputConductor });
-            var outputChunk = manifest["production"]["output_chunk"];
-            var outputX = (int)outputChunk[0] * 20;
-            var outputY = (int)outputChunk[1] * 20;
+            var outputX = options.OutputX;
+            var outputY = options.OutputY;
             if (localized.Simulation is TrashSimulation sink && localized is ILocalizedTileSimulation tile)
             {
                 var p = tile.GetOccupiedTile(0);
@@ -38,7 +36,7 @@ internal sealed class ProductionProbe
                 sink.OnLaneTrashesItem.Register((item, ticks, lane) => { var key = item.ToString(); trash[key] = trash.TryGetValue(key, out var n) ? n + 1 : 1; var location = p.x + "," + p.y + "," + p.z + ":" + key; discardedAt[location] = discardedAt.TryGetValue(location, out var d) ? d + 1 : 1; if (final) output[key] = output.TryGetValue(key, out var m) ? m + 1 : 1; });
             }
         }
-        var expectedReceivers = (int)manifest["production"]["signal_receivers"];
+        var expectedReceivers = options.SignalReceivers;
         if (drivers.Count != expectedReceivers)
             throw new Exception("Target-signal receiver mismatch: " + drivers.Count + "/" + expectedReceivers);
     }

@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 
 internal static class GraphExporter
 {
-    internal static (int count, List<object> open, string path) Write(Simulator simulator, JObject args, string root)
+    internal static (int count, List<object> open, string? path) Write(Simulator simulator, string name, string root)
     {
         var nodes = new List<object>();
         var open = new List<object>();
@@ -16,33 +16,33 @@ internal static class GraphExporter
         {
             var positions = new List<int[]>();
             if (sim is ILocalizedTileSimulation tile)
-            for (int i = 0; i < tile.NumOccupiedTiles; i++)
-            {
-                var p = tile.GetOccupiedTile(i);
-                positions.Add(new[] { p.x, p.y, (int)p.z });
-            }
+                for (int i = 0; i < tile.NumOccupiedTiles; i++)
+                {
+                    var p = tile.GetOccupiedTile(i);
+                    positions.Add(new[] { p.x, p.y, (int)p.z });
+                }
             var links = new List<object>();
             if (sim is IConnectableSimulation connectable)
-            for (int i = 0; i < connectable.NumConnectors; i++)
-            {
-                var connector = connectable.GetConnector(i);
-                bool connected = simulator.TryGetConnectedSimulation(sim, i, out var other);
-                links.Add(new
+                for (int i = 0; i < connectable.NumConnectors; i++)
                 {
-                    port = i,
-                    type = connector.GetType().FullName,
-                    socket = connector.ConnectorSocket.ToString(),
-                    target = connected ? Id(other) : null
-                });
-                if (!connected)
-                    open.Add(new
+                    var connector = connectable.GetConnector(i);
+                    bool connected = simulator.TryGetConnectedSimulation(sim, i, out var other);
+                    links.Add(new
                     {
-                        node = Id(sim),
                         port = i,
                         type = connector.GetType().FullName,
-                        socket = connector.ConnectorSocket.ToString()
+                        socket = connector.ConnectorSocket.ToString(),
+                        target = connected ? Id(other) : null
                     });
-            }
+                    if (!connected)
+                        open.Add(new
+                        {
+                            node = Id(sim),
+                            port = i,
+                            type = connector.GetType().FullName,
+                            socket = connector.ConnectorSocket.ToString()
+                        });
+                }
             nodes.Add(new
             {
                 id = Id(sim),
@@ -51,9 +51,6 @@ internal static class GraphExporter
                 links
             });
         }
-        var name = ((string)args["name"] ?? "blueprint");
-        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-            throw new ArgumentException("Invalid case name");
         var graphPath = Path.Combine(root, name + "-graph.json");
         File.WriteAllText(graphPath, JsonConvert.SerializeObject(nodes));
         return (nodes.Count, open, graphPath);

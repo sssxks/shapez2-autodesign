@@ -7,28 +7,26 @@ using Newtonsoft.Json.Linq;
 
 public sealed class CmamExperiment : IBlueprintExperiment
 {
-    bool adapter;
+    private CmamOptions? options;
     // Import policy is configured before buildings are created.
-    public bool KeepBuilding(GlobalTileCoordinate p) => !adapter || AdapterProbe.KeepBuilding(p);
+    public bool KeepBuilding(GlobalTileCoordinate p) => !Options.Adapter || AdapterProbe.KeepBuilding(p);
+    private CmamOptions Options => options ?? throw new InvalidOperationException("Configure the experiment before use");
     public object Run(LabWorld world, JObject args, string root)
     {
-        var seconds = (int?)args["seconds"] ?? 1;
-        if (args["production_manifest"] != null)
+        var configured = Options;
+        if (configured.Production != null)
         {
-            var production = new ProductionProbe(world.Simulator, JObject.Parse(File.ReadAllText((string)args["production_manifest"])), (string)args["target"]);
-            world.Advance(seconds, 10, () => production.BeforeTick(world.Simulator.SimulationTime, Ticks.OneSecond / 10));
-            var name = (string)args["name"] ?? "production";
-            if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-                throw new ArgumentException("Invalid case name");
+            var production = new ProductionProbe(world.Simulator, configured.Production);
+            world.Advance(configured.Seconds, 10, production.BeforeTick);
             var report = production.Report();
-            File.WriteAllText(Path.Combine(root, name + "-production.json"), JsonConvert.SerializeObject(report, Formatting.Indented));
-            if (args["min_produced"] != null && production.Produced < (long)args["min_produced"])
-                throw new Exception("Production below required count: " + production.Produced);
+            File.WriteAllText(Path.Combine(root, configured.Name + "-production.json"), JsonConvert.SerializeObject(report, Formatting.Indented));
+            if (configured.MinimumProduced is long minimum && production.Produced < minimum)
+                throw new InvalidOperationException("Production below required count: " + production.Produced);
             return report;
         }
         var probe = new AdapterProbe(world.Simulator);
         bool complete = false;
-        world.Advance(seconds, 10, probe.BeforeTick, () => complete = probe.AfterTick(), () => complete);
+        world.Advance(configured.Seconds, 10, (_, _) => probe.BeforeTick(), (_, _) => complete = probe.AfterTick(), () => complete);
         var flow = probe.Report();
         File.WriteAllText(Path.Combine(root, "adapter-flow.json"), JsonConvert.SerializeObject(flow));
         if (!complete)
@@ -40,6 +38,6 @@ public sealed class CmamExperiment : IBlueprintExperiment
     }
     public void Configure(JObject args)
     {
-        adapter = (bool?)args["adapter_probe"] == true;
+        options = new CmamOptions(args);
     }
 }

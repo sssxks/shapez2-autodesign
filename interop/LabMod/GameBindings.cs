@@ -5,6 +5,14 @@ using System.Collections.Generic;
 using System.Linq;
 using Game.Core.Trains;
 using Game.Content.Features.Fluids;
+using Core.Dependency;
+using Core.Logging;
+using Game.Core;
+using Game.Core.Blueprint.Importer;
+using Game.Core.Map.Simulation;
+using Game.Core.Simulation;
+using Game.Content.Features.Signals.Channels;
+using System.Runtime.ExceptionServices;
 
 public static class GameBindings
 {
@@ -27,6 +35,41 @@ public static class GameBindings
     public static ShapeOperations Operations => Field<ShapeOperations>(Session, "ShapeOperations");
     public static FluidRegistry Fluids => Field<FluidRegistry>(Session, "FluidRegistry");
     public static ColorFluid[] Colors => Field<Dictionary<IFluid, FluidId>>(Fluids, "FluidReferenceToIdLookup").Keys.OfType<ColorFluid>().ToArray();
+    internal static IBlueprintImporter Importer => LabBootstrap.Importer ??
+        Field<DependencyContainer>(Session, "DependencyContainer").Resolve<IBlueprintImporter>();
+
+    internal static IEnumerable<ISimulationSystem> CreateSimulationSystems(GameResourcesMap resources, ILogger logger)
+    {
+        var session = Session;
+        // Explicitly targets 1.2.0-rc3; constructor changes are compile errors.
+        return new BuiltinSimulationSystems(Ticks.Zero, Operations, Mode, Shapes, ShapeIds,
+            resources, Fluids, Field<FluidPackageItemSolver>(session, "FluidPackageItemSolver"),
+            new SignalChannelRegistry(Enumerable.Empty<(SignalChannelId, IReadOnlySignalChannel)>()),
+            Field<ResearchManager>(session, "Research").UnlockManager, logger).CreateSimulationSystems();
+    }
+
+    internal static void InitializeSession(object session, object options, object globals,
+        object gameData, object platform, object content)
+    {
+        Invoke(session, "Init_1_GameOptions", globals, options, gameData, platform);
+        Invoke(session, "Init_2_Player");
+        Invoke(session, "Init_3_SavegameAndMode", content, gameData, options);
+    }
+
+    private static void Invoke(object target, string name, params object[] args)
+    {
+        var method = target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException(target.GetType().FullName, name);
+        try
+        {
+            method.Invoke(target, args);
+        }
+        catch (TargetInvocationException error) when (error.InnerException != null)
+        {
+            ExceptionDispatchInfo.Capture(error.InnerException).Throw();
+            throw;
+        }
+    }
     public static TrainCargoToBeltFillingContainer<ShapeId>[] ShapeCargo(object unloader) => Field<TrainCargoToBeltFillingContainer<ShapeId>[]>(unloader, "_FillingContainers");
     public static TrainCargoToBeltFillingContainer<FluidId>[] FluidCargo(object unloader) => Field<TrainCargoToBeltFillingContainer<FluidId>[]>(unloader, "_FillingContainers");
     public static T Field<T>(object obj, string name)
