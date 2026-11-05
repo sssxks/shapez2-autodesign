@@ -1,15 +1,15 @@
 using System;
-using Game.Blueprints;
-using Game.Orchestration;
 using System.Collections.Generic;
 using System.Reflection;
 using Core.Logging;
 using Cysharp.Threading.Tasks;
+using Game.Blueprints;
+using Game.Core.Blueprint;
+using Game.Core.Blueprint.Exporter;
 using Game.Core.Blueprint.Importer;
 using Game.Core.Blueprint.Importer.Migration;
-using Game.Core.Blueprint.Exporter;
 using Game.Core.Blueprints;
-using Game.Core.Blueprint;
+using Game.Orchestration;
 
 // Called only by the patched temporary game clone. Retain native mode/content
 // initialization; omit player interaction, audio, renderers, HUD and menu ticking.
@@ -22,7 +22,9 @@ public static class LabBootstrap
         var save = Environment.GetEnvironmentVariable("SHAPEZ_LAB_SAVE");
         if (!string.IsNullOrEmpty(save))
         {
-            var copy = System.IO.Path.Combine(Environment.GetEnvironmentVariable("SHAPEZ_LAB_RUN"), "inspection.spz2");
+            var root = Environment.GetEnvironmentVariable("SHAPEZ_LAB_RUN")
+                ?? throw new InvalidOperationException("SHAPEZ_LAB_RUN is required");
+            var copy = System.IO.Path.Combine(root, "inspection.spz2");
             System.IO.File.Copy(save, copy);
             var saveLogger = GameBindings.Field<ILogger>(session, "Logger");
             var reader = new SaveFileAccessor(saveLogger).Read(copy, new Dictionary<Type, Game.Core.Serialization.IDataSerializer>());

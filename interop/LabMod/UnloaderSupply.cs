@@ -1,14 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Game.Content.Features.Fluids;
 using Game.Core.Map.Simulation;
 using Game.Core.Trains;
-using Game.Content.Features.Fluids;
 using Newtonsoft.Json.Linq;
 
 public sealed class UnloaderSupply
 {
-    readonly List<Action> refill = new List<Action>();
+    private readonly List<(TrainCargoToBeltFillingContainer<ShapeId> Container, ShapeId Item)> shapes =
+        new List<(TrainCargoToBeltFillingContainer<ShapeId>, ShapeId)>();
+    private readonly List<(TrainCargoToBeltFillingContainer<FluidId> Container, FluidId Item)> fluids =
+        new List<(TrainCargoToBeltFillingContainer<FluidId>, FluidId)>();
+    private const int RefillThreshold = 1000;
+    private const int PackageAmount = 30000;
     public UnloaderSupply(ISimulator simulator, JObject manifest) : this(simulator, new SupplyManifest(manifest)) { }
 
     public UnloaderSupply(ISimulator simulator, SupplyManifest manifest)
@@ -30,13 +35,13 @@ public sealed class UnloaderSupply
                 {
                     var id = ids.Resolve(item);
                     foreach (var f in GameBindings.ShapeCargo(shape))
-                        refill.Add(() => { if (f.Package.Amount < 1000) f.LoadPackage(new CargoPackage<ShapeId>(30000, id)); });
+                        shapes.Add((f, id));
                 }
                 else if (sim is TrainCargoUnloaderSimulation<FluidId> fluid)
                 {
                     var id = registry.GetFluidId(colors.Single(f => f.Color.Code == item[0]));
                     foreach (var f in GameBindings.FluidCargo(fluid))
-                        refill.Add(() => { if (f.Package.Amount < 1000) f.LoadPackage(new CargoPackage<FluidId>(30000, id)); });
+                        fluids.Add((f, id));
                 }
             }
         }
@@ -45,8 +50,12 @@ public sealed class UnloaderSupply
     }
     public void BeforeTick()
     {
-        foreach (var f in refill)
-            f();
+        foreach (var source in shapes)
+            if (source.Container.Package.Amount < RefillThreshold)
+                source.Container.LoadPackage(new CargoPackage<ShapeId>(PackageAmount, source.Item));
+        foreach (var source in fluids)
+            if (source.Container.Package.Amount < RefillThreshold)
+                source.Container.LoadPackage(new CargoPackage<FluidId>(PackageAmount, source.Item));
     }
 }
 

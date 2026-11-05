@@ -1,18 +1,18 @@
 using System;
-using System.Reflection;
-using Game.Orchestration;
 using System.Collections.Generic;
 using System.Linq;
-using Game.Core.Trains;
-using Game.Content.Features.Fluids;
+using System.Reflection;
+using System.Runtime.ExceptionServices;
 using Core.Dependency;
 using Core.Logging;
+using Game.Content.Features.Fluids;
+using Game.Content.Features.Signals.Channels;
 using Game.Core;
 using Game.Core.Blueprint.Importer;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
-using Game.Content.Features.Signals.Channels;
-using System.Runtime.ExceptionServices;
+using Game.Core.Trains;
+using Game.Orchestration;
 
 public static class GameBindings
 {
@@ -22,7 +22,9 @@ public static class GameBindings
         {
             if (LabBootstrap.Session != null)
                 return LabBootstrap.Session;
-            var orchestrator = typeof(GameBootstrapper).GetField("GameOrchestrator", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+            var orchestratorField = typeof(GameBootstrapper).GetField("GameOrchestrator", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new MissingFieldException(typeof(GameBootstrapper).FullName, "GameOrchestrator");
+            var orchestrator = orchestratorField.GetValue(null) ?? throw new InvalidOperationException("Game orchestrator is not ready");
             var session = Field<object>(orchestrator, "CurrentSubOrchestrator");
             if (!(session is GameSessionOrchestrator))
                 throw new InvalidOperationException("Game session is not ready");
@@ -79,6 +81,7 @@ public static class GameBindings
         var field = obj.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
         if (field == null)
             throw new MissingFieldException(obj.GetType().FullName, name);
-        return (T)field.GetValue(obj);
+        return field.GetValue(obj) is T value ? value
+            : throw new InvalidOperationException($"{obj.GetType().FullName}.{name} must contain {typeof(T).FullName}");
     }
 }

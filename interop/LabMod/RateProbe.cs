@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Game.Content.BuildingPath.Simulation;
+using Game.Content.Features.Fluids;
 using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 using Game.Core.Trains;
-using Game.Content.Features.Fluids;
-using Game.Content.BuildingPath.Simulation;
 using Newtonsoft.Json.Linq;
 
 internal sealed class RateProbe
@@ -18,7 +18,10 @@ internal sealed class RateProbe
     private readonly double expectedBeltRate;
     sealed class Meter : IItemReceiver
     {
-        internal long Count; readonly string expected; readonly Ticks interval; Ticks credit;
+        internal long Count;
+        private readonly string expected;
+        private readonly Ticks interval;
+        private Ticks credit;
         internal Meter(string expected, double rate)
         {
             this.expected = expected;

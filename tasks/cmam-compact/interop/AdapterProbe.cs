@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Game.Content.Features.Fluids;
+using Game.Content.Features.SpacePaths;
 using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
-using Game.Content.Features.Fluids;
-using Game.Content.Features.SpacePaths;
 
 // Terminate the DUT at CMAM's physical input receivers. Production circuitry is
 // intentionally outside this test: the assertion is transport identity at every lane.
@@ -29,7 +29,9 @@ internal sealed class AdapterProbe
     internal static bool KeepBuilding(GlobalTileCoordinate p) => p.x < -380 || p.x >= 200 || p.y < 120 || p.y >= 180 || Targets.ContainsKey((p.x, p.y, p.z));
     sealed class Sink : IItemReceiver
     {
-        internal int Count; readonly string expected; readonly IItemReceiver lane;
+        internal int Count;
+        private readonly string expected;
+        private readonly IItemReceiver lane;
         internal Sink(string expected, IItemReceiver lane)
         {
             this.expected = expected;
@@ -51,7 +53,6 @@ internal sealed class AdapterProbe
     int injected;
     internal AdapterProbe(ISimulator simulator)
     {
-        var session = GameBindings.Session;
         var registry = GameBindings.Shapes;
         var ids = GameBindings.ShapeIds;
         var fluids = GameBindings.Colors;
