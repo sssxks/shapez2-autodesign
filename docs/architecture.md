@@ -34,11 +34,28 @@ CMAM 任务负责接入布局、旧版生成、生产/接入实验插件和套�
 
 ## 原生接口与运行产物
 
-公共 `LabWorld` 管理世界与模拟器，`Advance` 显式推进模拟；`UnloaderSupply` 供料，`RateScenario` 测量通道，`GraphExporter` 导出连接图，`GameBindings` 集中游戏版本适配。
+公共 `LabWorld` 管理世界与模拟器，`Advance` 显式推进模拟；`BlueprintRunner` 拥有蓝图运行流程，`BlueprintLoader` 负责原生导入和放置；`UnloaderSupply` 供料，`RateScenario` 测量通道，`GraphExporter` 导出连接图，`GameBindings` 集中游戏版本适配。
+
+C# 操作在入口通过 `JsonInput` 校验 JSON，转成 `BlueprintRunOptions`、`RateManifest`、`SupplyManifest`、`RecipePlan` 等类型后执行。缺少字段、错误类型、负数时间、无效测量窗口和配方前向引用均在执行前拒绝。`TilePosition` 与 `ChunkPosition` 区分格子和区块坐标。任务插件在 `Configure` 中解析自己的参数，公共宿主不解释任务参数；`JObject` 仅保留在协议、操作入口和插件边界。协议响应、蓝图运行报告和速率报告通过显式 `JsonProperty` 固定线上的字段名。
+
+`LabWorld` 按创建顺序登记独立资源，并按逆序释放；构造中途失败也回收已创建对象。清理会尝试全部资源，并聚合异常。原生 `MapModel` 和 `Simulator` 的 `Dispose` 只解除自己注册的事件，不代替世界释放其余资源。
+
+`SimulationStepper` 是新世界和存档副本共用的推进实现。`Advance` 的前后回调均接收 `(模拟时间, 实际步长)`；前回调收到起始时间，后回调收到更新后的时间。探针和信号驱动直接使用传入步长：
+
+```csharp
+world.Advance(seconds, 10, production.BeforeTick);
+// void BeforeTick(Ticks start, Ticks delta)
+```
+
+游戏适配明确针对 1.2.0-rc3。模拟系统直接调用原生构造函数，私有字段和会话初始化反射集中在 `GameBindings`。`HostPrep` 先在内存中生成所有补丁，再检查预期的五处数据路径调用、一个快速启动构造函数、一个 Prepare 和一个 Tick；缺项时不写 DLL，也不保留旧的 `patch-audit.json` 成功标记。
 
 运行入口仍通过 Rust 调用 `dotnet build`。宿主启动时使用 `SHAPEZ_LAB_PIPE` 指定专属命名管道；C# 创建服务端，Rust 连接并校验协议版本、宿主 PID 和隔离数据路径。双方交换 4 字节小端长度前缀的 UTF-8 JSON 帧，单帧上限 64 MiB，一次执行一个请求。C# 的 `LabPipe` 在线程中收发，`LabService.Update` 在 Unity 主线程执行请求；退出也作为请求确认后执行。管道断连使宿主退出，请求超时使 Rust 终止宿主。Rust 的 I/O 线程随宿主退出解除阻塞并回收。运行目录只承担输入与产物存储，`ready.json` 只归档已收到的握手。
 
 协议分帧测试随 `cargo test -p shapez-runtime` 执行。准备好本地宿主后，可运行 `cargo test -p shapez-runtime live_pipe -- --ignored`，验证错误请求后的继续使用、控制端断连退出、请求超时回收和游戏异常退出。
+
+可识别请求 ID 的信封或参数错误返回本次请求的失败响应；无效 ID、损坏的帧或断连终止连接。只有成功执行并写出确认响应的 shutdown 才结束服务。Unity 主线程使用非阻塞回包入队；后台任务负责全部管道 I/O，关闭时中断 I/O，任务完成后释放队列和取消源。`catalog` 返回被跳过对象的名称、类型与错误信息。
+
+`cargo test -p shapez-runtime live_prepare -- --ignored` 验证不完整副本的补丁准备会失败、保持输入 DLL 字节不变并移除旧成功标记。
 
 任务特殊实验实现 `IBlueprintExperiment`：
 

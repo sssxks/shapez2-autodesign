@@ -34,6 +34,15 @@ cargo run -p cmam-compact -- probe
 
 公共部分全部为库，任务提供可执行入口：`cargo run -p cmam-compact -- --help`、`cargo run -p scaffold-recipe -- --help`。
 
+C# 三个工程统一使用 C# 14、nullable 和 .NET 分析器，构建警告视为错误；格式由根目录 `.editorconfig` 管理。可单独执行构建和格式检查：
+
+```powershell
+& "$env:TEMP/shapez-lab/tools/dotnet/dotnet.exe" build ShapezLab.slnx -c Release
+& "$env:TEMP/shapez-lab/tools/dotnet/dotnet.exe" format whitespace ShapezLab.slnx --verify-no-changes --no-restore
+```
+
+原生执行层的类型边界、世界资源所有权和模拟回调约定见[架构说明](docs/architecture.md)。
+
 构建产物、SDK、游戏副本、生成蓝图和运行日志统一置于 `%TEMP%/shapez-lab`。每次生成或执行使用 `runs/<run-id>`；输入快照与执行报告随运行保存。成功任务通过 `tasks/<task>/latest.json` 发布产物，历史运行保留。
 
 批量套件支持 `${LAB}`、`${REPO}`、`${LIBRARY}` 和 `${TASK:<task-id>}`。`projects` 声明需要构建的扩展项目；case 的 `experiment` 声明扩展程序集路径与类型。任务参数由任务解释。
