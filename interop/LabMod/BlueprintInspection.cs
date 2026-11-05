@@ -17,9 +17,11 @@ internal static class BlueprintInspection
 {
     internal static object Read(JObject args, string root)
     {
-        var path = (string)args["blueprint"];
-        if (string.IsNullOrEmpty(path))
-            throw new ArgumentException("blueprint path required");
+        var path = JsonInput.String(args, "blueprint");
+        var name = JsonInput.CaseName(args, "blueprint");
+        var expectedFormat = JsonInput.Integer(args, "expected_format_version");
+        var expectedWarning = JsonInput.Boolean(args, "expected_library_warning");
+        var expectedIcon = args["expected_icon"] as JArray;
         var text = File.ReadAllText(path);
         var logger = GameBindings.Field<ILogger>(GameBindings.Session, "Logger");
         var migrators = new BlueprintMigrators(logger);
@@ -33,17 +35,17 @@ internal static class BlueprintInspection
         if ((formatVersion >= 5 || !string.IsNullOrEmpty(metadata)) &&
             !deserializer.TryDeserializeMetadata(metadata, out var annotation, out error))
             throw error;
-        if (!LabBootstrap.Importer.TryImport(text, out var blueprint, out var importedVersion, out error))
+        if (!GameBindings.Importer.TryImport(text, out var blueprint, out var importedVersion, out error))
             throw error;
         var entry = new BlueprintLibraryEntry("inspection", path, blueprint, importedVersion);
         var warning = entry.Version < BlueprintFormat.RecommendedVersion;
-        if (args["expected_format_version"] != null && formatVersion != (int)args["expected_format_version"])
+        if (expectedFormat != null && formatVersion != expectedFormat)
             throw new InvalidDataException("Unexpected blueprint format: " + formatVersion);
-        if (args["expected_library_warning"] != null && warning != (bool)args["expected_library_warning"])
+        if (expectedWarning != null && warning != expectedWarning)
             throw new InvalidDataException("Unexpected library warning: " + warning);
         var exporter = new BlueprintImporterFactory(converter).CreateExporter();
         var exported = exporter.Export(blueprint);
-        if (!LabBootstrap.Importer.TryImport(exported, out var roundtrip, out var exportedVersion, out error))
+        if (!GameBindings.Importer.TryImport(exported, out var roundtrip, out var exportedVersion, out error))
             throw error;
         string Data(string encoded)
         {
@@ -58,10 +60,10 @@ internal static class BlueprintInspection
             throw new InvalidDataException("Native blueprint roundtrip changed serialized data");
         if (!blueprint.GetBlueprintIcon().Equals(roundtrip.GetBlueprintIcon()))
             throw new InvalidDataException("Native blueprint roundtrip changed icon");
-        var output = Path.Combine(root, (string)args["name"] + "-native.spz2bp");
+        var output = Path.Combine(root, name + "-native.spz2bp");
         File.WriteAllText(output, exported);
         var icon = entry.BlueprintIcon.Serialize().Data;
-        if (args["expected_icon"] is JArray expectedIcon && !icon.SequenceEqual(expectedIcon.Select(x => (string)x)))
+        if (expectedIcon != null && !icon.SequenceEqual(expectedIcon.Select(x => (string?)x)))
             throw new InvalidDataException("Unexpected blueprint icon");
         return new
         {

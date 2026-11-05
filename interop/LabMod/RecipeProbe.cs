@@ -9,50 +9,47 @@ internal static class RecipeProbe
 {
     internal static object Run(JObject args, string root)
     {
-        var recipe = JObject.Parse(File.ReadAllText((string)args["recipe"]));
-        File.WriteAllText(Path.Combine(root, "recipe.json"), recipe.ToString());
-        var session = GameBindings.Session;
+        var input = JsonInput.ReadFile(JsonInput.String(args, "recipe"));
+        var recipe = new RecipePlan(input);
+        File.WriteAllText(Path.Combine(root, "recipe.json"), input.ToString());
         var ops = GameBindings.Operations;
         var registry = GameBindings.Shapes;
         var ids = GameBindings.ShapeIds;
-        var fluids = GameBindings.Fluids;
         var colors = GameBindings.Colors;
         var values = new List<IItem>();
         var trace = new List<object>();
-        foreach (JObject node in recipe["nodes"])
+        foreach (var node in recipe.Nodes)
         {
-            var op = (string)node["op"];
-            var expected = (string)node["expected"];
-            var inputs = node["inputs"].Select(x => values[(int)x]).ToArray();
-            IItem a = null, b = null;
+            var op = node.OperationName;
+            var expected = node.Expected;
+            var inputs = node.Inputs.Select(x => values[x]).ToArray();
+            IItem? a = null, b = null;
             bool ok = true;
-            switch (op)
+            switch (node.Operation)
             {
-                case "source":
-                    if (!new[] { "CuCuCuCu", "RuRuRuRu", "SuSuSuSu", "WuWuWuWu", "P-P-P-P-" }.Contains(expected))
-                        throw new Exception("Invalid source");
+                case RecipeOperation.Source:
                     a = registry.GetItem(ids.Resolve(expected));
                     break;
-                case "cut":
+                case RecipeOperation.Cut:
                     ok = ops.Cut.TryExecute(inputs[0], out a, out b);
                     break;
-                case "swap":
+                case RecipeOperation.Swap:
                     ok = ops.SwapHalves.TryExecute(inputs[0], inputs[1], out a, out b);
                     break;
-                case "rotate-cw":
+                case RecipeOperation.RotateCw:
                     ok = ops.Rotate[0].TryExecute(inputs[0], out a);
                     break;
-                case "rotate-ccw":
+                case RecipeOperation.RotateCcw:
                     ok = ops.Rotate[1].TryExecute(inputs[0], out a);
                     break;
-                case "stack":
+                case RecipeOperation.Stack:
                     ok = ops.Stack.TryExecute(inputs[0], inputs[1], out a);
                     break;
-                case "paint":
-                    ok = ops.PaintTopmost.TryExecute(inputs[0], colors.Single(c => c.Color.Code.ToString() == (string)node["color"]), out a);
+                case RecipeOperation.Paint:
+                    ok = ops.PaintTopmost.TryExecute(inputs[0], colors.Single(c => c.Color.Code.ToString() == node.Color), out a);
                     break;
-                case "crystallize":
-                    ok = ops.Crystallize.TryExecute(inputs[0], colors.Single(c => c.Color.Code.ToString() == (string)node["color"]), out a);
+                case RecipeOperation.Crystallize:
+                    ok = ops.Crystallize.TryExecute(inputs[0], colors.Single(c => c.Color.Code.ToString() == node.Color), out a);
                     break;
                 default:
                     throw new Exception("Unknown recipe operation: " + op);
@@ -60,7 +57,7 @@ internal static class RecipeProbe
             var selected = a?.ToString() == expected ? a : b?.ToString() == expected ? b : null;
             trace.Add(new
             {
-                id = (int)node["id"],
+                id = node.Id,
                 op,
                 expected,
                 outputs = new[] { a?.ToString(), b?.ToString() },
@@ -71,8 +68,8 @@ internal static class RecipeProbe
                 var failed = new
                 {
                     verified = false,
-                    target = (string)recipe["target"],
-                    failed_node = (int)node["id"],
+                    target = recipe.Target,
+                    failed_node = node.Id,
                     trace
                 };
                 File.WriteAllText(Path.Combine(root, "recipe-verification.json"), JObject.FromObject(failed).ToString());
@@ -82,8 +79,8 @@ internal static class RecipeProbe
         }
         var result = new
         {
-            verified = values[(int)recipe["root"]].ToString() == (string)recipe["target"],
-            target = (string)recipe["target"],
+            verified = values[recipe.Root].ToString() == recipe.Target,
+            target = recipe.Target,
             steps = values.Count,
             trace
         };
