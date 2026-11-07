@@ -37,14 +37,32 @@ struct Row {
     lower: i64,
     upper: i64,
 }
+/// Reusable finite relation, stored once before native model serialization.
+#[derive(Clone, Copy)]
+pub struct Table(usize);
 #[derive(Default)]
 pub struct Model {
     domains: Vec<(i64, i64)>,
     rows: Vec<Row>,
     hints: BTreeMap<Var, i64>,
     objective: Expr,
+    relations: Vec<Vec<Vec<i64>>>,
+    tables: Vec<(Table, Vec<Var>)>,
 }
 impl Model {
+    /// Register a finite relation with a uniform nonzero arity.
+    pub fn relation(&mut self, rows: Vec<Vec<i64>>) -> Table {
+        assert!(!rows.is_empty() && !rows[0].is_empty());
+        assert!(rows.iter().all(|r| r.len() == rows[0].len()));
+        let table = Table(self.relations.len());
+        self.relations.push(rows);
+        table
+    }
+    /// Constrain variables to a tuple in a previously registered relation.
+    pub fn allow(&mut self, table: Table, variables: Vec<Var>) {
+        assert_eq!(variables.len(), self.relations[table.0][0].len());
+        self.tables.push((table, variables));
+    }
     pub fn variable(&mut self, lower: i64, upper: i64) -> Var {
         assert!(lower <= upper, "Ordered variable domain");
         let v = Var(self.domains.len());
@@ -102,7 +120,7 @@ impl Model {
         self.objective = expr;
     }
     pub fn counts(&self) -> (usize, usize) {
-        (self.domains.len(), self.rows.len())
+        (self.domains.len(), self.rows.len() + self.tables.len())
     }
     pub fn validate(&self, solution: &Solution) -> Result<()> {
         let Some(values) = &solution.values else {
@@ -124,6 +142,15 @@ impl Model {
             ensure!(
                 value >= i128::from(r.lower) && value <= i128::from(r.upper),
                 "Constraint {i} violated: {value}"
+            );
+        }
+        for (i, (table, vars)) in self.tables.iter().enumerate() {
+            ensure!(
+                self.relations[table.0].iter().any(|row| row
+                    .iter()
+                    .zip(vars)
+                    .all(|(&wanted, v)| values[v.0] == wanted)),
+                "Finite relation {i} violated"
             );
         }
         Ok(())
@@ -208,6 +235,13 @@ impl Model {
         for (&v, &value) in &self.hints {
             model.add_hint(variables[v.0], value);
         }
+        for (table, vars) in &self.tables {
+            model.add_table(
+                &vars.iter().map(|v| variables[v.0]).collect::<Vec<_>>(),
+                &self.relations[table.0],
+                false,
+            );
+        }
         if !self.objective.terms.is_empty() {
             let mut objective = LinearExpr::constant(self.objective.constant);
             for &(v, c) in &self.objective.terms {
@@ -248,6 +282,10 @@ impl Model {
 #[cfg(feature = "scip")]
 impl Model {
     pub fn solve_scip(&self, limits: &Limits) -> Result<Solution> {
+        ensure!(
+            self.tables.is_empty(),
+            "Finite relations require the CP-SAT backend"
+        );
         use russcip::prelude::*;
         let mut model = russcip::Model::new()
             .include_default_plugins()
@@ -338,6 +376,24 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "cp-sat")]
+    #[test]
+    fn finite_relation_preserves_non_linear_pairs() {
+        let mut model = Model::default();
+        let x = model.variable(2, 3);
+        let y = model.variable(0, 9);
+        let squares = model.relation(vec![vec![0, 0], vec![1, 1], vec![2, 4], vec![3, 9]]);
+        model.allow(squares, vec![x, y]);
+        model.minimize(y.into());
+        let solution = model
+            .solve_cp_sat(&Limits {
+                seconds: 5.,
+                workers: 1,
+                log: false,
+            })
+            .unwrap();
+        assert_eq!((solution.value(x), solution.value(y)), (2, 4));
+    }
     #[test]
     fn native_backends_respect_capacity_and_objective() {
         let mut model = Model::default();
