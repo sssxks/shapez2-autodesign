@@ -45,7 +45,7 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
         {
             var meter = new BeltMeter();
             port.Sender.PathLane.NextLane = meter;
-            meters.Add(port.Position.ToString(),meter);
+            meters.Add(port.Position.ToString(), meter);
         }
         if (sources.Count != 12 || meters.Count != 48)
             throw new InvalidOperationException($"Port counts {sources.Count}/12, {meters.Count}/48");

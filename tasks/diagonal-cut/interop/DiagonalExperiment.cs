@@ -31,8 +31,8 @@ public sealed class DiagonalExperiment : IBlueprintExperiment
         void Feed(Ticks t, Ticks dt)
         {
             foreach (var s in sources)
-            if (s.CanAcceptItem(item))
-                s.HandOverItem(item, Ticks.Zero);
+                if (s.CanAcceptItem(item))
+                    s.HandOverItem(item, Ticks.Zero);
         }
         BeltMeasurement.Run(w, 120, 120, sinks, Feed);
         string expected = args.Value<string>("name") == "NE-SW" ? "Cu--Cu--" : "--Cu--Cu";
@@ -40,13 +40,13 @@ public sealed class DiagonalExperiment : IBlueprintExperiment
         double rate = (speed.StepsPerTick * Ticks.OneSecond).Value / (double)LaneConstants.ItemSpacing.Value;
         var counts = sinks.Select(s => s.Counts).ToArray();
         foreach (var s in sinks)
-        if (s.Counts.Count != 1 || !s.Counts.TryGetValue(expected, out var n) || n < 120 * rate * 0.99)
-            throw new InvalidOperationException(Newtonsoft.Json.JsonConvert.SerializeObject(new
-            {
-                expected,
-                rate,
-                counts
-            }));
+            if (s.Counts.Count != 1 || !s.Counts.TryGetValue(expected, out var n) || n < 120 * rate * 0.99)
+                throw new InvalidOperationException(Newtonsoft.Json.JsonConvert.SerializeObject(new
+                {
+                    expected,
+                    rate,
+                    counts
+                }));
         return new
         {
             expected,

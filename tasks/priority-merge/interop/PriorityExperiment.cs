@@ -35,9 +35,9 @@ public sealed class PriorityExperiment : IBlueprintExperiment
         }
         foreach (var port in bound.Outputs)
         {
-            var meter = new BeltMeter(Shape(port.Lane,true), Shape(port.Lane,false));
+            var meter = new BeltMeter(Shape(port.Lane, true), Shape(port.Lane, false));
             port.Sender.PathLane.NextLane = meter;
-            sinks.Add(port.Lane,meter);
+            sinks.Add(port.Lane, meter);
         }
         if (a.Count != 12 || b.Count != 12 || sinks.Count != 12)
             throw new InvalidOperationException($"Port counts: A={a.Count}, B={b.Count}, output={sinks.Count}; " + string.Join(";", ((ISimulator)world.Simulator).Simulations.Take(12).Select(s => s.Simulation.GetType().Name)));
