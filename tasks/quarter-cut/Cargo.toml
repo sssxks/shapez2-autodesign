@@ -35,3 +35,4 @@ shapez-runtime.workspace = true
 
 shapez-model.workspace = true
 shapez-routing.workspace = true
+shapez-viz.workspace = true

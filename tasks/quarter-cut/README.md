@@ -29,13 +29,16 @@
 ## 运行和重建
 
 ```powershell
-cargo run -p quarter-cut  # 打包 1×2 模板并执行整机验收
+cargo run --locked --release -p quarter-cut  # 从已提交分区解重建蓝图和交互可视化
+cargo run --release -p quarter-cut -- --native  # 本地游戏原生整机验收
 cargo run --release -p quarter-cut --bin quarter-assemble -- `
   tasks/quarter-cut/search/bank-left.buildings.json `
   tasks/quarter-cut/search/bank-right.buildings.json
 ```
 
-第二条命令从仓库中的分区建筑解重建蓝图，再跑整机验收；不需要求解器 SDK。原生验收串行运行。
+默认命令只需要 Rust，在当前目录的 `artifacts/quarter-cut` 下生成蓝图和交互 HTML。进入 `tasks/quarter-cut` 后直接 `cargo run --release` 也可以。`quarter-assemble` 从指定分区文件重建并执行原生验收；验收需要本地游戏、.NET 和准备过的隔离宿主，并且串行运行。
+
+[fresh-clone 复现、完整依赖与三种运行方式](search/REPRODUCIBILITY.md)。
 
 [分区模型、已保存解及重新求解方法](search/BANKS.md)。搜索器和装配器均为 Rust，通过已有 Rust 绑定调用原生 OR-Tools CP-SAT。没有 Python 代码。
 

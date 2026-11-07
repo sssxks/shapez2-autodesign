@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shapez layout explorer</title>
+    <style>
+      __VIEWER_CSS__
+    </style>
+  </head>
+  <body>
+    <p id="description" class="description"></p>
+    <div id="banks" class="banks"></div>
+    <div class="toolbar">
+      <label
+        >楼层
+        <select id="layer"></select></label
+      ><label><input id="regions" type="checkbox" checked />分区</label
+      ><label><input id="feed" type="checkbox" checked />完整原料流</label
+      ><label><input id="links" type="checkbox" />全部连接</label
+      ><label
+        >放大
+        <select id="zoom">
+          <option value="1">100%</option>
+          <option value="1.5">150%</option>
+          <option value="2">200%</option>
+        </select></label
+      >
+    </div>
+    <div id="legend" class="legend"></div>
+    <div id="views" class="panel canvas"></div>
+    <div class="panel detail" id="detail" aria-live="polite"></div>
+    <p class="description">
+      接口标注是三层合计带数，每层每口四带。点击格子查看建筑及相邻物料流。箭头表示物品移动方向；虚线是跳跃带，↥
+      / ↧
+      表示跨层连接。细小箭头表示建筑朝向；旋转器的形状旋转运算单独显示。坐标采用有效地面左上角为
+      (0,0)，楼层从 1 开始显示。
+    </p>
+    <script id="scene" type="application/json">
+      __SCENE_JSON__
+    </script>
+    <script>
+      __VIEWER_JS__;
+    </script>
+  </body>
+</html>

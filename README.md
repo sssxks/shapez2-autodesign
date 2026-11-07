@@ -12,6 +12,7 @@ crates/
   shapez-routing/    空间布线算法，依赖 model
   shapez-blueprint/  蓝图编解码与游戏建筑编码，依赖 model
   shapez-runtime/    宿主生命周期、请求协议、批量执行、运行目录
+  shapez-viz/        离线交互布局、分层、物料连接、分区和建筑检查
 interop/
   HostPrep/          临时游戏副本与启动裁剪
   LabMod/            世界生命周期、原生运算、供料、测量、连接图和扩展接口
@@ -29,7 +30,7 @@ tasks/
 
 [12 带优先合并器](tasks/priority-merge/README.md) 提供直列优先、反向直列优先和左右输入左侧优先三个版本；运行 `cargo run -p priority-merge` 一次生成并验收三份带图库图标的单平台蓝图。
 
-[四象限切割器](tasks/quarter-cut/README.md) 提供 1×2 平台成品：`CuCuCuCu` 满带输入 12 带，四口各满带输出 12 带 `Cu------`。运行 `cargo run -p quarter-cut` 打包并执行原生整机验收。
+[四象限切割器](tasks/quarter-cut/README.md) 提供 1×2 平台成品：`CuCuCuCu` 满带输入 12 带，四口各满带输出 12 带 `Cu------`。运行 `cargo run --locked --release -p quarter-cut` 从已提交的分区解重建蓝图和交互可视化；`-- --native` 单独执行原生整机验收。
 
 ## 构建与验证
 
@@ -91,7 +92,7 @@ CMAM 入口的 `inspect` 输出蓝图摘要，`decode` 解压到独立运行目�
 
 读取存档副本时设置 `SHAPEZ_LAB_SAVE`，再运行 `probe --operation inspect-save`。原生宿主复制存档后加载，不保存回源文件；批量请求可通过 `seconds` 推进副本。
 
-`.cargo/config.toml` 为本机设置临时构建目录；换机器时调整它，或通过 `CARGO_TARGET_DIR` 覆盖。`scripts/dev.ps1` 自动根据系统临时目录设置该变量。
+Cargo 使用标准的 `target` 目录，没有写死的个人路径。可以通过 `CARGO_TARGET_DIR` 覆盖；`scripts/dev.ps1` 可选地把构建目录指向当前系统临时目录。
 
 ```powershell
 cargo run -p cmam-compact -- test

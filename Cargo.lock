@@ -864,6 +864,7 @@ dependencies = [
  "shapez-routing",
  "shapez-runtime",
  "shapez-solver",
+ "shapez-viz",
  "varisat",
 ]
 
@@ -1132,6 +1133,15 @@ dependencies = [
  "cpsat-rs",
  "russcip",
  "serde",
+]
+
+[[package]]
+name = "shapez-viz"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

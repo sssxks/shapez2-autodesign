@@ -20,3 +20,4 @@ shapez-model = { path = "crates/shapez-model" }
 shapez-routing = { path = "crates/shapez-routing" }
 shapez-blueprint = { path = "crates/shapez-blueprint" }
 shapez-runtime = { path = "crates/shapez-runtime" }
+shapez-viz = { path = "crates/shapez-viz" }

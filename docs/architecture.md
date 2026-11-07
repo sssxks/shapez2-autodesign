@@ -114,4 +114,6 @@ cargo run -p diagonal-cut --bin diagonal-cut
 cargo run -p quarter-cut -- --solve
 ```
 
-原生验收串行执行，共享宿主暂存目录只允许一个实例持有。quarter-cut 默认打包已保存的 1×2 模板；`quarter-assemble` 从已保存分区建筑解重建并验收，`quarter-grid` 求解新的分区。`--solve` 保留历史 1×3 布局生成器。
+原生验收串行执行，共享宿主暂存目录只允许一个实例持有。quarter-cut 默认从已保存的分区建筑解重建 1×2 蓝图及离线交互视图；`--native` 单独执行原生验收；`quarter-assemble` 从已保存分区建筑解重建并验收，`quarter-grid` 求解新的分区。`--solve` 保留历史 1×3 布局生成器。
+
+`shapez-viz` 只接受类型化场景（占格、建筑 owner、连接、分区、外部接口）并生成离线 HTML，不依赖游戏或求解器。任务负责把自己的蓝图及流量见证适配成场景。quarter-cut 的确定性装配位于任务库，默认入口与原生验收入口共享同一实现。

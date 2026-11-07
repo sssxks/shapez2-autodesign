@@ -1,0 +1,203 @@
+:root {
+  font-family: var(--font-sans, system-ui, sans-serif);
+  color: var(--foreground, #e4e8f1);
+  --v-card: var(--card, #171e2c);
+  --v-line: var(--border, #3b465d);
+  --v-dim: var(--muted-foreground, #9caac1);
+  --v-main: var(--primary, #8fb8ff);
+  --v-feed: var(--warning, #ffbf69);
+  --v-1: var(--chart-1, #8bb5ff);
+  --v-2: var(--chart-2, #65d8ba);
+  --v-3: var(--chart-3, #bda0ff);
+  --v-4: var(--chart-4, #f2a684);
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+button,
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--v-card);
+  border: 1px solid var(--v-line);
+  border-radius: 6px;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+button[aria-pressed="true"] {
+  border-color: var(--v-main);
+  color: var(--v-main);
+}
+.description {
+  color: var(--v-dim);
+  margin: 0 0 12px;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0;
+}
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.panel {
+  background: var(--v-card);
+  border-radius: var(--radius, 10px);
+  padding: 16px;
+  margin: 10px 0;
+}
+.banks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.bank {
+  border-left: 3px solid var(--v-1);
+  padding: 7px 10px;
+  background: var(--v-card);
+  border-radius: 4px;
+}
+.bank:nth-child(2) {
+  border-color: var(--v-2);
+}
+.bank:nth-child(3) {
+  border-color: var(--v-3);
+}
+.bank:nth-child(4) {
+  border-color: var(--v-4);
+}
+.bank p {
+  margin: 2px 0;
+  color: var(--v-dim);
+  font-size: 12px;
+}
+.legend {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.legend button {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.canvas {
+  overflow: auto;
+}
+.drawing {
+  display: block;
+  width: 100%;
+  min-width: 550px;
+  touch-action: manipulation;
+}
+.grid {
+  stroke: var(--v-line);
+  stroke-width: 0.02;
+  fill: none;
+}
+.region {
+  stroke-width: 0.09;
+  stroke-dasharray: 0.25 0.12;
+  fill-opacity: 0.08;
+}
+.tile {
+  cursor: pointer;
+}
+.tile .body {
+  fill: var(--v-card);
+  stroke: var(--v-line);
+  stroke-width: 0.045;
+}
+.tile.selected .body {
+  stroke: var(--v-feed);
+  stroke-width: 0.13;
+}
+.tile.dim {
+  opacity: 0.15;
+}
+.glyph {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.49px;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+.rotation {
+  stroke-width: 0.065;
+  fill: none;
+  opacity: 0.8;
+}
+.connection {
+  fill: none;
+  stroke-width: 0.075;
+  opacity: 0.75;
+  pointer-events: none;
+}
+.feed {
+  stroke: var(--v-feed);
+  stroke-width: 0.105;
+  opacity: 0.95;
+}
+.jump {
+  stroke-dasharray: 0.15 0.12;
+}
+.tiny {
+  font-size: 0.37px;
+  fill: var(--v-dim);
+  text-anchor: middle;
+}
+.port-label {
+  font-size: 0.48px;
+  text-anchor: middle;
+  fill: var(--foreground, #e4e8f1);
+}
+.port {
+  stroke-width: 0.14;
+  fill: none;
+}
+.detail {
+  min-height: 80px;
+}
+.detail strong {
+  color: var(--v-main);
+}
+.detail p {
+  margin: 3px 0;
+}
+.detail ul {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+.key {
+  color: var(--v-dim);
+}
+.layer-title {
+  margin: 0;
+  font-size: 12px;
+  color: var(--v-dim);
+}
+input {
+  accent-color: var(--v-main);
+}
+@media (max-width: 480px) {
+  .banks {
+    grid-template-columns: 1fr 1fr;
+  }
+  .bank p {
+    font-size: 11px;
+  }
+  .panel {
+    padding: 10px;
+  }
+  .toolbar {
+    gap: 5px;
+  }
+}

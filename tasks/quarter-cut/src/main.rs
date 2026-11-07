@@ -1,4 +1,4 @@
-//! Package and validate the delivered 1x2 four-quadrant cutter.
+//! Rebuild the delivered design, or explicitly run native game acceptance.
 mod compact;
 mod design;
 mod distribution;
@@ -10,11 +10,25 @@ use shapez_blueprint::{
 };
 use shapez_runtime::{LabPaths, RunDirectory, run_suite};
 use std::{fs, time::Duration};
-/// Package the native-validated template, or validate a supplied blueprint path.
+/// Default to portable reconstruction; native experiments remain explicit operations.
 fn main() -> Result<()> {
+    let mut arguments = std::env::args().skip(1);
+    let argument = arguments.next();
+    match argument.as_deref() {
+        None | Some("--rebuild") => {
+            return quarter_cut::rebuild(std::path::Path::new("artifacts/quarter-cut"));
+        }
+        Some("--output") => {
+            let output = arguments
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("--output requires a directory"))?;
+            return quarter_cut::rebuild(std::path::Path::new(&output));
+        }
+        _ => {}
+    }
     let paths = LabPaths::discover();
     let run = RunDirectory::create(&paths.root, "quarter-cut")?;
-    let argument = std::env::args().nth(1);
+    let argument = argument.filter(|s| s != "--native");
     if matches!(
         argument.as_deref(),
         Some(
