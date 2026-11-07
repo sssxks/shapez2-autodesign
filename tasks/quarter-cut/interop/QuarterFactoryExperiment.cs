@@ -51,6 +51,23 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
     }
     public object Run(LabWorld world, JObject args, string root)
     {
+        int checkedMergers = 0;
+        foreach (var sim in ((ISimulator)world.Simulator).Simulations)
+        {
+            if (sim.Simulation.GetType().Name.Contains("Blocked") || sim.Simulation.GetType().Name.Contains("Disabled"))
+                throw new InvalidOperationException("Disabled transport: " + sim.Simulation.GetType().Name);
+            if (sim.Simulation is MergerSimulation merger && sim is IConnectableSimulation connectors)
+            {
+                if (merger.NumItemReceivers != 2)
+                    throw new InvalidOperationException("Non-two-input merger");
+                for (int i = 0; i < connectors.NumConnectors; i++)
+                    if (!world.Simulator.TryGetConnectedSimulation(sim, i, out _))
+                        throw new InvalidOperationException("Unconnected merger socket at " + ((ILocalizedTileSimulation)sim).GetOccupiedTile(0));
+                checkedMergers++;
+            }
+        }
+        if (checkedMergers != 144)
+            throw new InvalidOperationException("Merger count: " + checkedMergers);
         var sources = new List<Source>();
         var meters = new Dictionary<string, Meter>();
         foreach (var localized in ((ISimulator)world.Simulator).Simulations)
@@ -58,10 +75,10 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
             if (!(localized is ILocalizedTileSimulation tile))
                 continue;
             var p = tile.GetOccupiedTile(0);
-            if (p.y == 2 && p.x >= 8 && p.x <= 11 && localized.Simulation is SpaceBeltPortReceiverSimulation receiver)
+            if (p.y == 2 && p.x >= 28 && p.x <= 31 && localized.Simulation is SpaceBeltPortReceiverSimulation receiver)
                 sources.Add(new Source(receiver.InputLane, "CuCuCuCu"));
             if (localized.Simulation is SpaceBeltPortSenderSimulation sender &&
-                ((p.x == 2 || p.x == 37) && p.y >= 8 && p.y <= 11 || p.y == 37 && (p.x >= 8 && p.x <= 11 || p.x >= 28 && p.x <= 31)))
+                ((p.y == 2 || p.y == 17) && (p.x >= 8 && p.x <= 11 || p.x >= 48 && p.x <= 51)))
             {
                 var meter = new Meter();
                 sender.PathLane.NextLane = meter;
@@ -131,10 +148,19 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
             input_lanes = sources.Count,
             output_lanes = meters.Count,
             blocked_output_recovery = true,
+            connected_two_input_mergers = checkedMergers,
+            unused_merger_connectors = 0,
             phases
         };
         File.WriteAllText(Path.Combine(root, "quarter-cut-measurements.json"), JsonConvert.SerializeObject(report, Formatting.Indented));
         return report;
     }
 }
+
+
+
+
+
+
+
 

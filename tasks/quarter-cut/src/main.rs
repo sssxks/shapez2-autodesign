@@ -1,5 +1,7 @@
-//! Package and validate a twelve-to-forty-eight belt quarter cutter.
+//! Build, package and validate the 1x3 twelve-to-forty-eight belt quarter cutter.
 mod design;
+mod layout;
+mod routing;
 use anyhow::Result;
 use shapez_blueprint::{
     Blueprint, BlueprintContent, BlueprintIcon, BuildingBlueprint, IconComponent, Island,
@@ -17,9 +19,28 @@ fn main() -> Result<()> {
     }
     let source = argument.map(std::path::PathBuf::from).unwrap_or_else(|| {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("templates/quarter-cut-12-to-48.spz2bp")
+            .join("templates/quarter-cut-1x3.spz2bp")
     });
-    let bp = Blueprint::read(source)?;
+    let bp = if source.to_string_lossy() == "--solve" {
+        let mut island = Island::new("Foundation_1x3", 1, 0, 0, Rotation::new(0));
+        island.buildings = Some(BuildingBlueprint::new(
+            layout::build()?
+                .into_iter()
+                .map(|mut b| {
+                    b.x -= 20;
+                    b
+                })
+                .collect(),
+        ));
+        Blueprint {
+            game_version: 1138,
+            content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
+            icon: None,
+            source_format_version: None,
+        }
+    } else {
+        Blueprint::read(source)?
+    };
     let mut bp = bp;
     bp.icon = Some(BlueprintIcon {
         components: [
@@ -29,7 +50,7 @@ fn main() -> Result<()> {
             Some(IconComponent::Shape("Cu------".into())),
         ],
     });
-    let output = run.path.join("quarter-cut-12-to-48.spz2bp");
+    let output = run.path.join("quarter-cut-1x3.spz2bp");
     fs::write(&output, encode_blueprint(&bp)?)?;
     fs::write(
         run.path.join("layout.json"),
@@ -39,7 +60,7 @@ fn main() -> Result<()> {
     let count = bp.islands()[0].buildings().len();
     let mut harness = bp.clone();
     if let BlueprintContent::Islands(islands) = &mut harness.content {
-        for (x, y, r) in [(0, -1, 1), (-1, 0, 2), (2, 0, 0), (0, 2, 1), (1, 2, 1)] {
+        for (x, y, r) in [(1, -1, 1), (0, -1, 3), (2, -1, 3), (0, 1, 1), (2, 1, 1)] {
             islands
                 .entries
                 .push(Island::new("SpaceBelt_Forward", x, y, 0, Rotation::new(r)));
