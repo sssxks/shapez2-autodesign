@@ -9,6 +9,8 @@ use shapez_routing::solve_tiles_negotiated;
 use std::collections::HashSet;
 /// Assemble rigid cells, native port fanout and rate-preserving transport nets.
 pub fn build() -> Result<Vec<Building>> {
+    let sockets = design::sockets();
+    let mut geometry = FoundationGeometry::strip(3, 3);
     let mut b = Vec::new();
     let mut fixed = HashSet::<Point>::new();
     let mut nets = Vec::new();
@@ -57,7 +59,7 @@ pub fn build() -> Result<Vec<Building>> {
             }
         }
         for k in 0..4 {
-            let x = 28 + k;
+            let x = geometry.socket_tile(sockets[0], k, z).0;
             fixed.insert((x, 2, z));
             b.push(Building::new(
                 "BeltPortReceiverInternalVariant",
@@ -136,12 +138,9 @@ pub fn build() -> Result<Vec<Building>> {
         }
         let mut ports = Vec::new();
         for k in 0..4 {
-            ports.extend([
-                ((8 + k, 2, z), 3),
-                ((48 + k, 2, z), 3),
-                ((8 + k, 17, z), 1),
-                ((48 + k, 17, z), 1),
-            ]);
+            for &socket in &sockets[1..] {
+                ports.push((geometry.socket_tile(socket, k, z), socket.direction()));
+            }
         }
         let dist = |i: usize, j: usize| {
             let p = outputs[i].position;
@@ -185,7 +184,6 @@ pub fn build() -> Result<Vec<Building>> {
             );
         }
     }
-    let mut geometry = FoundationGeometry::strip(3, 3);
     for n in nets.iter().filter(|n| n.output) {
         let d = shapez_model::TILE_DIRECTIONS[n.bd];
         geometry

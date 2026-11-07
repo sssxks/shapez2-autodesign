@@ -46,3 +46,21 @@ pub fn cell(factory: bool) -> Cell {
         ],
     )
 }
+
+/// Central input and four full-rate output banks.
+pub fn sockets() -> [shapez_model::FoundationSocket; 5] {
+    use shapez_model::{Direction, FoundationSocket};
+    [
+        (Direction::North, 1, false, "input"),
+        (Direction::North, 0, true, "nw"),
+        (Direction::North, 2, true, "ne"),
+        (Direction::South, 0, true, "sw"),
+        (Direction::South, 2, true, "se"),
+    ]
+    .map(|(side, segment, output, role)| FoundationSocket {
+        side,
+        segment,
+        output,
+        role,
+    })
+}

@@ -107,18 +107,13 @@ fn lane(ne: bool) -> Cell {
     )
 }
 /// Place four independent lanes and declare their external connections.
-pub fn layout(
-    ne: bool,
-    ports: [usize; 3],
-    perms: [[i32; 4]; 3],
-) -> Result<(Vec<Building>, Vec<Point>, Vec<Net>)> {
-    let port = |side: usize, g: i32| match side {
-        0 => ((8 + g, 2), 1),
-        1 => ((28 + g, 2), 1),
-        2 => ((8 + g, 17), 3),
-        3 => ((28 + g, 17), 3),
-        4 => ((2, 8 + g), 0),
-        _ => ((37, 8 + g), 2),
+pub fn layout(ne: bool, perms: [[i32; 4]; 3]) -> Result<(Vec<Building>, Vec<Point>, Vec<Net>)> {
+    let geometry = shapez_model::FoundationGeometry::strip(2, 1);
+    let sockets = sockets();
+    let port = |index: usize, lane: i32| {
+        let socket = sockets[index];
+        let p = geometry.socket_tile(socket, lane, 0);
+        ((p.0, p.1), socket.direction())
     };
     let mut b = Vec::new();
     let mut fixed = Vec::new();
@@ -130,9 +125,9 @@ pub fn layout(
         });
         b.extend(cell.buildings.iter().cloned());
         fixed.extend(cell.footprint.iter().copied());
-        let (ip, id) = port(ports[0], perms[0][g as usize]);
-        let (op, od) = port(ports[1], perms[1][g as usize]);
-        let (qp, qd) = port(ports[2], perms[2][g as usize]);
+        let (ip, id) = port(0, perms[0][g as usize]);
+        let (op, od) = port(1, perms[1][g as usize]);
+        let (qp, qd) = port(2, perms[2][g as usize]);
         nets.push(Net {
             a: (ip.0, ip.1, 0),
             ad: id,
@@ -146,7 +141,7 @@ pub fn layout(
             a: cell.port("first")?.position,
             ad: 1,
             b: (op.0, op.1, 0),
-            bd: (od + 2) % 4,
+            bd: od,
             exchange: None,
             input: false,
             output: true,
@@ -155,11 +150,36 @@ pub fn layout(
             a: cell.port("second")?.position,
             ad: 1,
             b: (qp.0, qp.1, 0),
-            bd: (qd + 2) % 4,
+            bd: qd,
             exchange: None,
             input: false,
             output: true,
         });
     }
     Ok((b, fixed, nets))
+}
+
+/// External interface shared by layout and experiment fixture.
+pub fn sockets() -> [shapez_model::FoundationSocket; 3] {
+    use shapez_model::{Direction, FoundationSocket};
+    [
+        FoundationSocket {
+            side: Direction::North,
+            segment: 0,
+            output: false,
+            role: "input",
+        },
+        FoundationSocket {
+            side: Direction::South,
+            segment: 0,
+            output: true,
+            role: "first",
+        },
+        FoundationSocket {
+            side: Direction::South,
+            segment: 1,
+            output: true,
+            role: "second",
+        },
+    ]
 }

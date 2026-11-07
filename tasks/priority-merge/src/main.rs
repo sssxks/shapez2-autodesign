@@ -72,7 +72,7 @@ fn cell() -> shapez_blueprint::Cell {
 
 /// Build one independently routed interface with three identical building layers.
 fn build(design: &Design) -> Result<Blueprint> {
-    let centers = if matches!(design.secondary, design::Side::South) {
+    let centers = if matches!(design.secondary, shapez_model::Direction::South) {
         [(5, 6), (12, 6), (5, 12), (12, 12)]
     } else {
         [(6, 6), (13, 6), (6, 13), (13, 13)]
@@ -124,21 +124,16 @@ fn main() -> Result<()> {
         )?;
         let mut harness = bp.clone();
         if let BlueprintContent::Islands(islands) = &mut harness.content {
-            for (x, y, r) in [
-                design.primary.harness(),
-                design.secondary.harness(),
-                (1, 0, 0),
-            ] {
-                islands
-                    .entries
-                    .push(Island::new("SpaceBelt_Forward", x, y, 0, Rotation::new(r)));
-            }
+            islands.entries.extend(shapez_blueprint::foundation_harness(
+                &shapez_model::FoundationGeometry::strip(1, 3),
+                &design.sockets(),
+            ));
         }
         let test_blueprint = run.path.join(format!("{}-harness.spz2bp", design.id));
         fs::write(&test_blueprint, encode_blueprint(&harness)?)?;
         cases.push(serde_json::json!({
         "name":design.id,"blueprint":test_blueprint,"expected_buildings":count,"export_graph":true,
-        "primary_side":design.primary.name(),"secondary_side":design.secondary.name(),
+        "ports":shapez_model::FoundationGeometry::strip(1,3).ports(&design.sockets()),
         "experiment":{"assembly":"${LAB}/bin/PriorityTask/Release/netstandard2.1/ShapezLab.Priority.dll","type":"PriorityExperiment"}
     }));
         cases.push(serde_json::json!({

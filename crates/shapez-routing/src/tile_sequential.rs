@@ -83,11 +83,7 @@ fn search(
     let mut queue = VecDeque::from([start]);
     let mut previous = HashMap::from([(start, None)]);
     while let Some(s) = queue.pop_front() {
-        if s.p == n.b
-            && (!s.catch || s.d == n.bd)
-            && (!n.output || s.d == n.bd)
-            && (n.bd + 4 - s.d) % 4 != 2
-        {
+        if s.p == n.b && s.allows_destination(n.bd, n.output) {
             let mut path = vec![s];
             let mut current = s;
             while let Some(p) = previous[&current] {
@@ -105,11 +101,8 @@ fn search(
         for offset in 0..4 {
             let d = (offset + preference) % 4;
             let direction = D[d];
-            if (d + 4 - s.d) % 4 == 2 || ((s.catch || s == start && n.input) && d != s.d) {
-                continue;
-            }
             for length in 1..=5 {
-                if length > 1 && (d != s.d || s.catch || s == start && n.input) {
+                if !s.allows_move(d, s.p.2, length > 1, s == start && n.input) {
                     continue;
                 }
                 let p = (
@@ -117,7 +110,6 @@ fn search(
                     s.p.1 + direction.1 * length,
                     s.p.2,
                 );
-                // Foundation_1x2 has a 34x14 floor, not a filled 16x16 square.
                 // Boundary cells are only legal at the dedicated external ports.
                 if (!geometry.contains(p) && p != n.b)
                     || occupied.contains(&p)

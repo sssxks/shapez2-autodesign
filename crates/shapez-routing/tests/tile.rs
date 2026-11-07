@@ -47,3 +47,44 @@ fn both_strategies_connect_external_ports_without_reusing_tiles() {
         );
     }
 }
+
+#[test]
+fn catcher_and_external_input_cannot_turn_lift_or_relaunch() {
+    use shapez_model::TileRouteStep;
+    for (catch, external) in [(true, false), (false, true)] {
+        let s = TileRouteStep {
+            p: (5, 5, 0),
+            d: 0,
+            catch,
+        };
+        assert!(s.allows_move(0, 0, false, external));
+        assert!(!s.allows_move(1, 0, false, external));
+        assert!(!s.allows_move(0, 1, false, external));
+        assert!(!s.allows_move(0, 0, true, external));
+    }
+}
+#[test]
+fn lift_occupancy_and_launcher_interference_remain_distinct() {
+    use shapez_model::TileRouteStep;
+    let path = [
+        TileRouteStep {
+            p: (5, 5, 0),
+            d: 0,
+            catch: false,
+        },
+        TileRouteStep {
+            p: (6, 5, 2),
+            d: 0,
+            catch: false,
+        },
+        TileRouteStep {
+            p: (10, 5, 2),
+            d: 0,
+            catch: true,
+        },
+    ];
+    let resources = tile_resources(&path);
+    assert!(resources.contains(&TileResource::Occupancy((5, 5, 1))));
+    assert!(resources.contains(&TileResource::LauncherRange((11, 5, 2), 0)));
+    assert!(!resources.contains(&TileResource::Occupancy((8, 5, 2))));
+}

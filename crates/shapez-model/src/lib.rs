@@ -19,3 +19,5 @@ pub use tile::{
     ExchangeGroup, FoundationGeometry, TILE_DIRECTIONS, TileNet, TilePoint, TileResource,
     TileRoute, TileRouteStep, TileRoutingProblem, tile_resources,
 };
+
+pub use tile::{FactoryBeltPort, FoundationSocket};

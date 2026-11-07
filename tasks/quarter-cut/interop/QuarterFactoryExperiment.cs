@@ -12,9 +12,8 @@ using Newtonsoft.Json.Linq;
 /// End-to-end twelve-input, forty-eight-output production acceptance.
 public sealed class QuarterFactoryExperiment : IBlueprintExperiment
 {
-    public void Configure(JObject args)
-    {
-    }
+    private BeltPortManifest ports = null!;
+    public void Configure(JObject args) => ports = BeltPortManifest.Parse(args);
     public bool KeepBuilding(GlobalTileCoordinate position) => true;
 
 
@@ -39,20 +38,14 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
             throw new InvalidOperationException("Merger count: " + checkedMergers);
         var sources = new List<BeltSource>();
         var meters = new Dictionary<string, BeltMeter>();
-        foreach (var localized in ((ISimulator)world.Simulator).Simulations)
+        var bound = ports.Bind(world);
+        foreach (var port in bound.Inputs)
+            sources.Add(new BeltSource(port.Receiver, "CuCuCuCu"));
+        foreach (var port in bound.Outputs)
         {
-            if (!(localized is ILocalizedTileSimulation tile))
-                continue;
-            var p = tile.GetOccupiedTile(0);
-            if (p.y == 2 && p.x >= 28 && p.x <= 31 && localized.Simulation is SpaceBeltPortReceiverSimulation receiver)
-                sources.Add(new BeltSource(receiver.InputLane, "CuCuCuCu"));
-            if (localized.Simulation is SpaceBeltPortSenderSimulation sender &&
-                ((p.y == 2 || p.y == 17) && (p.x >= 8 && p.x <= 11 || p.x >= 48 && p.x <= 51)))
-            {
-                var meter = new BeltMeter();
-                sender.PathLane.NextLane = meter;
-                meters.Add($"{p.x}:{p.y}:{p.z}", meter);
-            }
+            var meter = new BeltMeter();
+            port.Sender.PathLane.NextLane = meter;
+            meters.Add(port.Position.ToString(),meter);
         }
         if (sources.Count != 12 || meters.Count != 48)
             throw new InvalidOperationException($"Port counts {sources.Count}/12, {meters.Count}/48");

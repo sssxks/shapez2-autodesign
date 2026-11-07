@@ -12,21 +12,9 @@ using Newtonsoft.Json.Linq;
 /// Exercise real ports, circuitry, belts, and backpressure in a disposable native world.
 public sealed class PriorityExperiment : IBlueprintExperiment
 {
-    private enum Side
-    {
-        West, North, South
-    }
-    private Side primarySide;
-    private Side secondarySide;
-    public void Configure(JObject args)
-    {
-        primarySide = Enum.Parse<Side>(args.Value<string>("primary_side") ?? "west", true);
-        secondarySide = Enum.Parse<Side>(args.Value<string>("secondary_side") ?? "north", true);
-    }
+    private BeltPortManifest ports = null!;
+    public void Configure(JObject args) => ports = BeltPortManifest.Parse(args);
     public bool KeepBuilding(GlobalTileCoordinate position) => true;
-
-
-
 
     private static string Shape(int lane, bool primary)
     {
@@ -34,40 +22,22 @@ public sealed class PriorityExperiment : IBlueprintExperiment
         return $"{part}{"rgbcmyw"[lane % 7]}{part}{"rgbcmyw"[lane / 7]}{part}u{part}u";
     }
 
-    private static int InputLane(GlobalTileCoordinate p, Side side)
-    {
-        int k = side switch
-        {
-            Side.West when p.x == 2 => p.y - 8,
-            Side.North when p.y == 2 => p.x - 8,
-            Side.South when p.y == 17 => p.x - 8,
-            _ => -1
-        };
-        return k >= 0 && k < 4 ? p.z * 4 + k : -1;
-    }
-
     public object Run(LabWorld world, JObject args, string root)
     {
         var a = new Dictionary<int, BeltSource>();
         var b = new Dictionary<int, BeltSource>();
         var sinks = new Dictionary<int, BeltMeter>();
-        foreach (var localized in ((ISimulator)world.Simulator).Simulations)
+        var bound = ports.Bind(world);
+        foreach (var port in bound.Inputs)
         {
-            if (!(localized is ILocalizedTileSimulation tile) || !(localized.Simulation is IItemSimulation belt))
-                continue;
-            var p = tile.GetOccupiedTile(0);
-            int primaryLane = InputLane(p, primarySide);
-            int secondaryLane = InputLane(p, secondarySide);
-            if (primaryLane >= 0)
-                a.Add(primaryLane, new BeltSource(((SpaceBeltPortReceiverSimulation)belt).InputLane, Shape(primaryLane, true)));
-            if (secondaryLane >= 0)
-                b.Add(secondaryLane, new BeltSource(((SpaceBeltPortReceiverSimulation)belt).InputLane, Shape(secondaryLane, false)));
-            if (p.x == 17 && p.y >= 8 && p.y <= 11)
-            {
-                var meter = new BeltMeter(Shape(p.z * 4 + p.y - 8, true), Shape(p.z * 4 + p.y - 8, false));
-                ((SpaceBeltPortSenderSimulation)belt).PathLane.NextLane = meter;
-                sinks.Add(p.z * 4 + p.y - 8, meter);
-            }
+            bool primary = port.Role == "primary";
+            (primary ? a : b).Add(port.Lane, new BeltSource(port.Receiver, Shape(port.Lane, primary)));
+        }
+        foreach (var port in bound.Outputs)
+        {
+            var meter = new BeltMeter(Shape(port.Lane,true), Shape(port.Lane,false));
+            port.Sender.PathLane.NextLane = meter;
+            sinks.Add(port.Lane,meter);
         }
         if (a.Count != 12 || b.Count != 12 || sinks.Count != 12)
             throw new InvalidOperationException($"Port counts: A={a.Count}, B={b.Count}, output={sinks.Count}; " + string.Join(";", ((ISimulator)world.Simulator).Simulations.Take(12).Select(s => s.Simulation.GetType().Name)));

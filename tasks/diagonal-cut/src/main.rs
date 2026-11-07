@@ -13,7 +13,7 @@ fn main() -> Result<()> {
     let mut cases = Vec::new();
     for (name, ne) in [("NE-SW", true), ("NW-SE", false)] {
         let (mut buildings, fixed, nets) =
-            design::layout(ne, [0, 2, 3], [[1, 0, 3, 2], [2, 3, 1, 0], [2, 1, 0, 3]])?;
+            design::layout(ne, [[1, 0, 3, 2], [2, 3, 1, 0], [2, 1, 0, 3]])?;
         for route in shapez_routing::solve_tiles_sequential(
             shapez_model::TileRoutingProblem {
                 geometry: shapez_model::FoundationGeometry::strip(2, 1),
@@ -58,16 +58,15 @@ fn main() -> Result<()> {
         cases.push(serde_json::json!({"name":format!("{name}-icon"),"operation":"inspect-blueprint","blueprint":file,"expected_format_version":5,"expected_library_warning":false,"expected_icon":bp.icon.as_ref().map(|i| &i.components)}));
         let mut harness = bp.clone();
         if let BlueprintContent::Islands(islands) = &mut harness.content {
-            for (x, y, r) in [(0, -1, 1), (0, 1, 1), (1, 1, 1)] {
-                islands
-                    .entries
-                    .push(Island::new("SpaceBelt_Forward", x, y, 0, Rotation::new(r)));
-            }
+            islands.entries.extend(shapez_blueprint::foundation_harness(
+                &shapez_model::FoundationGeometry::strip(2, 3),
+                &design::sockets(),
+            ));
         }
         let fixture = run.path.join(format!("{name}-harness.spz2bp"));
         fs::write(&fixture, encode_blueprint(&harness)?)?;
         println!("{}", file.display());
-        cases.push(serde_json::json!({"name":name,"blueprint":fixture,"export_graph":true,"experiment":{"assembly":"${LAB}/bin/DiagonalTask/Release/netstandard2.1/ShapezLab.Diagonal.dll","type":"DiagonalExperiment"}}));
+        cases.push(serde_json::json!({"name":name,"blueprint":fixture,"ports":shapez_model::FoundationGeometry::strip(2,3).ports(&design::sockets()),"export_graph":true,"experiment":{"assembly":"${LAB}/bin/DiagonalTask/Release/netstandard2.1/ShapezLab.Diagonal.dll","type":"DiagonalExperiment"}}));
     }
     let suite = serde_json::json!({"projects":["${REPO}/tasks/diagonal-cut/interop/DiagonalTask.csproj"],"cases":cases});
     let suite_path = run.path.join("suite.json");

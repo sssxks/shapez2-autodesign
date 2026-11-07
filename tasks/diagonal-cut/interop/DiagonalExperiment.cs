@@ -9,28 +9,21 @@ using Newtonsoft.Json.Linq;
 /// Verify all physical input/output ports against the native simulation.
 public sealed class DiagonalExperiment : IBlueprintExperiment
 {
-    public void Configure(JObject args)
-    {
-    }
+    private BeltPortManifest ports = null!;
+    public void Configure(JObject args) => ports = BeltPortManifest.Parse(args);
     public bool KeepBuilding(GlobalTileCoordinate p) => true;
 
     public object Run(LabWorld w, JObject args, string root)
     {
         var sources = new List<IItemReceiver>();
         var sinks = new List<BeltMeter>();
-        foreach (var s in ((ISimulator)w.Simulator).Simulations)
+        var bound = ports.Bind(w);
+        sources.AddRange(bound.Inputs.Select(p => p.Receiver));
+        foreach (var port in bound.Outputs)
         {
-            if (!(s is ILocalizedTileSimulation tile))
-                continue;
-            var p = tile.GetOccupiedTile(0);
-            if (p.y == 2 && p.x >= 8 && p.x <= 11)
-                sources.Add(((SpaceBeltPortReceiverSimulation)s.Simulation).InputLane);
-            if (p.y == 17 && ((p.x >= 8 && p.x <= 11) || (p.x >= 28 && p.x <= 31)))
-            {
-                var m = new BeltMeter();
-                ((SpaceBeltPortSenderSimulation)s.Simulation).PathLane.NextLane = m;
-                sinks.Add(m);
-            }
+            var meter = new BeltMeter();
+            port.Sender.PathLane.NextLane = meter;
+            sinks.Add(meter);
         }
         if (sources.Count != 12 || sinks.Count != 24)
             throw new InvalidOperationException($"ports {sources.Count}/{sinks.Count}");

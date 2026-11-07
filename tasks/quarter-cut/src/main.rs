@@ -59,15 +59,14 @@ fn main() -> Result<()> {
     let count = bp.islands()[0].buildings().len();
     let mut harness = bp.clone();
     if let BlueprintContent::Islands(islands) = &mut harness.content {
-        for (x, y, r) in [(1, -1, 1), (0, -1, 3), (2, -1, 3), (0, 1, 1), (2, 1, 1)] {
-            islands
-                .entries
-                .push(Island::new("SpaceBelt_Forward", x, y, 0, Rotation::new(r)));
-        }
+        islands.entries.extend(shapez_blueprint::foundation_harness(
+            &shapez_model::FoundationGeometry::strip(3, 3),
+            &design::sockets(),
+        ));
     }
     let test = run.path.join("harness.spz2bp");
     fs::write(&test, encode_blueprint(&harness)?)?;
-    let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[{"name":"factory","blueprint":test,"expected_buildings":count,"export_graph":true,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":"QuarterFactoryExperiment"}},{"name":"library-icon","operation":"inspect-blueprint","blueprint":output,"expected_format_version":5,"expected_library_warning":false,"expected_icon":bp.icon.as_ref().unwrap().components}]});
+    let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[{"name":"factory","blueprint":test,"ports":shapez_model::FoundationGeometry::strip(3,3).ports(&design::sockets()),"expected_buildings":count,"export_graph":true,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":"QuarterFactoryExperiment"}},{"name":"library-icon","operation":"inspect-blueprint","blueprint":output,"expected_format_version":5,"expected_library_warning":false,"expected_icon":bp.icon.as_ref().unwrap().components}]});
     let suite_path = run.path.join("suite.json");
     fs::write(&suite_path, serde_json::to_vec_pretty(&suite)?)?;
     run_suite(&paths, &suite_path, Duration::from_secs(180))?;

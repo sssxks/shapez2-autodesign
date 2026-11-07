@@ -37,12 +37,10 @@ fn search(
         if costs[&s] != cost {
             continue;
         }
-        if targets.iter().any(|&(p, bd)| {
-            s.p == p
-                && (!s.catch || s.d == bd)
-                && (!n.output || s.d == bd)
-                && (bd + 4 - s.d) % 4 != 2
-        }) {
+        if targets
+            .iter()
+            .any(|&(p, bd)| s.p == p && s.allows_destination(bd, n.output))
+        {
             let mut path = vec![s];
             let mut cur = s;
             while let Some(p) = prev[&cur] {
@@ -68,14 +66,8 @@ fn search(
                 continue;
             }
             for (d, v) in D.iter().enumerate() {
-                if !lift && (d + 4 - s.d) % 4 == 2 {
-                    continue;
-                }
-                if (s.catch || s.p == n.a && n.input) && d != s.d {
-                    continue;
-                }
                 for len in 1..=5 {
-                    if len > 1 && (lift || d != s.d || s.catch || s.p == n.a && n.input) {
+                    if !s.allows_move(d, z, len > 1, s.p == n.a && n.input) {
                         continue;
                     }
                     let p = (s.p.0 + v.0 * len, s.p.1 + v.1 * len, z);
@@ -217,10 +209,14 @@ pub fn solve_tiles_negotiated(
             }) else {
                 bail!("Unreachable connection {id}");
             };
+            let endpoint = path
+                .last()
+                .ok_or_else(|| anyhow::anyhow!("Empty route for connection {id}"))?
+                .p;
             let other = candidates
                 .into_iter()
-                .find(|&j| nets[j].b == path.last().unwrap().p)
-                .unwrap();
+                .find(|&j| nets[j].b == endpoint)
+                .ok_or_else(|| anyhow::anyhow!("Route did not reach a candidate destination"))?;
             let old = (nets[id].b, nets[id].bd);
             (nets[id].b, nets[id].bd) = (nets[other].b, nets[other].bd);
             (nets[other].b, nets[other].bd) = old;

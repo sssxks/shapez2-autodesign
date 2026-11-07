@@ -88,3 +88,97 @@ pub fn tile_resources(path: &[TileRouteStep]) -> Vec<TileResource> {
     }
     resources
 }
+
+/// Four-lane socket on an edge of a 1xN foundation.
+#[derive(Clone, Copy)]
+pub struct FoundationSocket {
+    pub side: crate::Direction,
+    pub segment: i32,
+    pub output: bool,
+    pub role: &'static str,
+}
+/// Serialized physical lane used by native experiment bindings.
+#[derive(Clone, serde::Serialize)]
+pub struct FactoryBeltPort {
+    pub role: &'static str,
+    pub lane: usize,
+    pub position: TilePoint,
+    pub output: bool,
+}
+impl FoundationSocket {
+    /// Direction of travel at this socket.
+    pub fn direction(self) -> usize {
+        if self.output {
+            self.side.index()
+        } else {
+            self.side.opposite().index()
+        }
+    }
+}
+impl FoundationGeometry {
+    /// Native tile of one socket lane.
+    pub fn socket_tile(&self, socket: FoundationSocket, lane: i32, layer: i16) -> TilePoint {
+        use crate::Direction;
+        let along = 8 + 20 * socket.segment + lane;
+        let (x, y) = match socket.side {
+            Direction::North => (along, self.min.1 - 1),
+            Direction::South => (along, self.max.1 + 1),
+            Direction::West => (self.min.0 - 1, along),
+            Direction::East => (self.max.0 + 1, along),
+        };
+        (x, y, layer)
+    }
+    /// Adjacent space-belt chunk and its direction for a test fixture.
+    pub fn socket_harness(&self, socket: FoundationSocket) -> (i32, i32, usize) {
+        use crate::Direction;
+        let (x, y) = match socket.side {
+            Direction::North => (socket.segment, -1),
+            Direction::South => (socket.segment, 1),
+            Direction::West => (-1, socket.segment),
+            Direction::East => ((self.max.0 + 4) / 20, socket.segment),
+        };
+        (x, y, socket.direction())
+    }
+    /// Expand socket declarations into stable layer-major lane identities.
+    pub fn ports(&self, sockets: &[FoundationSocket]) -> Vec<FactoryBeltPort> {
+        sockets
+            .iter()
+            .flat_map(|&socket| {
+                (0..self.layers).flat_map(move |z| {
+                    (0..4).map(move |lane| FactoryBeltPort {
+                        role: socket.role,
+                        lane: z as usize * 4 + lane as usize,
+                        position: self.socket_tile(socket, lane, z),
+                        output: socket.output,
+                    })
+                })
+            })
+            .collect()
+    }
+}
+
+impl TileRouteStep {
+    /// Native movement rule shared by sequential and negotiated search.
+    pub fn allows_move(
+        self,
+        outgoing: usize,
+        layer: i16,
+        jump: bool,
+        external_input: bool,
+    ) -> bool {
+        let lift = layer != self.p.2;
+        let locked = self.catch || external_input;
+        if locked && (lift || outgoing != self.d) {
+            return false;
+        }
+        if !lift && (outgoing + 4 - self.d) % 4 == 2 {
+            return false;
+        }
+        !jump || (!lift && outgoing == self.d && !locked)
+    }
+    /// Native final-tile constraints at a device or external sender.
+    pub fn allows_destination(self, direction: usize, external_output: bool) -> bool {
+        (!(self.catch || external_output) || self.d == direction)
+            && (direction + 4 - self.d) % 4 != 2
+    }
+}
