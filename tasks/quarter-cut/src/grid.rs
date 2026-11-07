@@ -27,6 +27,20 @@ struct Args {
     workers: i32,
     #[arg(long)]
     cell: bool,
+    /// Synthesize a four-output bank with one full input per layer.
+    #[arg(long, conflicts_with = "cell")]
+    bank: bool,
+    #[arg(long, default_value_t = 17)]
+    bank_width: i32,
+    #[arg(long, default_value_t = 6)]
+    bank_height: i32,
+    #[arg(long, default_value_t = 5)]
+    bank_output: i32,
+    /// Carry an additional full input through the bank to the east edge.
+    #[arg(long, requires = "bank")]
+    bank_through: bool,
+    #[arg(long, requires = "bank")]
+    bank_input_row: Option<i32>,
     #[arg(long)]
     quiet: bool,
     #[arg(long)]
@@ -372,7 +386,13 @@ fn edge_value(e: Edge, s: &Solution) -> i64 {
     }
 }
 fn build(args: &Args) -> Grid {
-    let (width, height) = if args.cell { (5, 4) } else { (34, 14) };
+    let (width, height) = if args.cell {
+        (5, 4)
+    } else if args.bank {
+        (args.bank_width, args.bank_height)
+    } else {
+        (34, 14)
+    };
     let layers = args.layers;
     let mut grammar = Grammar::build();
     let mut kinds = Vec::<Kind>::new();
@@ -479,9 +499,11 @@ fn build(args: &Args) -> Grid {
     );
     let mut cores = BTreeMap::<Point, (Vec<i64>, i64)>::new();
     if args.cores {
-        for i in 0..16 {
-            let r = if i < 8 { 3 } else { 1 };
-            let origin = if i < 8 {
+        for i in 0..if args.bank { 4 } else { 16 } {
+            let r = if args.bank || i < 8 { 3 } else { 1 };
+            let origin = if args.bank {
+                (4 * i, height - 2)
+            } else if i < 8 {
                 (1 + 4 * (i % 8), 5)
             } else {
                 (4 + 4 * (i % 8), 8)
@@ -694,6 +716,16 @@ fn build(args: &Args) -> Grid {
     }
     let source_ports = if args.cell {
         vec![((-1, 2, layers - 1), 0)]
+    } else if args.bank {
+        (0..layers)
+            .flat_map(|z| {
+                let mut ports = vec![((-1, args.bank_input_row.unwrap_or(height - 1), z), 0)];
+                if args.bank_through {
+                    ports.push(((-1, height - 2, z), 0));
+                }
+                ports
+            })
+            .collect()
     } else {
         (0..layers)
             .flat_map(|z| (5..9).map(move |x| ((x, -1, z), 1)))
@@ -701,6 +733,10 @@ fn build(args: &Args) -> Grid {
     };
     let target_ports = if args.cell {
         vec![((4, 3, 0), 0)]
+    } else if args.bank {
+        (0..layers)
+            .flat_map(|z| (args.bank_output..args.bank_output + 4).map(move |x| ((x, 0, z), 3)))
+            .collect()
     } else {
         (0..layers)
             .flat_map(|z| {
@@ -758,6 +794,18 @@ fn build(args: &Args) -> Grid {
         source_flow.term(yes, -1);
         served.push(yes);
         targets.push((p, d, e));
+    }
+    if args.bank_through {
+        for z in 0..layers {
+            let p = (width - 1, height - 2, z);
+            let e = edges[&(p, 0)];
+            model.equal(e.wire, 1);
+            model.equal(e.shape, 15);
+            model.equal(e.rate, 4);
+            source_flow.term(e.rate, -1);
+            stream_balance.term(e.active, -1);
+            targets.push((p, 0, e));
+        }
     }
     for (&(p, d), e) in &edges {
         let q = step(p, d, 1);
@@ -1110,13 +1158,13 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
     let paths = LabPaths::discover();
     let run = RunDirectory::create(
         &paths.root,
-        if args.cell {
+        if args.cell || args.bank {
             "quarter-grid"
         } else {
             "quarter-cut"
         },
     )?;
-    let (offset, layers) = if args.cell {
+    let (offset, layers) = if args.cell || args.bank {
         ((8, 4), 1)
     } else {
         ((3, 3), if grid.layers == 1 { 3 } else { 1 })
@@ -1132,14 +1180,17 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         }
     }
     let mut inputs = Vec::new();
+    let mut input_rates = Vec::new();
     let mut outputs = Vec::new();
+    let mut output_full = Vec::new();
     for z in 0..layers {
         for &(p, d, v) in &grid.sources {
             ensure!(solution.value(v.rate) > 0, "Unused required source");
             let p = (p.0 + offset.0, p.1 + offset.1, p.2 + z);
             inputs.push(p);
+            input_rates.push(solution.value(v.rate) as f64 * 0.5);
             buildings.push(Building::new(
-                if args.cell {
+                if args.cell || args.bank {
                     "BeltDefaultForwardInternalVariant"
                 } else {
                     "BeltPortReceiverInternalVariant"
@@ -1150,12 +1201,13 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
                 Rotation::new(d),
             ));
         }
-        for &(p, d, _) in &grid.targets {
+        for &(p, d, e) in &grid.targets {
             let p = step(p, d, 1);
             let p = (p.0 + offset.0, p.1 + offset.1, p.2 + z);
             outputs.push(p);
+            output_full.push(solution.value(e.shape) == 15);
             buildings.push(Building::new(
-                if args.cell {
+                if args.cell || args.bank {
                     "BeltDefaultForwardInternalVariant"
                 } else {
                     "BeltPortSenderInternalVariant"
@@ -1173,7 +1225,7 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         .filter(|b| b.definition.starts_with("Merger"))
         .count();
     let mut island = Island::new(
-        if args.cell {
+        if args.cell || args.bank {
             "Foundation_2x2"
         } else {
             "Foundation_1x2"
@@ -1198,7 +1250,7 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
             Some(shapez_blueprint::IconComponent::Shape("Cu------".into())),
         ],
     });
-    let blueprint = run.path.join(if args.cell {
+    let blueprint = run.path.join(if args.cell || args.bank {
         "grid.spz2bp"
     } else {
         "quarter-cut-1x2.spz2bp"
@@ -1210,8 +1262,8 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         grid.width,
         grid.height
     );
-    if args.cell {
-        let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[{"name":"grid","blueprint":blueprint,"expected_buildings":count,"inputs":inputs,"outputs":outputs,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":"QuarterWeaveExperiment"}}]});
+    if args.cell || args.bank {
+        let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[{"name":"grid","blueprint":blueprint,"expected_buildings":count,"inputs":inputs,"input_rates":input_rates,"outputs":outputs,"output_full":output_full,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":"QuarterWeaveExperiment"}}]});
         let file = run.path.join("suite.json");
         fs::write(&file, serde_json::to_vec_pretty(&suite)?)?;
         run_suite(&paths, &file, std::time::Duration::from_secs(180))?;

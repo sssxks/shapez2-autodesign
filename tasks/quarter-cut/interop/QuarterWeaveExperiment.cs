@@ -29,23 +29,32 @@ public sealed class QuarterWeaveExperiment : IBlueprintExperiment
                 mergers++;
             }
         }
-        IItemSimulation Find(JToken p) => (IItemSimulation)simulations.OfType<ILocalizedTileSimulation>().Single(s => {
-            var t = s.GetOccupiedTile(0);
-            return t.x == (int)p[0]! && t.y == (int)p[1]! && t.z == (int)p[2]!;
-        }).Simulation;
+        IItemSimulation Find(JToken p) => (IItemSimulation)(simulations.OfType<ILocalizedTileSimulation>().SingleOrDefault(s => {
+            for (int i = 0; i < s.NumOccupiedTiles; i++) {
+                var t = s.GetOccupiedTile(i);
+                if (t.x == (int)p[0]! && t.y == (int)p[1]! && t.z == (int)p[2]!) return true;
+            }
+            return false;
+        }) ?? throw new InvalidOperationException("Missing test port " + p)).Simulation;
         var sources = args["inputs"]!.Select(p => new BeltSource(Find(p).GetItemReceiver(0), "CuCuCuCu")).ToArray();
         var meters = args["outputs"]!.Select(p => {
             var meter = new BeltMeter();
             Find(p).GetItemProvider(0).NextLane = meter;
             return meter;
         }).ToArray();
-        void Feed(Ticks start, Ticks delta) { foreach (var source in sources) source.Feed(delta.FloatSeconds, 0.5); }
+        var rates = args["input_rates"]?.Select(p => (double)p).ToArray() ?? sources.Select(_ => 0.5).ToArray();
+        if (rates.Length != sources.Length) throw new InvalidOperationException("Input rate count does not match source count");
+        void Feed(Ticks start, Ticks delta) { for (int i = 0; i < sources.Length; i++) sources[i].Feed(delta.FloatSeconds, rates[i]); }
         var phases = new List<object>();
+        var outputFull = args["output_full"]?.Select(p => (bool)p).ToArray() ?? meters.Select(_ => false).ToArray();
         void Check(string expected)
         {
-            foreach (var meter in meters)
-                if (meter.Counts.Count != 1 || !meter.Counts.TryGetValue(expected, out var n) || n < 239)
+            for (int i = 0; i < meters.Length; i++) {
+                var meter = meters[i];
+                var shape = outputFull[i] ? string.Concat(Enumerable.Repeat(expected.Substring(0,2), 4)) : expected;
+                if (meter.Counts.Count != 1 || !meter.Counts.TryGetValue(shape, out var n) || n < 239)
                     throw new InvalidOperationException("Weave output: " + JsonConvert.SerializeObject(meter.Counts));
+            }
         }
         foreach (var shape in new[] { "CuCuCuCu", "RrRrRrRr" })
         {

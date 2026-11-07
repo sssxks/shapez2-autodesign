@@ -16,7 +16,7 @@ public sealed class QuarterCutDefinitions : IBlueprintExperiment
         var definitions = GameBindings.Mode.Buildings.All
             .SelectMany(group => group.Definitions)
             .Where(definition => !definition.Id.ToString().StartsWith("Virtual"))
-            .Where(definition => definition.Id.ToString().Contains("Cutter") || definition.Id.ToString().Contains("Rotator") || definition.Id.ToString().Contains("Splitter") || definition.Id.ToString().Contains("Merger") || definition.Id.ToString().Contains("Belt") || definition.Id.ToString().Contains("Lift"))
+            .Where(definition => definition.Id.ToString().Contains("Cutter") || definition.Id.ToString().Contains("Rotator") || definition.Id.ToString().Contains("Splitter") || definition.Id.ToString().Contains("Merger") || definition.Id.ToString().Contains("Belt") || definition.Id.ToString().Contains("Lift") || definition.Id.ToString().Contains("Stacker"))
             .Select(definition => new
             {
                 id = definition.Id.ToString(),
