@@ -1,0 +1,24 @@
+{
+  "commit": "a1231bd2a16e55ed352edec5ebb00f3f096c8b7d",
+  "clone": "C:\\Users\\27773\\AppData\\Local\\Temp\\shapez-original-repro-1794085464283",
+  "command": "cargo run --locked --release",
+  "working_directory": "C:\\Users\\27773\\AppData\\Local\\Temp\\shapez-original-repro-1794085464283\\tasks\\quarter-cut",
+  "fresh_target": true,
+  "solver_environment_unset": true,
+  "game_and_dotnet_paths_absent": true,
+  "cargo_dependency_cache_available": true,
+  "checks": [
+    {
+      "variant": "quarter-cut-1x2-original",
+      "sha256": "babaf25a81fe1df3b1ccf9d485535f49e9feeaa5520a3509bb18df93620ea6d9",
+      "matches_template": true,
+      "html_exists": true
+    },
+    {
+      "variant": "quarter-cut-1x2",
+      "sha256": "d029d294a1136ec591f4e91899e78eadd5d6a057485a1f15ab12e9137dbc0085",
+      "matches_template": true,
+      "html_exists": true
+    }
+  ]
+}

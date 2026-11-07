@@ -51,6 +51,10 @@ The west-input variant uses four 17×7 regions with fixed cutting cores. The ori
 
 ## Verified fresh-clone run
 
+The original-interface delivery was checked again from commit `a1231bd` on 2026-11-08 using `git clone --no-local`, a fresh clone-local target directory, unset solver environment variables, and nonexistent game/.NET paths. Running `cargo run --locked --release` inside `tasks/quarter-cut` rebuilt both variants and their HTML views. Both blueprint hashes matched the committed native-verified templates. [Original-interface fresh-clone record](../results/fresh-clone-original-reconstruction.json).
+
+The earlier west-input-only check is retained below as historical evidence.
+
 On 2026-11-08, commit `facc273` was cloned with `git clone --no-local` into a new directory. The build used the clone's new `target` directory, with `CARGO_TARGET_DIR`, `ORTOOLS_PREFIX`, and `PROTOC` unset. Game and .NET paths were deliberately set to nonexistent locations. Running `cargo run --locked --release` inside `tasks/quarter-cut` produced the blueprint and interactive HTML successfully with Rust 1.98.1 on Windows.
 
 The generated blueprint was byte-identical to the native-verified template (SHA-256 above). Cargo's normal dependency cache was available. The [machine-readable result](../results/fresh-clone-reconstruction.json) records the checkout, command, paths and hash. This checks reconstruction from tracked solutions; cold solving and native acceptance have the separate prerequisites described above.
