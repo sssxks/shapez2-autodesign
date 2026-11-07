@@ -1,10 +1,11 @@
 //! Outward-facing cutting rows keep distribution in the central aisle.
-use crate::{
-    design,
-    routing::{self, Net, Point},
-};
+use crate::design;
 use anyhow::Result;
 use shapez_blueprint::{Building, Rotation};
+use shapez_model::{
+    ExchangeGroup, FoundationGeometry, TileNet as Net, TilePoint as Point, TileRoutingProblem,
+};
+use shapez_routing::solve_tiles_negotiated;
 use std::collections::HashSet;
 /// Assemble rigid cells, native port fanout and rate-preserving transport nets.
 pub fn build() -> Result<Vec<Building>> {
@@ -127,8 +128,7 @@ pub fn build() -> Result<Vec<Building>> {
                     bd,
                     input: false,
                     output: false,
-                    flex: true,
-                    class: j as u8,
+                    exchange: Some(ExchangeGroup(j as u8)),
                 });
                 a = (p.0 + if left { -1 } else { 1 }, p.1, z);
                 ad = if left { 2 } else { 0 };
@@ -172,8 +172,7 @@ pub fn build() -> Result<Vec<Building>> {
                 bd: d,
                 input: false,
                 output: true,
-                flex: true,
-                class: 4,
+                exchange: Some(ExchangeGroup(4)),
             });
         }
     }
@@ -186,5 +185,22 @@ pub fn build() -> Result<Vec<Building>> {
             );
         }
     }
-    routing::connect(b, fixed, nets)
+    let mut geometry = FoundationGeometry::strip(3, 3);
+    for n in nets.iter().filter(|n| n.output) {
+        let d = shapez_model::TILE_DIRECTIONS[n.bd];
+        geometry
+            .exits
+            .insert((n.b.0 - d.0, n.b.1 - d.1, n.b.2), n.b);
+    }
+    for route in solve_tiles_negotiated(
+        TileRoutingProblem {
+            geometry,
+            fixed,
+            nets,
+        },
+        240,
+    )? {
+        shapez_blueprint::route_buildings(&route, &mut b);
+    }
+    Ok(b)
 }

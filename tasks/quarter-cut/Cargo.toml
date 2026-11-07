@@ -10,3 +10,6 @@ serde_json.workspace = true
 shapez-blueprint.workspace = true
 shapez-runtime.workspace = true
 
+
+shapez-model.workspace = true
+shapez-routing.workspace = true

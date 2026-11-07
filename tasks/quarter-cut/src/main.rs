@@ -1,7 +1,6 @@
 //! Build, package and validate the 1x3 twelve-to-forty-eight belt quarter cutter.
 mod design;
 mod layout;
-mod routing;
 use anyhow::Result;
 use shapez_blueprint::{
     Blueprint, BlueprintContent, BlueprintIcon, BuildingBlueprint, IconComponent, Island,

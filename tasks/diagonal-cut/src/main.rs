@@ -1,6 +1,5 @@
 //! Generate and validate both diagonal factories.
 mod design;
-mod routing;
 use anyhow::Result;
 use shapez_blueprint::{
     Blueprint, BlueprintContent, BlueprintIcon, BuildingBlueprint, IconComponent, Island,
@@ -15,7 +14,19 @@ fn main() -> Result<()> {
     for (name, ne) in [("NE-SW", true), ("NW-SE", false)] {
         let (mut buildings, fixed, nets) =
             design::layout(ne, [0, 2, 3], [[1, 0, 3, 2], [2, 3, 1, 0], [2, 1, 0, 3]]);
-        routing::connect(&mut buildings, &fixed, &nets)?;
+        for route in shapez_routing::solve_tiles_sequential(
+            shapez_model::TileRoutingProblem {
+                geometry: shapez_model::FoundationGeometry::strip(2, 1),
+                fixed: fixed.into_iter().collect(),
+                nets,
+            },
+            shapez_model::SearchOptions {
+                attempts: 30,
+                seed: 1234567,
+            },
+        )? {
+            shapez_blueprint::route_buildings(&route, &mut buildings);
+        }
         let layer = buildings.clone();
         for z in 1..3 {
             buildings.extend(layer.iter().cloned().map(|mut b| {

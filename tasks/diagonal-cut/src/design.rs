@@ -1,6 +1,6 @@
 //! Four parallel cutters per lane, with separate full-rate output buses.
-use crate::routing::{Net, Point};
 use shapez_blueprint::{Building, Rotation};
+use shapez_model::{TileNet as Net, TilePoint as Point};
 pub fn layout(
     ne: bool,
     ports: [usize; 3],
@@ -19,7 +19,7 @@ pub fn layout(
     let mut nets = Vec::new();
     let mut add = |t: &str, x, y, r| {
         b.push(Building::new(t, x, y, 0, Rotation::new(r)));
-        fixed.push((x, y));
+        fixed.push((x, y, 0));
     };
     for g in 0..4 {
         let x = 5 + 8 * g;
@@ -98,26 +98,29 @@ pub fn layout(
         let (op, od) = port(ports[1], perms[1][g as usize]);
         let (qp, qd) = port(ports[2], perms[2][g as usize]);
         nets.push(Net {
-            a: ip,
+            a: (ip.0, ip.1, 0),
             ad: id,
-            b: (x - 1, 6),
+            b: (x - 1, 6, 0),
             bd: 1,
+            exchange: None,
             input: true,
             output: false,
         });
         nets.push(Net {
-            a: (x + 6, 13),
+            a: (x + 6, 13, 0),
             ad: 1,
-            b: op,
+            b: (op.0, op.1, 0),
             bd: (od + 2) % 4,
+            exchange: None,
             input: false,
             output: true,
         });
         nets.push(Net {
-            a: (x + 4, 14),
+            a: (x + 4, 14, 0),
             ad: 1,
-            b: qp,
+            b: (qp.0, qp.1, 0),
             bd: (qd + 2) % 4,
+            exchange: None,
             input: false,
             output: true,
         });
@@ -125,8 +128,8 @@ pub fn layout(
     // Reserve non-anchor halves of the cutters and swappers.
     for g in 0..4 {
         for j in 0..4 {
-            fixed.push((5 + 8 * g, 6 + 2 * j));
-            fixed.push((7 + 8 * g, 6 + 2 * j));
+            fixed.push((5 + 8 * g, 6 + 2 * j, 0));
+            fixed.push((7 + 8 * g, 6 + 2 * j, 0));
         }
     }
     (b, fixed, nets)
