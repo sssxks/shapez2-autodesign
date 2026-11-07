@@ -10,3 +10,6 @@ pub use model::{
     Island, IslandBlueprint, Rotation,
 };
 pub use space::space_island;
+
+mod tile;
+pub use tile::route_buildings;

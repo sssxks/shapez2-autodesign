@@ -13,3 +13,9 @@ pub use shape::{Color, Layer, Material, Part, Shape};
 pub use transport::{
     RouteNode, RoutePlan, SearchOptions, TransportEndpoint, TransportNet, TransportProblem,
 };
+
+mod tile;
+pub use tile::{
+    ExchangeGroup, FoundationGeometry, TILE_DIRECTIONS, TileNet, TilePoint, TileResource,
+    TileRoute, TileRouteStep, TileRoutingProblem, tile_resources,
+};
