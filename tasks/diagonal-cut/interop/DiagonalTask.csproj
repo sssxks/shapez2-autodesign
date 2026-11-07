@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>netstandard2.1</TargetFramework><AssemblyName>ShapezLab.Diagonal</AssemblyName></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../interop/LabMod/LabMod.csproj" />
+    <GameAssembly Include="$(ManagedPath)/Game*.dll;$(ManagedPath)/Core*.dll;$(ManagedPath)/SPZGameAssembly.dll;$(ManagedPath)/MainMenuAssembly.dll;$(ManagedPath)/Newtonsoft.Json.dll;$(ManagedPath)/UnityEngine*.dll;$(ManagedPath)/Unity.Mathematics.dll;$(ManagedPath)/UniTask.dll" />
+    <Reference Include="@(GameAssembly)"><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>
+
+

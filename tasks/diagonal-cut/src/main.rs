@@ -1,0 +1,55 @@
+//! Generate and validate both diagonal factories.
+mod design;
+mod routing;
+use anyhow::Result;
+use shapez_blueprint::{
+    Blueprint, BlueprintContent, BuildingBlueprint, Island, IslandBlueprint, Rotation,
+    encode_blueprint,
+};
+use shapez_runtime::{LabPaths, RunDirectory, run_suite};
+use std::{fs, time::Duration};
+fn main() -> Result<()> {
+    let paths = LabPaths::discover();
+    let run = RunDirectory::create(&paths.root, "diagonal-cut")?;
+    let mut cases = Vec::new();
+    for (name, ne) in [("NE-SW", true), ("NW-SE", false)] {
+        let (mut buildings, fixed, nets) =
+            design::layout(ne, [1, 0, 2], [[3, 0, 1, 2], [3, 1, 2, 0], [1, 0, 2, 3]]);
+        routing::connect(&mut buildings, &fixed, &nets)?;
+        let layer = buildings.clone();
+        for z in 1..3 {
+            buildings.extend(layer.iter().cloned().map(|mut b| {
+                b.layer = z;
+                b
+            }));
+        }
+        let mut island = Island::new("Foundation_1x2", 0, 0, 0, Rotation::new(0));
+        island.buildings = Some(BuildingBlueprint::new(buildings));
+        let bp = Blueprint {
+            game_version: 1138,
+            content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
+            icon: None,
+            source_format_version: None,
+        };
+        let file = run.path.join(format!("{name}.spz2bp"));
+        fs::write(&file, encode_blueprint(&bp)?)?;
+        let mut harness = bp.clone();
+        if let BlueprintContent::Islands(islands) = &mut harness.content {
+            for (x, y, r) in [(1, -1, 1), (0, -1, 3), (0, 1, 1)] {
+                islands
+                    .entries
+                    .push(Island::new("SpaceBelt_Forward", x, y, 0, Rotation::new(r)));
+            }
+        }
+        let fixture = run.path.join(format!("{name}-harness.spz2bp"));
+        fs::write(&fixture, encode_blueprint(&harness)?)?;
+        println!("{}", file.display());
+        cases.push(serde_json::json!({"name":name,"blueprint":fixture,"export_graph":true,"experiment":{"assembly":"${LAB}/bin/DiagonalTask/Release/netstandard2.1/ShapezLab.Diagonal.dll","type":"DiagonalExperiment"}}));
+    }
+    let suite = serde_json::json!({"projects":["${REPO}/tasks/diagonal-cut/interop/DiagonalTask.csproj"],"cases":cases});
+    let suite_path = run.path.join("suite.json");
+    fs::write(&suite_path, serde_json::to_vec_pretty(&suite)?)?;
+    run_suite(&paths, &suite_path, Duration::from_secs(180))?;
+    run.publish(&paths.root)?;
+    Ok(())
+}
