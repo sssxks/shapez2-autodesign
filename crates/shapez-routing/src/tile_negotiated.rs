@@ -8,7 +8,7 @@ use shapez_model::{
 /// Destination indices reachable with production buildings and source tiles reserved.
 pub fn reachable_targets(problem: &TileRoutingProblem) -> Vec<Vec<usize>> {
     let mut fixed = problem.fixed.clone();
-    fixed.extend(problem.nets.iter().map(|n| n.a));
+    fixed.extend(problem.nets.iter().flat_map(|n| [n.a, n.b]));
     problem
         .nets
         .iter()
@@ -97,7 +97,7 @@ use std::{
 /// Match equivalent destinations before routing, preserving scarce accessible exits.
 pub fn assign_reachable_targets(problem: &mut TileRoutingProblem) -> Result<()> {
     let mut fixed = problem.fixed.clone();
-    fixed.extend(problem.nets.iter().map(|n| n.a));
+    fixed.extend(problem.nets.iter().flat_map(|n| [n.a, n.b]));
     let mut groups = Vec::new();
     for net in &problem.nets {
         if let Some(group) = net.exchange
@@ -118,8 +118,8 @@ pub fn assign_reachable_targets(problem: &mut TileRoutingProblem) -> Result<()> 
             .iter()
             .map(|&i| (problem.nets[i].b, problem.nets[i].bd))
             .collect();
-        let mut edges = Vec::new();
-        for &id in &ids {
+        let mut costs = vec![vec![1_000_000; ids.len()]; ids.len()];
+        for (row, &id) in ids.iter().enumerate() {
             let mut remaining: Vec<_> = (0..targets.len()).collect();
             let mut reachable = Vec::new();
             while !remaining.is_empty() {
@@ -137,46 +137,33 @@ pub fn assign_reachable_targets(problem: &mut TileRoutingProblem) -> Result<()> 
                 };
                 let p = path.last().unwrap().p;
                 let j = remaining.iter().position(|&j| targets[j].0 == p).unwrap();
-                reachable.push(remaining.remove(j));
+                let column = remaining.remove(j);
+                costs[row][column] = resources(&path)
+                    .iter()
+                    .map(|r| {
+                        if matches!(r, TileResource::Occupancy(_)) {
+                            10
+                        } else {
+                            1
+                        }
+                    })
+                    .sum();
+                reachable.push(column);
             }
             anyhow::ensure!(
                 !reachable.is_empty(),
                 "Connection {id} at {:?} cannot reach any equivalent target",
                 problem.nets[id].a
             );
-            edges.push(reachable);
         }
-        fn augment(
-            i: usize,
-            edges: &[Vec<usize>],
-            seen: &mut [bool],
-            matched: &mut [Option<usize>],
-        ) -> bool {
-            for &j in &edges[i] {
-                if seen[j] {
-                    continue;
-                }
-                seen[j] = true;
-                if matched[j].is_none_or(|previous| augment(previous, edges, seen, matched)) {
-                    matched[j] = Some(i);
-                    return true;
-                }
-            }
-            false
-        }
-        let mut matched = vec![None; ids.len()];
-        let mut order: Vec<_> = (0..ids.len()).collect();
-        order.sort_by_key(|&i| edges[i].len());
-        for i in order {
+        let matched = minimum_assignment(&costs);
+        for (i, j) in matched.into_iter().enumerate() {
             anyhow::ensure!(
-                augment(i, &edges, &mut vec![false; ids.len()], &mut matched),
-                "No reachable destination matching in group {:?}; source {}",
-                group,
-                ids[i]
+                costs[i][j] < 1_000_000,
+                "No reachable destination matching in group {:?}",
+                group
             );
-        }
-        for (j, i) in matched.into_iter().enumerate() {
-            let net = &mut problem.nets[ids[i.unwrap()]];
+            let net = &mut problem.nets[ids[i]];
             (net.b, net.bd) = targets[j];
             net.exchange = None;
         }
@@ -203,7 +190,7 @@ fn search(
     let mut prev = HashMap::from([(start, None)]);
     let mut costs = HashMap::from([(start, 0)]);
     let legal = |p: Point| {
-        (!fixed.contains(&p) || p == n.a)
+        (!fixed.contains(&p) || p == n.a || targets.iter().any(|v| v.0 == p))
             && (geometry.contains(p) || p == n.a || targets.iter().any(|v| v.0 == p))
     };
     let price = |p: TileResource| {
@@ -233,12 +220,22 @@ fn search(
             }
             continue;
         }
+        // A reserved destination is an endpoint, never a transit tile for a
+        // different destination in the same exchange group.
+        if s.p != n.a && fixed.contains(&s.p) {
+            continue;
+        }
         for z in 0..geometry.layers {
             let lift = z != s.p.2;
             if lift && (s.catch || s.p == n.a && n.input) {
                 continue;
             }
-            if lift && (s.p.2.min(z)..=s.p.2.max(z)).any(|k| !legal((s.p.0, s.p.1, k))) {
+            if lift
+                && (s.p.2.min(z)..=s.p.2.max(z)).any(|k| {
+                    let p = (s.p.0, s.p.1, k);
+                    !geometry.contains(p) || p != n.a && fixed.contains(&p)
+                })
+            {
                 continue;
             }
             for (d, v) in D.iter().enumerate() {
@@ -250,7 +247,7 @@ fn search(
                     if geometry.exits.get(&s.p).is_some_and(|&port| p != port) {
                         continue;
                     }
-                    if !legal(p) || (targets.iter().any(|v| v.0 == p) && (lift || len > 1)) {
+                    if !legal(p) || (n.output && targets.iter().any(|v| v.0 == p) && len > 1) {
                         continue;
                     }
                     let mut ancestor = Some(s);
@@ -342,7 +339,7 @@ pub fn solve_tiles_negotiated(
         mut nets,
     } = problem;
     let mut fixed = fixed;
-    fixed.extend(nets.iter().map(|n| n.a));
+    fixed.extend(nets.iter().flat_map(|n| [n.a, n.b]));
     let mut paths = vec![Vec::new(); nets.len()];
     let mut usage = HashMap::<TileResource, i32>::new();
     let mut history = HashMap::<TileResource, i32>::new();
@@ -430,4 +427,63 @@ pub fn solve_tiles_negotiated(
         }
     }
     bail!("Routing stopped at {best} conflicts")
+}
+
+/// Dense minimum-cost perfect matching, using successive dual adjustments.
+fn minimum_assignment(cost: &[Vec<i32>]) -> Vec<usize> {
+    let n = cost.len();
+    let mut u = vec![0; n + 1];
+    let mut v = vec![0; n + 1];
+    let mut p = vec![0; n + 1];
+    let mut way = vec![0; n + 1];
+    for i in 1..=n {
+        p[0] = i;
+        let mut j0 = 0;
+        let mut min = vec![i32::MAX; n + 1];
+        let mut used = vec![false; n + 1];
+        loop {
+            used[j0] = true;
+            let i0 = p[j0];
+            let mut delta = i32::MAX;
+            let mut j1 = 0;
+            for j in 1..=n {
+                if !used[j] {
+                    let cur = cost[i0 - 1][j - 1] - u[i0] - v[j];
+                    if cur < min[j] {
+                        min[j] = cur;
+                        way[j] = j0;
+                    }
+                    if min[j] < delta {
+                        delta = min[j];
+                        j1 = j;
+                    }
+                }
+            }
+            for j in 0..=n {
+                if used[j] {
+                    u[p[j]] += delta;
+                    v[j] -= delta;
+                } else if j > 0 {
+                    min[j] -= delta;
+                }
+            }
+            j0 = j1;
+            if p[j0] == 0 {
+                break;
+            }
+        }
+        loop {
+            let j1 = way[j0];
+            p[j0] = p[j1];
+            j0 = j1;
+            if j0 == 0 {
+                break;
+            }
+        }
+    }
+    let mut result = vec![0; n];
+    for j in 1..=n {
+        result[p[j] - 1] = j - 1;
+    }
+    result
 }

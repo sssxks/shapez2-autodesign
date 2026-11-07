@@ -88,3 +88,24 @@ fn lift_occupancy_and_launcher_interference_remain_distinct() {
     assert!(resources.contains(&TileResource::LauncherRange((11, 5, 2), 0)));
     assert!(!resources.contains(&TileResource::Occupancy((8, 5, 2))));
 }
+
+#[test]
+fn jump_can_land_directly_before_a_machine_input() {
+    let mut p = problem();
+    p.nets[0] = TileNet {
+        a: (4, 8, 0),
+        ad: 0,
+        b: (7, 8, 0),
+        bd: 0,
+        input: false,
+        output: false,
+        exchange: None,
+    };
+    p.fixed = (3..=16)
+        .flat_map(|x| (3..=16).map(move |y| (x, y, 0)))
+        .filter(|p| *p != (4, 8, 0) && *p != (7, 8, 0))
+        .collect();
+    let routes = solve_tiles_negotiated(p, 1).unwrap();
+    assert_eq!(routes[0].steps.len(), 2);
+    assert!(routes[0].steps[1].catch);
+}
