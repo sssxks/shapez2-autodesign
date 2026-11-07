@@ -132,14 +132,14 @@ pub fn layout(ne: bool, perms: [[i32; 4]; 3]) -> Result<(Vec<Building>, Vec<Poin
             a: (ip.0, ip.1, 0),
             ad: id,
             b: cell.port("input")?.position,
-            bd: 1,
+            bd: cell.port("input")?.direction,
             exchange: None,
             input: true,
             output: false,
         });
         nets.push(Net {
             a: cell.port("first")?.position,
-            ad: 1,
+            ad: cell.port("first")?.direction,
             b: (op.0, op.1, 0),
             bd: od,
             exchange: None,
@@ -148,7 +148,7 @@ pub fn layout(ne: bool, perms: [[i32; 4]; 3]) -> Result<(Vec<Building>, Vec<Poin
         });
         nets.push(Net {
             a: cell.port("second")?.position,
-            ad: 1,
+            ad: cell.port("second")?.direction,
             b: (qp.0, qp.1, 0),
             bd: qd,
             exchange: None,
