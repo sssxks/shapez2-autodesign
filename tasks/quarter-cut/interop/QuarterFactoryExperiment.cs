@@ -20,21 +20,23 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
     public object Run(LabWorld world, JObject args, string root)
     {
         int checkedMergers = 0;
+        int twoInputMergers = 0, threeInputMergers = 0;
         foreach (var sim in ((ISimulator)world.Simulator).Simulations)
         {
             if (sim.Simulation.GetType().Name.Contains("Blocked") || sim.Simulation.GetType().Name.Contains("Disabled"))
                 throw new InvalidOperationException("Disabled transport: " + sim.Simulation.GetType().Name);
             if (sim.Simulation is MergerSimulation merger && sim is IConnectableSimulation connectors)
             {
-                if (merger.NumItemReceivers != 2)
-                    throw new InvalidOperationException("Non-two-input merger");
+                if (merger.NumItemReceivers == 2) twoInputMergers++;
+                else if (merger.NumItemReceivers == 3) threeInputMergers++;
+                else throw new InvalidOperationException("Unexpected merger input count");
                 for (int i = 0; i < connectors.NumConnectors; i++)
                     if (!world.Simulator.TryGetConnectedSimulation(sim, i, out _))
                         throw new InvalidOperationException("Unconnected merger socket at " + ((ILocalizedTileSimulation)sim).GetOccupiedTile(0));
                 checkedMergers++;
             }
         }
-        if (checkedMergers != 144)
+        if (checkedMergers != args.Value<int>("expected_mergers"))
             throw new InvalidOperationException("Merger count: " + checkedMergers);
         var sources = new List<BeltSource>();
         var meters = new Dictionary<string, BeltMeter>();
@@ -107,7 +109,8 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
             input_lanes = sources.Count,
             output_lanes = meters.Count,
             blocked_output_recovery = true,
-            connected_two_input_mergers = checkedMergers,
+            connected_two_input_mergers = twoInputMergers,
+            connected_three_input_mergers = threeInputMergers,
             unused_merger_connectors = 0,
             phases
         };

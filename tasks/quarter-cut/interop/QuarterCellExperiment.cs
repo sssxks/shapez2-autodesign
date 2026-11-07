@@ -16,19 +16,28 @@ public sealed class QuarterCellExperiment : IBlueprintExperiment
 
     public object Run(LabWorld world, JObject args, string root)
     {
-        var cutter = ((ISimulator)world.Simulator).Simulations.Select(s => s.Simulation).OfType<FullCutterSimulation>().First();
+        var inputY = args.Value<bool?>("mirrored") == true ? 7 : 8;
+        var cutter = (FullCutterSimulation)((ISimulator)world.Simulator).Simulations.OfType<ILocalizedTileSimulation>()
+            .Single(s => s.Simulation is FullCutterSimulation && s.GetOccupiedTile(0).x == 8 && s.GetOccupiedTile(0).y == inputY).Simulation;
         var left = new BeltMeter();
-        var output = ((ISimulator)world.Simulator).Simulations.OfType<ILocalizedTileSimulation>().Single(s => s.GetOccupiedTile(0).x == 12 && s.GetOccupiedTile(0).y == 9);
+        var outputY = 6 + (args.Value<int?>("output_row") ?? (args.Value<bool?>("mirrored") == true ? 0 : 3));
+        var output = ((ISimulator)world.Simulator).Simulations.OfType<ILocalizedTileSimulation>().Single(s => s.GetOccupiedTile(0).x == 12 && s.GetOccupiedTile(0).y == outputY);
         ((MergerSimulation)output.Simulation).OutputLane.NextLane = left;
         var item = GameBindings.Shapes.GetItem(GameBindings.ShapeIds.Resolve("CuCuCuCu"));
+        IItemReceiver input=cutter.InputLane;
+        if (args.Value<bool?>("jump_input")==true)
+        {
+            var source=((ISimulator)world.Simulator).Simulations.OfType<ILocalizedTileSimulation>().Single(s=>s.GetOccupiedTile(0).x==3 && s.GetOccupiedTile(0).y==8);
+            input=((IItemSimulation)source.Simulation).GetItemReceiver(0);
+        }
         void Feed(Ticks start, Ticks delta)
         {
-            if (cutter.InputLane.CanAcceptItem(item))
-                cutter.InputLane.HandOverItem(item, Ticks.Zero);
+            if (input.CanAcceptItem(item))
+                input.HandOverItem(item, Ticks.Zero);
         }
         BeltMeasurement.Run(world, 30, 120, new[] { left }, Feed);
         if (left.Counts.Count != 1 || !left.Counts.TryGetValue("Cu------", out var count) || count != 240)
-            throw new InvalidOperationException("Quarter cell did not produce 240 normalized quarters");
+            throw new InvalidOperationException("Quarter cell output: " + Newtonsoft.Json.JsonConvert.SerializeObject(left.Counts));
         return new
         {
             verified = true,
