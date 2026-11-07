@@ -13,3 +13,6 @@ pub use space::space_island;
 
 mod tile;
 pub use tile::route_buildings;
+
+mod cell;
+pub use cell::{Cell, CellPort, Placement};
