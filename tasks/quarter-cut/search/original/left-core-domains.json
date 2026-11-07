@@ -1,0 +1,10 @@
+[
+  { "bounds": [3, 3, 6, 5], "rotation": 2 },
+  { "bounds": [4, 6, 8, 8], "rotation": 2 },
+  { "bounds": [9, 0, 12, 2], "rotation": 1 },
+  { "bounds": [13, 0, 16, 2], "rotation": 1 },
+  { "bounds": [3, 8, 4, 10], "rotation": 1 },
+  { "bounds": [7, 7, 8, 9], "rotation": 1 },
+  { "bounds": [11, 7, 12, 9], "rotation": 1 },
+  { "bounds": [15, 7, 16, 9], "rotation": 1 }
+]

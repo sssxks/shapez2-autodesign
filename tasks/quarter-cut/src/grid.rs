@@ -36,15 +36,30 @@ struct Args {
     /// Solve one 17x14 half of the original five-port layout.
     #[arg(long, conflicts_with_all = ["cell", "bank"])]
     original_half: Option<OriginalHalf>,
+    /// The two complete-shape lanes crossing between the original-layout regions.
+    #[arg(long, num_args = 2, default_values_t = [5,8])]
+    through_rows: Vec<i32>,
     /// Point the upper cutting cores inward to receive the original northern input.
     #[arg(long, requires = "original_half")]
     inward_top: bool,
     /// Reflect fixed core geometry horizontally while preserving shape operations.
     #[arg(long, requires = "original_half")]
     mirror_cores: bool,
+    /// Stagger four west-facing cores above four south-facing cores in the left region.
+    #[arg(long, requires_all = ["original_half", "cores"], conflicts_with_all = ["mirror_cores", "inward_top"])]
+    corner_cores: bool,
     /// Jointly choose a small set of cutting-core poses and all remaining transport.
     #[arg(long, requires = "original_half", conflicts_with = "cores")]
     flex_cores: bool,
+    /// Pack anonymous cutting cores anywhere; their layer counts may differ.
+    #[arg(long, requires = "original_half", conflicts_with_all = ["cores", "flex_cores"])]
+    free_core_pack: bool,
+    /// Optional disjoint pose domains, one selected core per domain and layer.
+    #[arg(long, requires = "free_core_pack")]
+    core_domains: Option<PathBuf>,
+    /// Pack cores in the left half of a full platform while allowing transport anywhere.
+    #[arg(long, conflicts_with_all = ["original_half", "cores", "flex_cores", "free_core_pack"])]
+    pack_left: bool,
     /// Synthesize a four-output bank with one full input per layer.
     #[arg(long, conflicts_with = "cell")]
     bank: bool,
@@ -86,6 +101,9 @@ struct Args {
     buildings_hint: Option<PathBuf>,
     #[arg(long, requires = "buildings_hint")]
     lock_layout: bool,
+    /// Fix supplied buildings while leaving all other tiles available.
+    #[arg(long, requires = "buildings_hint")]
+    fix_known_layout: bool,
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct Kind {
@@ -95,6 +113,12 @@ struct Kind {
     jump: Option<usize>,
     #[serde(default)]
     lift: bool,
+}
+/// Inclusive origin bounds and physical direction for one interchangeable pose group.
+#[derive(Deserialize)]
+struct CoreDomain {
+    bounds: [i32; 4],
+    rotation: usize,
 }
 struct Grammar {
     kinds: Vec<Kind>,
@@ -323,6 +347,7 @@ struct Edge {
     normal: Var,
     internal: Var,
 }
+#[derive(Clone)]
 struct Tile {
     kind: Var,
     cut: Var,
@@ -505,7 +530,127 @@ fn flexible_cores(
     }
 }
 
-fn build(args: &Args) -> Grid {
+/// Set packing avoids assigning interchangeable core identities or per-layer production quotas.
+fn pack_cores(
+    model: &mut Model,
+    grammar: &Grammar,
+    tiles: &BTreeMap<Point, Tile>,
+    width: i32,
+    height: i32,
+    layers: i16,
+    domains: &[CoreDomain],
+) {
+    let mut occupied = BTreeMap::<Point, Vec<Var>>::new();
+    let mut cutters = BTreeMap::<Point, Vec<Var>>::new();
+    let mut constants = BTreeMap::new();
+    let mut choices = Vec::new();
+    let mut groups = vec![Vec::new(); domains.len() * layers as usize];
+    for z in 0..layers {
+        for y0 in 0..height {
+            for x0 in 0..width {
+                for r in 0..4 {
+                    let group = domains.iter().position(|d| {
+                        d.rotation == r
+                            && (d.bounds[0]..=d.bounds[2]).contains(&x0)
+                            && (d.bounds[1]..=d.bounds[3]).contains(&y0)
+                    });
+                    if !domains.is_empty() && group.is_none() {
+                        continue;
+                    }
+                    for mirror in [false, true] {
+                        let mut cells = Vec::new();
+                        for (x, y, name, mask, aux) in [
+                            (0, 2, "CutterDefaultInternalVariant", 15, false),
+                            (0, 1, "", 0, true),
+                            (1, 1, "RotatorOneQuadInternalVariant", 12, false),
+                            (1, 2, "RotatorOneQuadCCWInternalVariant", 3, false),
+                            (2, 1, "CutterDefaultInternalVariant", 9, false),
+                            (2, 0, "", 0, true),
+                            (2, 2, "CutterDefaultInternalVariantMirrored", 9, false),
+                            (2, 3, "", 0, true),
+                        ] {
+                            let y = if mirror { 3 - y } else { y };
+                            let (dx, dy) = [(x, y), (-y, x), (-x, -y), (y, -x)][r];
+                            let p = (x0 + dx, y0 + dy, z);
+                            if !tiles.contains_key(&p) {
+                                break;
+                            }
+                            let name = if mirror && name.starts_with("Cutter") {
+                                if name.ends_with("Mirrored") {
+                                    "CutterDefaultInternalVariant"
+                                } else {
+                                    "CutterDefaultInternalVariantMirrored"
+                                }
+                            } else {
+                                name
+                            };
+                            let k = grammar
+                                .kinds
+                                .iter()
+                                .position(|k| {
+                                    k.rotation == r
+                                        && k.auxiliary == aux
+                                        && !k.lift
+                                        && if aux {
+                                            k.definition.is_none()
+                                        } else {
+                                            k.definition.as_deref() == Some(name)
+                                        }
+                                })
+                                .unwrap() as i64;
+                            cells.push((p, k, mask, name.starts_with("Cutter")));
+                        }
+                        if cells.len() != 8 {
+                            continue;
+                        }
+                        let on = model.boolean();
+                        choices.push(on);
+                        if let Some(group) = group {
+                            groups[z as usize * domains.len() + group].push(on);
+                        }
+                        for (p, k, mask, cut) in cells {
+                            let wanted =
+                                *constants.entry(k).or_insert_with(|| model.variable(k, k));
+                            equal_if(
+                                model,
+                                on,
+                                tiles[&p].kind,
+                                wanted,
+                                grammar.kinds.len() as i64,
+                            );
+                            if mask != 0 {
+                                let value = *constants
+                                    .entry(mask)
+                                    .or_insert_with(|| model.variable(mask, mask));
+                                equal_if(model, on, tiles[&p].shapes[0], value, 15);
+                            }
+                            occupied.entry(p).or_default().push(on);
+                            if cut {
+                                cutters.entry(p).or_default().push(on);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    model.bounded(Expr::sum(choices), 0, 8 * i64::from(layers));
+    for group in groups {
+        model.exactly_one(group);
+    }
+    for choices in occupied.into_values() {
+        model.at_most_one(choices);
+    }
+    for (&p, t) in tiles {
+        let mut eq = Expr::from(t.cut);
+        for &on in cutters.get(&p).into_iter().flatten() {
+            eq.term(on, -1);
+        }
+        model.equal(eq, 0);
+    }
+}
+
+fn build(args: &Args, domains: &[CoreDomain]) -> Grid {
     let (width, height) = if args.cell {
         (5, 4)
     } else if args.original_half.is_some() {
@@ -629,14 +774,27 @@ fn build(args: &Args) -> Grid {
             16
         } {
             let reflected = args.original_half.is_some() && (i >= 4 || args.inward_top);
-            let r = if args.original_half.is_some() {
+            let r = if args.corner_cores && i < 4 {
+                2
+            } else if args.original_half.is_some() {
                 if reflected { 1 } else { 3 }
             } else if args.bank || i < 8 {
                 3
             } else {
                 1
             };
-            let origin = if args.original_half.is_some() {
+            let origin = if args.corner_cores {
+                [
+                    (4, 3),
+                    (4, 7),
+                    (4, 11),
+                    (12, 3),
+                    (12, 4),
+                    (8, 9),
+                    (12, 9),
+                    (16, 9),
+                ][i as usize]
+            } else if args.original_half.is_some() {
                 (
                     4 * (i % 4) + if reflected { 3 } else { 0 },
                     if i >= 4 {
@@ -680,7 +838,7 @@ fn build(args: &Args) -> Grid {
                     } else {
                         definition
                     };
-                let (dx, dy) = if r == 3 { (y, -x) } else { (-y, x) };
+                let (dx, dy) = [(x, y), (-y, x), (-x, -y), (y, -x)][r];
                 let p = (
                     if args.mirror_cores {
                         width - 1 - origin.0 - dx
@@ -838,6 +996,17 @@ fn build(args: &Args) -> Grid {
     if args.flex_cores {
         flexible_cores(&mut model, &grammar, &tiles, layers);
     }
+    if args.free_core_pack {
+        pack_cores(&mut model, &grammar, &tiles, width, height, layers, domains);
+    }
+    if args.pack_left {
+        let left = tiles
+            .iter()
+            .filter(|(p, _)| p.0 < 17)
+            .map(|(&p, t)| (p, t.clone()))
+            .collect();
+        pack_cores(&mut model, &grammar, &left, 17, height, layers, &[]);
+    }
     for (&p, t) in &tiles {
         for r in 0..4 {
             let mut nearby = Expr::default();
@@ -895,7 +1064,7 @@ fn build(args: &Args) -> Grid {
                 if half == OriginalHalf::Left {
                     (5..9).map(|x| ((x, -1, z), 1)).collect::<Vec<_>>()
                 } else {
-                    [5, 8].map(|y| ((-1, y, z), 0)).into()
+                    args.through_rows.iter().map(|&y| ((-1, y, z), 0)).collect()
                 }
             })
             .collect()
@@ -996,7 +1165,7 @@ fn build(args: &Args) -> Grid {
             for y in if args.bank_through {
                 vec![height - 2]
             } else {
-                vec![5, 8]
+                args.through_rows.clone()
             } {
                 let p = (width - 1, y, z);
                 let e = edges[&(p, 0)];
@@ -1147,7 +1316,35 @@ pub fn run() -> Result<()> {
             "Fixed bank cores need at least 16x6"
         );
     }
-    let mut grid = build(&args);
+    let domains: Vec<CoreDomain> = args
+        .core_domains
+        .as_ref()
+        .map(|p| -> Result<_> { Ok(serde_json::from_slice(&fs::read(p)?)?) })
+        .transpose()?
+        .unwrap_or_default();
+    ensure!(
+        domains.is_empty() || domains.len() == 8,
+        "Expected eight core domains"
+    );
+    for d in &domains {
+        ensure!(
+            d.rotation < 4 && d.bounds[0] <= d.bounds[2] && d.bounds[1] <= d.bounds[3],
+            "Invalid core pose domain"
+        );
+    }
+    for (i, a) in domains.iter().enumerate() {
+        for b in &domains[..i] {
+            ensure!(
+                a.rotation != b.rotation
+                    || a.bounds[0] > b.bounds[2]
+                    || b.bounds[0] > a.bounds[2]
+                    || a.bounds[1] > b.bounds[3]
+                    || b.bounds[1] > a.bounds[3],
+                "Core pose domains must be disjoint"
+            );
+        }
+    }
+    let mut grid = build(&args, &domains);
     grid.model.bounded(
         Expr::sum(grid.served.iter().copied()),
         args.minimum,
@@ -1232,7 +1429,7 @@ pub fn run() -> Result<()> {
         for (&p, t) in &grid.tiles {
             let kind = known.get(&p).copied().unwrap_or(0) as i64;
             grid.model.hint(t.kind, kind);
-            if args.lock_layout {
+            if args.lock_layout || args.fix_known_layout && known.contains_key(&p) {
                 grid.model.equal(t.kind, kind);
             }
         }
