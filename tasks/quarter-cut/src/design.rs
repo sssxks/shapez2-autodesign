@@ -1,7 +1,7 @@
 //! Four-way cutting cell; four normalized quarters merge to one full belt.
-use shapez_blueprint::{Building, Rotation};
+use shapez_blueprint::{Building, Cell, CellPort, Rotation};
 /// Local cell occupies five columns and four rows, facing east.
-pub fn cell(x: i32, y: i32) -> Vec<Building> {
+pub fn cell(factory: bool) -> Cell {
     let mut b = vec![];
     for (dx, dy, r, t) in [
         (0, 2, 0, "CutterDefaultInternalVariant"),
@@ -18,7 +18,31 @@ pub fn cell(x: i32, y: i32) -> Vec<Building> {
         (4, 2, 1, "Merger2To1LInternalVariantMirrored"),
         (4, 3, 0, "Merger2To1LInternalVariant"),
     ] {
-        b.push(Building::new(t, x + dx, y + dy, 0, Rotation::new(r)));
+        b.push(Building::new(t, dx, dy, 0, Rotation::new(r)));
     }
-    b
+    if factory {
+        let last = &mut b[12];
+        last.definition = "Merger2To1LInternalVariantMirrored".into();
+        last.rotation = Rotation::new(1);
+    }
+    Cell::new(
+        b,
+        [(0, 1, 0), (2, 0, 0), (2, 3, 0)],
+        [
+            (
+                "input",
+                CellPort {
+                    position: (-1, 2, 0),
+                    direction: 0,
+                },
+            ),
+            (
+                "output",
+                CellPort {
+                    position: (4, 4, 0),
+                    direction: 1,
+                },
+            ),
+        ],
+    )
 }

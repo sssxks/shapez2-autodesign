@@ -1,11 +1,117 @@
 //! Four parallel cutters per lane, with separate full-rate output buses.
-use shapez_blueprint::{Building, Rotation};
+use anyhow::Result;
+use shapez_blueprint::{Building, Cell, CellPort, Placement, Rotation};
 use shapez_model::{TileNet as Net, TilePoint as Point};
+/// A full-rate diagonal lane owns its four stages and both output buses.
+fn lane(ne: bool) -> Cell {
+    let x = 5;
+    let mut b = Vec::new();
+    let mut add = |t: &str, x, y, r| b.push(Building::new(t, x, y, 0, Rotation::new(r)));
+    for j in 0..4 {
+        let y = 6 + 2 * j;
+        add("CutterDefaultInternalVariant", x, y + 1, 0);
+        add(
+            if ne {
+                "RotatorOneQuadInternalVariant"
+            } else {
+                "RotatorOneQuadCCWInternalVariant"
+            },
+            x + 1,
+            y,
+            0,
+        );
+        add(
+            if ne {
+                "RotatorOneQuadInternalVariant"
+            } else {
+                "RotatorOneQuadCCWInternalVariant"
+            },
+            x + 1,
+            y + 1,
+            0,
+        );
+        add("HalvesSwapperDefaultInternalVariant", x + 2, y + 1, 0);
+        add("BeltPortSenderInternalVariant", x + 3, y, 0);
+        // Jump across the downward output bus to the second downward merger bus.
+
+        add("BeltPortReceiverInternalVariant", x + 5, y, 0);
+        add(
+            if j == 0 {
+                "BeltDefaultLeftInternalVariantMirrored"
+            } else {
+                "Merger2To1LInternalVariantMirrored"
+            },
+            x + 6,
+            y,
+            if j == 0 { 0 } else { 1 },
+        );
+        add("RotatorOneQuadInternalVariant", x + 3, y + 1, 0);
+        add(
+            if j == 0 {
+                "BeltDefaultLeftInternalVariantMirrored"
+            } else {
+                "Merger2To1LInternalVariantMirrored"
+            },
+            x + 4,
+            y + 1,
+            if j == 0 { 0 } else { 1 },
+        );
+        add(
+            if j < 3 {
+                "Splitter1To2LInternalVariant"
+            } else {
+                "BeltDefaultLeftInternalVariant"
+            },
+            x - 1,
+            y + 1,
+            1,
+        );
+        if j < 3 {
+            {
+                let dy = 2;
+                add("BeltDefaultForwardInternalVariant", x - 1, y + dy, 1);
+                add("BeltDefaultForwardInternalVariant", x + 4, y + dy, 1);
+            }
+            {
+                let dy = 1;
+                add("BeltDefaultForwardInternalVariant", x + 6, y + dy, 1);
+            }
+        }
+    }
+    Cell::new(
+        b,
+        (0..4).flat_map(|j| [(5, 6 + 2 * j, 0), (7, 6 + 2 * j, 0)]),
+        [
+            (
+                "input",
+                CellPort {
+                    position: (4, 6, 0),
+                    direction: 1,
+                },
+            ),
+            (
+                "first",
+                CellPort {
+                    position: (11, 13, 0),
+                    direction: 1,
+                },
+            ),
+            (
+                "second",
+                CellPort {
+                    position: (9, 14, 0),
+                    direction: 1,
+                },
+            ),
+        ],
+    )
+}
+/// Place four independent lanes and declare their external connections.
 pub fn layout(
     ne: bool,
     ports: [usize; 3],
     perms: [[i32; 4]; 3],
-) -> (Vec<Building>, Vec<Point>, Vec<Net>) {
+) -> Result<(Vec<Building>, Vec<Point>, Vec<Net>)> {
     let port = |side: usize, g: i32| match side {
         0 => ((8 + g, 2), 1),
         1 => ((28 + g, 2), 1),
@@ -17,97 +123,27 @@ pub fn layout(
     let mut b = Vec::new();
     let mut fixed = Vec::new();
     let mut nets = Vec::new();
-    let mut add = |t: &str, x, y, r| {
-        b.push(Building::new(t, x, y, 0, Rotation::new(r)));
-        fixed.push((x, y, 0));
-    };
     for g in 0..4 {
-        let x = 5 + 8 * g;
-        for j in 0..4 {
-            let y = 6 + 2 * j;
-            add("CutterDefaultInternalVariant", x, y + 1, 0);
-            add(
-                if ne {
-                    "RotatorOneQuadInternalVariant"
-                } else {
-                    "RotatorOneQuadCCWInternalVariant"
-                },
-                x + 1,
-                y,
-                0,
-            );
-            add(
-                if ne {
-                    "RotatorOneQuadInternalVariant"
-                } else {
-                    "RotatorOneQuadCCWInternalVariant"
-                },
-                x + 1,
-                y + 1,
-                0,
-            );
-            add("HalvesSwapperDefaultInternalVariant", x + 2, y + 1, 0);
-            add("BeltPortSenderInternalVariant", x + 3, y, 0);
-            // Jump across the downward output bus to the second downward merger bus.
-
-            add("BeltPortReceiverInternalVariant", x + 5, y, 0);
-            add(
-                if j == 0 {
-                    "BeltDefaultLeftInternalVariantMirrored"
-                } else {
-                    "Merger2To1LInternalVariantMirrored"
-                },
-                x + 6,
-                y,
-                if j == 0 { 0 } else { 1 },
-            );
-            add("RotatorOneQuadInternalVariant", x + 3, y + 1, 0);
-            add(
-                if j == 0 {
-                    "BeltDefaultLeftInternalVariantMirrored"
-                } else {
-                    "Merger2To1LInternalVariantMirrored"
-                },
-                x + 4,
-                y + 1,
-                if j == 0 { 0 } else { 1 },
-            );
-            add(
-                if j < 3 {
-                    "Splitter1To2LInternalVariant"
-                } else {
-                    "BeltDefaultLeftInternalVariant"
-                },
-                x - 1,
-                y + 1,
-                1,
-            );
-            if j < 3 {
-                {
-                    let dy = 2;
-                    add("BeltDefaultForwardInternalVariant", x - 1, y + dy, 1);
-                    add("BeltDefaultForwardInternalVariant", x + 4, y + dy, 1);
-                }
-                {
-                    let dy = 1;
-                    add("BeltDefaultForwardInternalVariant", x + 6, y + dy, 1);
-                }
-            }
-        }
+        let cell = lane(ne).placed(Placement {
+            origin: (8 * g, 0, 0),
+            rotation: Rotation::new(0),
+        });
+        b.extend(cell.buildings.iter().cloned());
+        fixed.extend(cell.footprint.iter().copied());
         let (ip, id) = port(ports[0], perms[0][g as usize]);
         let (op, od) = port(ports[1], perms[1][g as usize]);
         let (qp, qd) = port(ports[2], perms[2][g as usize]);
         nets.push(Net {
             a: (ip.0, ip.1, 0),
             ad: id,
-            b: (x - 1, 6, 0),
+            b: cell.port("input")?.position,
             bd: 1,
             exchange: None,
             input: true,
             output: false,
         });
         nets.push(Net {
-            a: (x + 6, 13, 0),
+            a: cell.port("first")?.position,
             ad: 1,
             b: (op.0, op.1, 0),
             bd: (od + 2) % 4,
@@ -116,7 +152,7 @@ pub fn layout(
             output: true,
         });
         nets.push(Net {
-            a: (x + 4, 14, 0),
+            a: cell.port("second")?.position,
             ad: 1,
             b: (qp.0, qp.1, 0),
             bd: (qd + 2) % 4,
@@ -125,12 +161,5 @@ pub fn layout(
             output: true,
         });
     }
-    // Reserve non-anchor halves of the cutters and swappers.
-    for g in 0..4 {
-        for j in 0..4 {
-            fixed.push((5 + 8 * g, 6 + 2 * j, 0));
-            fixed.push((7 + 8 * g, 6 + 2 * j, 0));
-        }
-    }
-    (b, fixed, nets)
+    Ok((b, fixed, nets))
 }

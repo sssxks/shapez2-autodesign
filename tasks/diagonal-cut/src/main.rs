@@ -13,7 +13,7 @@ fn main() -> Result<()> {
     let mut cases = Vec::new();
     for (name, ne) in [("NE-SW", true), ("NW-SE", false)] {
         let (mut buildings, fixed, nets) =
-            design::layout(ne, [0, 2, 3], [[1, 0, 3, 2], [2, 3, 1, 0], [2, 1, 0, 3]]);
+            design::layout(ne, [0, 2, 3], [[1, 0, 3, 2], [2, 3, 1, 0], [2, 1, 0, 3]])?;
         for route in shapez_routing::solve_tiles_sequential(
             shapez_model::TileRoutingProblem {
                 geometry: shapez_model::FoundationGeometry::strip(2, 1),

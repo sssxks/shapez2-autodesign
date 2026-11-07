@@ -77,7 +77,16 @@ fn main() -> Result<()> {
 
 /// Run a bounded native discovery or unit-cell experiment without publishing a factory.
 fn probe(paths: &LabPaths, run: &RunDirectory, cell: bool) -> Result<()> {
-    let buildings = if cell { design::cell(8, 6) } else { Vec::new() };
+    let buildings = if cell {
+        design::cell(false)
+            .placed(shapez_blueprint::Placement {
+                origin: (8, 6, 0),
+                rotation: Rotation::new(0),
+            })
+            .buildings
+    } else {
+        Vec::new()
+    };
     let count = buildings.len();
     let mut island = Island::new("Foundation_2x2", 0, 0, 0, Rotation::new(0));
     island.buildings = Some(BuildingBlueprint::new(buildings));

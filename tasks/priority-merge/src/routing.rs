@@ -7,19 +7,22 @@ use shapez_routing::solve_tiles_sequential;
 use std::collections::HashSet;
 pub fn connect(
     buildings: &mut Vec<Building>,
-    centers: &[(i32, i32); 4],
+    cells: &[shapez_blueprint::Cell],
     design: &Design,
 ) -> Result<()> {
     let mut nets = Vec::new();
-    for (i, &(x, y)) in centers.iter().enumerate() {
+    for (i, cell) in cells.iter().enumerate() {
+        let a = cell.port("primary")?;
+        let b = cell.port("secondary")?;
+        let out = cell.port("output")?;
         let k = i as i32;
         let (primary, primary_direction) = design.primary.port(k);
         let (secondary, secondary_direction) = design.secondary.port(k);
         nets.push(Net {
             a: (primary.0, primary.1, 0),
             ad: primary_direction,
-            b: (x - 2, y - 2, 0),
-            bd: 1,
+            b: a.position,
+            bd: a.direction,
             input: true,
             output: false,
             exchange: None,
@@ -27,15 +30,15 @@ pub fn connect(
         nets.push(Net {
             a: (secondary.0, secondary.1, 0),
             ad: secondary_direction,
-            b: (x + 1, y + 1, 0),
-            bd: 2,
+            b: b.position,
+            bd: b.direction,
             input: true,
             output: false,
             exchange: None,
         });
         nets.push(Net {
-            a: (x - 1, y + 2, 0),
-            ad: 1,
+            a: out.position,
+            ad: out.direction,
             b: (17, 8 + k, 0),
             bd: 0,
             input: false,
@@ -43,7 +46,10 @@ pub fn connect(
             exchange: None,
         });
     }
-    let fixed: HashSet<_> = buildings.iter().map(|b| (b.x, b.y, b.layer)).collect();
+    let fixed: HashSet<_> = cells
+        .iter()
+        .flat_map(|c| c.footprint.iter().copied())
+        .collect();
     for route in solve_tiles_sequential(
         TileRoutingProblem {
             geometry: FoundationGeometry::strip(1, 1),

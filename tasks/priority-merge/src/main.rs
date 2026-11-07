@@ -11,7 +11,7 @@ use shapez_runtime::{LabPaths, RunDirectory, run_suite};
 use std::{fs, time::Duration};
 
 /// One independently controlled lane, with local coordinates matching the circuit diagram.
-fn cell(x: i32, y: i32) -> Vec<Building> {
+fn cell() -> shapez_blueprint::Cell {
     // Overflow feedback circuit adapted from Rhaversen's published single-lane design:
     // https://www.reddit.com/r/shapezio/comments/1l53i2c/input_priority_to_vortex/
     let specs = [
@@ -30,16 +30,44 @@ fn cell(x: i32, y: i32) -> Vec<Building> {
         (-1, 1, 1, "Merger3To1InternalVariant"),
         (0, 1, 2, "BeltFilterDefaultInternalVariant"),
     ];
-    specs
+    let buildings = specs
         .into_iter()
         .map(|(dx, dy, r, t)| {
-            let mut b = Building::new(t, x + dx, y + dy, 0, Rotation::new(r));
+            let mut b = Building::new(t, dx, dy, 0, Rotation::new(r));
             if t.starts_with("Constant") {
                 b.configuration = Some(Configuration(vec![5]));
             }
             b
         })
-        .collect()
+        .collect();
+    use shapez_blueprint::{Cell, CellPort};
+    Cell::new(
+        buildings,
+        [],
+        [
+            (
+                "primary",
+                CellPort {
+                    position: (-2, -2, 0),
+                    direction: 1,
+                },
+            ),
+            (
+                "secondary",
+                CellPort {
+                    position: (1, 1, 0),
+                    direction: 2,
+                },
+            ),
+            (
+                "output",
+                CellPort {
+                    position: (-1, 2, 0),
+                    direction: 1,
+                },
+            ),
+        ],
+    )
 }
 
 /// Build one independently routed interface with three identical building layers.
@@ -49,11 +77,20 @@ fn build(design: &Design) -> Result<Blueprint> {
     } else {
         [(6, 6), (13, 6), (6, 13), (13, 13)]
     };
-    let mut buildings = centers
+    let cells: Vec<_> = centers
         .into_iter()
-        .flat_map(|(x, y)| cell(x, y))
-        .collect::<Vec<_>>();
-    routing::connect(&mut buildings, &centers, design)?;
+        .map(|(x, y)| {
+            cell().placed(shapez_blueprint::Placement {
+                origin: (x, y, 0),
+                rotation: Rotation::new(0),
+            })
+        })
+        .collect();
+    let mut buildings = cells
+        .iter()
+        .flat_map(|c| c.buildings.iter().cloned())
+        .collect();
+    routing::connect(&mut buildings, &cells, design)?;
     let layer = buildings.clone();
     for z in 1..3 {
         buildings.extend(layer.iter().cloned().map(|mut b| {

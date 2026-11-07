@@ -1,7 +1,7 @@
 //! Outward-facing cutting rows keep distribution in the central aisle.
 use crate::design;
 use anyhow::Result;
-use shapez_blueprint::{Building, Rotation};
+use shapez_blueprint::{Building, Placement, Rotation};
 use shapez_model::{
     ExchangeGroup, FoundationGeometry, TileNet as Net, TilePoint as Point, TileRoutingProblem,
 };
@@ -27,28 +27,20 @@ pub fn build() -> Result<Vec<Building>> {
                 (left + 3 - p.1, 12 + p.0, z)
             }
         };
-        for i in 0..16 {
-            let r = if i < 8 { 3 } else { 1 };
-            for mut v in design::cell(0, 0) {
-                let final_merger = v.x == 4 && v.y == 3;
-                let p = point(i, (v.x, v.y));
-                v.x = p.0;
-                v.y = p.1;
-                v.layer = z;
-                v.rotation = Rotation::new(v.rotation.index() + r);
-                if final_merger {
-                    v.definition = "Merger2To1LInternalVariantMirrored".into();
-                    v.rotation = Rotation::new(if i < 8 { 0 } else { 2 });
-                }
-                fixed.insert(p);
-                b.push(v);
-            }
-            for p in [(0, 1), (2, 0), (2, 3)] {
-                fixed.insert(point(i, p));
-            }
+        let cells: Vec<_> = (0..16)
+            .map(|i| {
+                design::cell(true).placed(Placement {
+                    origin: point(i, (0, 0)),
+                    rotation: Rotation::new(if i < 8 { 3 } else { 1 }),
+                })
+            })
+            .collect();
+        for (i, cell) in cells.iter().enumerate() {
+            fixed.extend(cell.footprint.iter().copied());
+            b.extend(cell.buildings.iter().cloned());
             if i % 4 != 3 {
                 let left = i % 8 < 4;
-                let p = point(i, (-1, 2));
+                let p = cells[i].port("input")?.position;
                 let mirrored = if i < 8 { left } else { !left };
                 fixed.insert(p);
                 b.push(Building::new(
@@ -97,6 +89,14 @@ pub fn build() -> Result<Vec<Building>> {
                 Rotation::new(r),
             ));
         }
+        let inputs = cells
+            .iter()
+            .map(|c| c.port("input"))
+            .collect::<Result<Vec<_>>>()?;
+        let outputs = cells
+            .iter()
+            .map(|c| c.port("output"))
+            .collect::<Result<Vec<_>>>()?;
         let mut used = [false; 16];
         for g in 0..4 {
             let (x, y, dir) = [(27, 8, 2), (27, 9, 2), (32, 9, 0), (32, 8, 0)][g];
@@ -106,12 +106,12 @@ pub fn build() -> Result<Vec<Building>> {
                 let id = (0..16)
                     .filter(|&i| !used[i] && (i % 4 != 3) == (j < 3))
                     .min_by_key(|&i| {
-                        let p = point(i, (-1, 2));
+                        let p = inputs[i].position;
                         (a.0 - p.0).abs() + (a.1 - p.1).abs()
                     })
                     .unwrap();
                 used[id] = true;
-                let p = point(id, (-1, 2));
+                let p = inputs[id].position;
                 let left = id % 8 < 4;
                 let (target, bd) = if j < 3 {
                     (
@@ -119,7 +119,7 @@ pub fn build() -> Result<Vec<Building>> {
                         if left { 2 } else { 0 },
                     )
                 } else {
-                    (p, if id < 8 { 3 } else { 1 })
+                    (p, inputs[id].direction)
                 };
                 nets.push(Net {
                     a,
@@ -144,7 +144,7 @@ pub fn build() -> Result<Vec<Building>> {
             ]);
         }
         let dist = |i: usize, j: usize| {
-            let p = point(i, (4, 4));
+            let p = outputs[i].position;
             let q = ports[j].0;
             (p.0 - q.0).abs() + (p.1 - q.1).abs()
         };
@@ -166,8 +166,8 @@ pub fn build() -> Result<Vec<Building>> {
         for i in 0..16 {
             let (p, d) = ports[ids[i]];
             nets.push(Net {
-                a: point(i, (4, 4)),
-                ad: if i < 8 { 0 } else { 2 },
+                a: outputs[i].position,
+                ad: outputs[i].direction,
                 b: p,
                 bd: d,
                 input: false,
