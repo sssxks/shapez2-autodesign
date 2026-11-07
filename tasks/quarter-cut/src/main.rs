@@ -45,7 +45,7 @@ fn main() -> Result<()> {
     }
     let source = argument.map(std::path::PathBuf::from).unwrap_or_else(|| {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("templates/quarter-cut-1x2.spz2bp")
+            .join("templates/quarter-cut-1x2-original.spz2bp")
     });
     let compact = source.to_string_lossy() == "--compact";
     let bp = if source.to_string_lossy() == "--solve" || compact {
@@ -85,13 +85,17 @@ fn main() -> Result<()> {
         Blueprint::read(source)?
     };
     anyhow::ensure!(bp.islands().len() == 1, "Expected one factory platform");
+    let original = bp.islands()[0]
+        .buildings()
+        .iter()
+        .any(|b| b.definition == "BeltPortReceiverInternalVariant" && b.x == 8 && b.y == 2);
     let (chunks, sockets) = match bp.islands()[0].definition.as_str() {
         "Foundation_1x2" => (
             2,
             if compact {
                 compact::sockets()
             } else {
-                compact::sockets_for(true)
+                compact::sockets_for(!original)
             },
         ),
         "Foundation_1x3" => (3, design::sockets()),
@@ -106,7 +110,9 @@ fn main() -> Result<()> {
             Some(IconComponent::Shape("Cu------".into())),
         ],
     });
-    let output = run.path.join(if chunks == 2 {
+    let output = run.path.join(if chunks == 2 && original {
+        "quarter-cut-1x2-original.spz2bp"
+    } else if chunks == 2 {
         "quarter-cut-1x2.spz2bp"
     } else {
         "quarter-cut-1x3.spz2bp"

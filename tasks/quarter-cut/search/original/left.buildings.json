@@ -153,26 +153,10 @@
   },
   {
     "X": 1,
-    "Y": 8,
-    "L": 0,
-    "R": 2,
-    "T": "BeltDefaultLeftInternalVariant",
-    "C": null
-  },
-  {
-    "X": 1,
-    "Y": 9,
-    "L": 0,
-    "R": 1,
-    "T": "CutterDefaultInternalVariant",
-    "C": null
-  },
-  {
-    "X": 1,
     "Y": 10,
     "L": 0,
     "R": 1,
-    "T": "RotatorOneQuadCCWInternalVariant",
+    "T": "RotatorOneQuadInternalVariant",
     "C": null
   },
   {
@@ -188,7 +172,7 @@
     "Y": 12,
     "L": 0,
     "R": 1,
-    "T": "BeltDefaultForwardInternalVariant",
+    "T": "BeltDefaultLeftInternalVariant",
     "C": null
   },
   {
@@ -196,7 +180,7 @@
     "Y": 13,
     "L": 0,
     "R": 0,
-    "T": "Merger2To1LInternalVariant",
+    "T": "BeltDefaultForwardInternalVariant",
     "C": null
   },
   {
@@ -252,7 +236,15 @@
     "Y": 8,
     "L": 0,
     "R": 2,
-    "T": "BeltDefaultForwardInternalVariant",
+    "T": "BeltDefaultLeftInternalVariant",
+    "C": null
+  },
+  {
+    "X": 2,
+    "Y": 9,
+    "L": 0,
+    "R": 1,
+    "T": "CutterDefaultInternalVariantMirrored",
     "C": null
   },
   {
@@ -260,7 +252,7 @@
     "Y": 10,
     "L": 0,
     "R": 1,
-    "T": "RotatorOneQuadInternalVariant",
+    "T": "RotatorOneQuadCCWInternalVariant",
     "C": null
   },
   {
@@ -276,7 +268,7 @@
     "Y": 12,
     "L": 0,
     "R": 1,
-    "T": "BeltDefaultForwardInternalVariant",
+    "T": "Merger2To1LInternalVariantMirrored",
     "C": null
   },
   {
@@ -292,7 +284,7 @@
     "Y": 1,
     "L": 0,
     "R": 2,
-    "T": "RotatorOneQuadCCWInternalVariant",
+    "T": "RotatorOneQuadInternalVariant",
     "C": null
   },
   {
@@ -300,7 +292,7 @@
     "Y": 2,
     "L": 0,
     "R": 2,
-    "T": "RotatorOneQuadInternalVariant",
+    "T": "RotatorOneQuadCCWInternalVariant",
     "C": null
   },
   {
@@ -361,10 +353,10 @@
   },
   {
     "X": 4,
-    "Y": 1,
+    "Y": 2,
     "L": 0,
     "R": 2,
-    "T": "CutterDefaultInternalVariant",
+    "T": "CutterDefaultInternalVariantMirrored",
     "C": null
   },
   {
@@ -452,7 +444,7 @@
     "Y": 1,
     "L": 0,
     "R": 1,
-    "T": "Splitter1To2LInternalVariantMirrored",
+    "T": "BeltDefaultForwardInternalVariant",
     "C": null
   },
   {
@@ -460,7 +452,7 @@
     "Y": 2,
     "L": 0,
     "R": 1,
-    "T": "BeltDefaultForwardInternalVariant",
+    "T": "Splitter1To2LInternalVariantMirrored",
     "C": null
   },
   {
@@ -524,39 +516,15 @@
     "Y": 0,
     "L": 0,
     "R": 1,
-    "T": "BeltDefaultForwardInternalVariant",
-    "C": null
-  },
-  {
-    "X": 6,
-    "Y": 1,
-    "L": 0,
-    "R": 1,
     "T": "BeltPortSenderInternalVariant",
-    "C": null
-  },
-  {
-    "X": 6,
-    "Y": 2,
-    "L": 0,
-    "R": 3,
-    "T": "BeltDefaultLeftInternalVariantMirrored",
     "C": null
   },
   {
     "X": 6,
     "Y": 3,
     "L": 0,
-    "R": 3,
-    "T": "Merger2To1LInternalVariant",
-    "C": null
-  },
-  {
-    "X": 6,
-    "Y": 4,
-    "L": 0,
-    "R": 2,
-    "T": "BeltDefaultLeftInternalVariantMirrored",
+    "R": 0,
+    "T": "BeltDefaultForwardInternalVariant",
     "C": null
   },
   {
@@ -641,18 +609,10 @@
   },
   {
     "X": 7,
-    "Y": 2,
-    "L": 0,
-    "R": 0,
-    "T": "BeltDefaultLeftInternalVariantMirrored",
-    "C": null
-  },
-  {
-    "X": 7,
     "Y": 3,
     "L": 0,
-    "R": 1,
-    "T": "BeltDefaultLeftInternalVariant",
+    "R": 0,
+    "T": "Merger2To1LInternalVariantMirrored",
     "C": null
   },
   {
@@ -660,7 +620,7 @@
     "Y": 4,
     "L": 0,
     "R": 3,
-    "T": "BeltDefaultLeftInternalVariant",
+    "T": "BeltDefaultForwardInternalVariant",
     "C": null
   },
   {
@@ -804,15 +764,15 @@
     "Y": 11,
     "L": 0,
     "R": 1,
-    "T": "Merger2To1LInternalVariant",
+    "T": "BeltDefaultLeftInternalVariant",
     "C": null
   },
   {
     "X": 8,
     "Y": 12,
     "L": 0,
-    "R": 1,
-    "T": "BeltDefaultLeftInternalVariantMirrored",
+    "R": 2,
+    "T": "BeltPortReceiverInternalVariant",
     "C": null
   },
   {
@@ -833,26 +793,10 @@
   },
   {
     "X": 9,
-    "Y": 1,
-    "L": 0,
-    "R": 2,
-    "T": "BeltDefaultLeftInternalVariant",
-    "C": null
-  },
-  {
-    "X": 9,
-    "Y": 2,
-    "L": 0,
-    "R": 1,
-    "T": "CutterDefaultInternalVariant",
-    "C": null
-  },
-  {
-    "X": 9,
     "Y": 3,
     "L": 0,
     "R": 1,
-    "T": "RotatorOneQuadCCWInternalVariant",
+    "T": "RotatorOneQuadInternalVariant",
     "C": null
   },
   {
@@ -907,16 +851,24 @@
     "X": 9,
     "Y": 11,
     "L": 0,
-    "R": 2,
-    "T": "Merger2To1LInternalVariantMirrored",
+    "R": 1,
+    "T": "Merger3To1InternalVariant",
+    "C": null
+  },
+  {
+    "X": 9,
+    "Y": 12,
+    "L": 0,
+    "R": 1,
+    "T": "BeltDefaultForwardInternalVariant",
     "C": null
   },
   {
     "X": 9,
     "Y": 13,
     "L": 0,
-    "R": 2,
-    "T": "BeltPortReceiverInternalVariant",
+    "R": 1,
+    "T": "BeltDefaultLeftInternalVariantMirrored",
     "C": null
   },
   {
@@ -924,15 +876,23 @@
     "Y": 0,
     "L": 0,
     "R": 0,
-    "T": "BeltDefaultForwardInternalVariant",
+    "T": "Splitter1To2LInternalVariantMirrored",
     "C": null
   },
   {
     "X": 10,
     "Y": 1,
     "L": 0,
-    "R": 2,
+    "R": 1,
     "T": "BeltDefaultForwardInternalVariant",
+    "C": null
+  },
+  {
+    "X": 10,
+    "Y": 2,
+    "L": 0,
+    "R": 1,
+    "T": "CutterDefaultInternalVariantMirrored",
     "C": null
   },
   {
@@ -940,7 +900,7 @@
     "Y": 3,
     "L": 0,
     "R": 1,
-    "T": "RotatorOneQuadInternalVariant",
+    "T": "RotatorOneQuadCCWInternalVariant",
     "C": null
   },
   {
@@ -1000,40 +960,16 @@
     "C": null
   },
   {
-    "X": 10,
-    "Y": 12,
-    "L": 0,
-    "R": 3,
-    "T": "BeltDefaultLeftInternalVariantMirrored",
-    "C": null
-  },
-  {
-    "X": 10,
-    "Y": 13,
-    "L": 0,
-    "R": 2,
-    "T": "BeltDefaultLeftInternalVariantMirrored",
-    "C": null
-  },
-  {
     "X": 11,
     "Y": 0,
     "L": 0,
     "R": 0,
-    "T": "BeltDefaultForwardInternalVariant",
+    "T": "Splitter1To2LInternalVariantMirrored",
     "C": null
   },
   {
     "X": 11,
     "Y": 1,
-    "L": 0,
-    "R": 2,
-    "T": "Splitter1To2LInternalVariant",
-    "C": null
-  },
-  {
-    "X": 11,
-    "Y": 2,
     "L": 0,
     "R": 1,
     "T": "BeltPortSenderInternalVariant",
@@ -1104,35 +1040,11 @@
     "C": null
   },
   {
-    "X": 11,
-    "Y": 12,
-    "L": 0,
-    "R": 0,
-    "T": "Merger2To1LInternalVariantMirrored",
-    "C": null
-  },
-  {
-    "X": 11,
-    "Y": 13,
-    "L": 0,
-    "R": 2,
-    "T": "Splitter1To2LInternalVariantMirrored",
-    "C": null
-  },
-  {
     "X": 12,
     "Y": 0,
     "L": 0,
     "R": 0,
-    "T": "Splitter1To2LInternalVariantMirrored",
-    "C": null
-  },
-  {
-    "X": 12,
-    "Y": 1,
-    "L": 0,
-    "R": 1,
-    "T": "BeltDefaultLeftInternalVariantMirrored",
+    "T": "BeltPortSenderInternalVariant",
     "C": null
   },
   {
@@ -1195,24 +1107,8 @@
     "X": 12,
     "Y": 12,
     "L": 0,
-    "R": 0,
-    "T": "BeltDefaultLeftInternalVariantMirrored",
-    "C": null
-  },
-  {
-    "X": 12,
-    "Y": 13,
-    "L": 0,
-    "R": 1,
-    "T": "BeltDefaultLeftInternalVariantMirrored",
-    "C": null
-  },
-  {
-    "X": 13,
-    "Y": 0,
-    "L": 0,
-    "R": 0,
-    "T": "BeltDefaultForwardInternalVariant",
+    "R": 2,
+    "T": "BeltPortSenderInternalVariant",
     "C": null
   },
   {
@@ -1283,16 +1179,8 @@
     "X": 13,
     "Y": 12,
     "L": 0,
-    "R": 1,
-    "T": "BeltDefaultLeftInternalVariant",
-    "C": null
-  },
-  {
-    "X": 14,
-    "Y": 0,
-    "L": 0,
-    "R": 0,
-    "T": "BeltDefaultForwardInternalVariant",
+    "R": 2,
+    "T": "Merger2To1LInternalVariantMirrored",
     "C": null
   },
   {
@@ -1364,23 +1252,15 @@
     "Y": 11,
     "L": 0,
     "R": 1,
-    "T": "BeltDefaultForwardInternalVariant",
+    "T": "Merger2To1LInternalVariant",
     "C": null
   },
   {
     "X": 14,
     "Y": 12,
     "L": 0,
-    "R": 0,
-    "T": "Merger2To1LInternalVariant",
-    "C": null
-  },
-  {
-    "X": 14,
-    "Y": 13,
-    "L": 0,
     "R": 2,
-    "T": "BeltPortSenderInternalVariant",
+    "T": "Merger2To1LInternalVariantMirrored",
     "C": null
   },
   {
@@ -1388,7 +1268,7 @@
     "Y": 0,
     "L": 0,
     "R": 0,
-    "T": "BeltDefaultForwardInternalVariant",
+    "T": "BeltPortReceiverInternalVariant",
     "C": null
   },
   {
@@ -1468,23 +1348,15 @@
     "Y": 11,
     "L": 0,
     "R": 1,
-    "T": "BeltDefaultForwardInternalVariant",
+    "T": "BeltDefaultLeftInternalVariantMirrored",
     "C": null
   },
   {
     "X": 15,
     "Y": 12,
     "L": 0,
-    "R": 1,
-    "T": "Merger2To1LInternalVariantMirrored",
-    "C": null
-  },
-  {
-    "X": 15,
-    "Y": 13,
-    "L": 0,
     "R": 2,
-    "T": "Merger2To1LInternalVariantMirrored",
+    "T": "BeltDefaultForwardInternalVariant",
     "C": null
   },
   {
@@ -1556,20 +1428,12 @@
     "Y": 11,
     "L": 0,
     "R": 1,
-    "T": "BeltDefaultForwardInternalVariant",
-    "C": null
-  },
-  {
-    "X": 16,
-    "Y": 12,
-    "L": 0,
-    "R": 1,
     "T": "RotatorOneQuadInternalVariant",
     "C": null
   },
   {
     "X": 16,
-    "Y": 13,
+    "Y": 12,
     "L": 0,
     "R": 1,
     "T": "BeltDefaultLeftInternalVariantMirrored",

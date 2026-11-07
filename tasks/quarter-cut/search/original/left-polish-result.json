@@ -1,0 +1,8 @@
+{
+  "completed": 8,
+  "constraints": 45131,
+  "required": 8,
+  "seconds": 30.200080800000002,
+  "status": "FEASIBLE",
+  "variables": 23684
+}

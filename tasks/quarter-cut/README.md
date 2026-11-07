@@ -1,5 +1,17 @@
 # 1×2 四象限切割器：12 带输入 → 48 带输出
 
+**原图五个接口的版本已完成：上方左口输入，左侧、右侧、下方两口输出。** 使用横向 1×2 平台，每口三层 × 四带，全部 48 条输出通过原生满速验收。
+
+- [原图接口蓝图：quarter-cut-1x2-original.spz2bp](templates/quarter-cut-1x2-original.spz2bp)
+- [原图接口的分区、联合模型、保存解和重建步骤](search/original/README.md)
+- [原图接口逐带测量](results/quarter-cut-1x2-original-measurements.json)
+
+原图接口版共 1,134 个建筑，左右两个 17×14 区域分别求出单层设计后复制到三层，没有升降机。输入 `CuCuCuCu` 和 `RrRrRrRr` 时，48 条输出每条在 120 秒内产出 240 个正确四分之一片；出口堵塞恢复通过，138 台合流器没有闲置入口。
+
+`cargo run --locked --release -p quarter-cut` 同时重建原图接口版与此前西侧输入版的蓝图和交互 HTML，输出到 `artifacts/quarter-cut`。默认 `--native` 验收原图接口版；传入旧模板路径可验收西侧输入版。
+
+## 此前西侧输入版
+
 成品使用 **横向 1×2 平台、三层建筑**。输入四个象限相同的普通单层形状，保留全部四份并统一到第一个象限：`CuCuCuCu → Cu------`。
 
 [可导入蓝图：quarter-cut-1x2.spz2bp](templates/quarter-cut-1x2.spz2bp)。复制文件全部文本后在游戏中粘贴。需要解锁三层建筑以及切割、旋转、分流、合流、跳跃带和升降机。

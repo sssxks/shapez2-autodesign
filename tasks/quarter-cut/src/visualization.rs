@@ -1,4 +1,5 @@
 //! Adapt the delivered blueprint and saved material-flow witness to the shared viewer.
+use crate::Layout;
 use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 use shapez_blueprint::{Blueprint, Building};
@@ -56,16 +57,27 @@ fn connection(from: Point, to: Point, mask: i64, rate: f64, jump: bool) -> Conne
 }
 
 /// Reflect and replicate the exact same bank coordinates used by assembly.
-fn states() -> Result<BTreeMap<Point, State>> {
+fn states(layout: Layout) -> Result<BTreeMap<Point, State>> {
     let mut result = BTreeMap::new();
-    for (text, x_offset, repeat) in [
-        (include_str!("../search/bank-left.witness.json"), 0, 1),
-        (include_str!("../search/bank-right.witness.json"), 17, 3),
-    ] {
+    let banks = if layout == Layout::Original {
+        [
+            (include_str!("../search/original/left.witness.json"), 0, 3),
+            (include_str!("../search/original/right.witness.json"), 17, 3),
+        ]
+    } else {
+        [
+            (include_str!("../search/bank-left.witness.json"), 0, 1),
+            (include_str!("../search/bank-right.witness.json"), 17, 3),
+        ]
+    };
+    for (text, x_offset, repeat) in banks {
         let bank: Vec<State> = serde_json::from_str(text)?;
         for z in 0..repeat {
             for state in &bank {
                 for reflected in [false, true] {
+                    if reflected && layout == Layout::Original {
+                        continue;
+                    }
                     let mut s = state.clone();
                     s.position[0] += x_offset;
                     s.position[2] += z;
@@ -112,13 +124,13 @@ fn footprint(b: &Building) -> Vec<Point> {
 }
 
 /// Build an inspectable view from actual buildings, including every occupied auxiliary tile.
-pub fn scene(blueprint: &Blueprint) -> Result<Scene> {
+pub(crate) fn scene(blueprint: &Blueprint, layout: Layout) -> Result<Scene> {
     let buildings = blueprint
         .islands()
         .first()
         .context("Missing factory island")?
         .buildings();
-    let states = states()?;
+    let states = states(layout)?;
     let mut occupied = BTreeMap::new();
     let mut tiles = Vec::new();
     let mut origins = BTreeMap::new();
@@ -215,22 +227,76 @@ pub fn scene(blueprint: &Blueprint) -> Result<Scene> {
         }
     }
     for z in 0..3 {
-        for y in 5..9 {
-            connections.push(connection([-1, y, z], [0, y, z], 15, 2., false));
+        for lane in 5..9 {
+            let (from, to) = if layout == Layout::Original {
+                ([lane, -1, z], [lane, 0, z])
+            } else {
+                ([-1, lane, z], [0, lane, z])
+            };
+            connections.push(connection(from, to, 15, 2., false));
         }
     }
+    let regions = if layout == Layout::Original {
+        vec![
+            (
+                [0, 0, 17, 14],
+                "左区 · 北侧供料",
+                "17×14，单层解复制三层：北侧 12 带输入，西侧及南侧共 24 带输出；6 带完整形状向右区供料。核心位置、镜像与线路联合求解。",
+            ),
+            (
+                [17, 0, 34, 14],
+                "右区 · 东侧与南侧输出",
+                "17×14，单层解复制三层：接收左区 6 带原料，东侧及南侧共 24 带输出。两区在 y=5、8 连接。",
+            ),
+        ]
+    } else {
+        vec![
+            (
+                [0, 0, 17, 7],
+                "左上 · A",
+                "17×7×3：6 带进入，12 带四分之一片向上输出，3 带完整形状向右穿越。",
+            ),
+            (
+                [17, 0, 34, 7],
+                "右上 · B",
+                "17×7，单层解复制三层：接收 A 的 3 带，12 带四分之一片向上输出。",
+            ),
+            (
+                [0, 7, 17, 14],
+                "左下 · A 的反射",
+                "6 带进入，12 带四分之一片向下输出，3 带完整形状向右穿越。",
+            ),
+            (
+                [17, 7, 34, 14],
+                "右下 · B 的反射",
+                "接收左下的 3 带，12 带四分之一片向下输出。",
+            ),
+        ]
+    };
+    let ports = if layout == Layout::Original {
+        [
+            ([5, -1], [8, -1], "输入 12 带", true),
+            ([-1, 5], [-1, 8], "输出 12 带", false),
+            ([34, 5], [34, 8], "输出 12 带", false),
+            ([5, 14], [8, 14], "输出 12 带", false),
+            ([25, 14], [28, 14], "输出 12 带", false),
+        ]
+    } else {
+        [
+            ([-1, 5], [-1, 8], "输入 12 带", true),
+            ([5, -1], [8, -1], "输出 12 带", false),
+            ([25, -1], [28, -1], "输出 12 带", false),
+            ([5, 14], [8, 14], "输出 12 带", false),
+            ([25, 14], [28, 14], "输出 12 带", false),
+        ]
+    };
     Ok(Scene {
         description: "1×2 实际布局 · 有效地面 34×14 · 3 层 · 12 条满带输入 → 48 条满带输出。建筑取自重建蓝图，连接及流量取自对应的求解见证；没有示意性改动线路。".into(),
         width: 34, height: 14, layers: 3,
         categories: [("切割","C"),("旋转","R"),("合流","M"),("分流","S"),("升降","L"),("跳跃/端口","J"),("传送带","·")]
             .map(|(name,glyph)| Category { name:name.into(), glyph:glyph.into() }).into(),
-        regions: [
-            ([0,0,17,7],"左上 · A", "17×7×3：6 带进入，12 带四分之一片向上输出，3 带完整形状向右穿越。"),
-            ([17,0,34,7],"右上 · B", "17×7，单层解复制三层：接收 A 的 3 带，12 带四分之一片向上输出。"),
-            ([0,7,17,14],"左下 · A 的反射", "6 带进入，12 带四分之一片向下输出，3 带完整形状向右穿越。"),
-            ([17,7,34,14],"右下 · B 的反射", "接收左下的 3 带，12 带四分之一片向下输出。"),
-        ].map(|(bounds,name,description)| Region { bounds,name:name.into(),description:description.into() }).into(),
-        ports: [([-1,5],[-1,8],"输入 12 带",true),([5,-1],[8,-1],"输出 12 带",false),([25,-1],[28,-1],"输出 12 带",false),([5,14],[8,14],"输出 12 带",false),([25,14],[28,14],"输出 12 带",false)]
+        regions: regions.into_iter().map(|(bounds,name,description)| Region { bounds,name:name.into(),description:description.into() }).collect(),
+        ports: ports
             .map(|(from,to,name,input)| Port {from,to,name:name.into(),input}).into(),
         tiles, connections,
     })

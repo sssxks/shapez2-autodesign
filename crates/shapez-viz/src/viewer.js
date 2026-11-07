@@ -249,15 +249,17 @@ function draw(z) {
         class: "port",
       }),
     );
-    if (x === x2 && x < 0) {
+    if (x === x2 && (x < 0 || x >= scene.width)) {
+      const labelX = x < 0 ? -1.15 : scene.width + 1.35;
+      const labelY = (y + y2) / 2 + 0.5;
       svg.append(
         node(
           "text",
           {
-            x: -1.15,
-            y: (y + y2) / 2 + 0.5,
+            x: labelX,
+            y: labelY,
             class: "port-label",
-            transform: `rotate(-90 -1.15 ${(y + y2) / 2 + 0.5})`,
+            transform: `rotate(${x < 0 ? -90 : 90} ${labelX} ${labelY})`,
           },
           p.name,
         ),

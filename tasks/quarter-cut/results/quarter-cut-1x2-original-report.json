@@ -6,9 +6,9 @@
       "ok": true,
       "passed": true,
       "result": {
-        "buildings": 1185,
-        "graph": "C:\\Users\\27773\\AppData\\Local\\Temp\\shapez-lab\\runs\\1794084842725-21688-1\\factory-graph.json",
-        "imported_buildings": 1185,
+        "buildings": 1134,
+        "graph": "C:\\Users\\27773\\AppData\\Local\\Temp\\shapez-lab\\runs\\1794085189566-12920-1\\factory-graph.json",
+        "imported_buildings": 1134,
         "islands": 6,
         "open_connectors": [
           {
@@ -44,8 +44,8 @@
         ],
         "probe": {
           "blocked_output_recovery": true,
-          "connected_three_input_mergers": 12,
-          "connected_two_input_mergers": 132,
+          "connected_three_input_mergers": 15,
+          "connected_two_input_mergers": 123,
           "input_lanes": 12,
           "output_lanes": 48,
           "phases": [
@@ -643,9 +643,9 @@
           "verified": true
         },
         "simulated_seconds": 860.0,
-        "simulations": 1018
+        "simulations": 988
       },
-      "wall_seconds": 9.270477
+      "wall_seconds": 9.0095599
     },
     {
       "id": 2,
@@ -653,7 +653,7 @@
       "ok": true,
       "passed": true,
       "result": {
-        "buildings": 1185,
+        "buildings": 1134,
         "format_version": 5,
         "icon": [
           "shape:CuCuCuCu",
@@ -663,11 +663,11 @@
         ],
         "library_version": 5,
         "library_warning": false,
-        "native_export": "C:\\Users\\27773\\AppData\\Local\\Temp\\shapez-lab\\runs\\1794084842725-21688-1\\library-icon-native.spz2bp",
+        "native_export": "C:\\Users\\27773\\AppData\\Local\\Temp\\shapez-lab\\runs\\1794085189566-12920-1\\library-icon-native.spz2bp",
         "native_export_format": 5,
         "verified": true
       },
-      "wall_seconds": 0.0485143
+      "wall_seconds": 0.0355208
     }
   ]
 }

@@ -4,8 +4,8 @@
   "input_lanes": 12,
   "output_lanes": 48,
   "blocked_output_recovery": true,
-  "connected_two_input_mergers": 132,
-  "connected_three_input_mergers": 12,
+  "connected_two_input_mergers": 123,
+  "connected_three_input_mergers": 15,
   "unused_merger_connectors": 0,
   "phases": [
     {
