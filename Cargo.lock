@@ -217,6 +217,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarter-cut"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "shapez-blueprint",
+ "shapez-runtime",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"

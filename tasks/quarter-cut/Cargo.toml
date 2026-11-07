@@ -1,0 +1,12 @@
+[package]
+name = "quarter-cut"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+shapez-blueprint.workspace = true
+shapez-runtime.workspace = true
+
