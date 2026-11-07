@@ -4,9 +4,9 @@
 
 公共 Rust 代码全部是库，各自拥有独立职责：
 
-- `shapez-model`：形状、颜色、坐标、端口、加工 DAG、验证后配方及运输问题/结果模型。
-- `shapez-routing`：运输求解算法；依赖 `shapez-model`。
-- `shapez-blueprint`：蓝图编解码、摘要及游戏建筑编码；依赖 `shapez-model`。
+- `shapez-model`：形状、颜色、坐标、端口、加工 DAG、验证后配方及运输问题/结果模型、格子级路线、平台 socket 和端口清单。
+- `shapez-routing`：平台间及平台内运输求解算法；依赖 `shapez-model`。
+- `shapez-blueprint`：蓝图编解码、摘要、生产单元放置及游戏建筑编码；依赖 `shapez-model`。
 
 蓝图在输入边界解析为 `Blueprint`、`BlueprintContent`、`IslandBlueprint`、`BuildingBlueprint`、`Island` 和 `Building`。配置为解码后的 `Configuration(Vec<u8>)`，旋转为受约束的 `Rotation`；图标为四槽 `BlueprintIcon`。公共模型和任务算法均不携带原始 JSON、`serde_json::Value` 或未知字段字典。Newtonsoft 的 `$values`/`$value` 包装只在解码时处理；遇到未建模字段会报错，避免重写时丢失信息。具体格式与原生验证见[蓝图格式说明](blueprint-format.md)。
 - `shapez-runtime`：原生宿主生命周期、请求协议、批量执行与运行目录。
@@ -76,3 +76,42 @@ object Run(LabWorld world, JObject args, string outputDirectory);
 3. 通过 `cargo run -p <name> -- ...` 执行；宿主准备、测试编排等胶水也由任务入口调用公共库。
 4. 本任务库同样使用私有模块和 `lib.rs` 显式重导出。
 5. 语义独立于具体设计的能力才提取到对应公共 crate。
+
+## 可组合的实体产线设计
+
+`priority-merge`、`diagonal-cut` 和 `quarter-cut` 共同使用以下设计链路：
+
+1. 任务定义 `Cell`，包含局部建筑、完整 `footprint` 和命名 `CellPort`。多格建筑的非锚点占地在单元定义中声明。
+2. `Cell::placed(Placement)` 同时旋转、平移建筑、占地和端口。布局通过 `cell.port("input")` 等名字连接单元。
+3. 任务建立 `TileRoutingProblem`，声明地板几何、障碍及 `TileNet`。`ExchangeGroup` 由任务显式声明等价加工阶段；只有同组终点可以交换。不同优先级或不同流量阶段不得共用组。
+4. `shapez-routing` 返回 `Vec<TileRoute>`；结果保留实际选择的终点。`route_buildings` 将路线转换为原生建筑，求解器不依赖蓝图 crate。
+5. `FoundationSocket` 同时生成外部路由端点、`foundation_harness` 测试夹具，以及传给原生插件的 `FactoryBeltPort` 清单。
+
+`FoundationGeometry::strip` 对应当前使用的原生 1×N 平台族，采用设计坐标系中的长轴 x、短轴 y；不是任意平台形状生成器。`socket_tile` 提供四带接口的格子坐标，`socket_harness` 提供相邻运输平台坐标。quarter-cut 将 1×3 平台放在区块 x=1，并将建筑局部 x 减去 20；端口清单使用变换后的世界坐标，仍为设计中的 2..57。原生加载器继续使用游戏 `IslandLayoutQuery` 验证实际占地。
+
+### 路由策略
+
+- `solve_tiles_sequential`：固定楼层、按排列顺序占地、确定性重试；用于优先合并器和对角切割器。
+- `solve_tiles_negotiated`：多层、拥堵历史成本、终点交换及发射器干扰资源协商；用于四象限切割器。
+
+两者共用 `TileRouteStep` 的移动与终点规则，以及同一蓝图编码器。`TileResource::Occupancy` 表示真实占地（含升降途中楼层），`LauncherRange` 表示同向发射器的干扰范围；不存在用于模拟干扰的虚拟楼层。算法预算由任务传入。平台间运输仍使用 `TransportProblem` / `solve_transport`，其区块级拓扑独立于格子级路线。
+
+### 原生实验组合
+
+`BeltPortManifest.Parse` 在插件 `Configure` 中解析端口清单；`Bind` 在世界建立后绑定精确位置的原生发送器、接收器。角色及楼层内通道身份来自设计，插件不再重复计算平台边缘坐标。
+
+- `BeltSource`：带背压的速率供料，最多保留一个物品的供料额度；速率为零时不发送。
+- `BeltMeter`：按形状计数、可选允许形状集合以及输出阻塞；允许形状集合用于检查串线。
+- `BeltMeasurement.Run`：预热、清零、测量；任务继续拥有供料函数、时间和验收标准。
+
+这组组件用于逐带产线验收。已有 `RateScenario` 继续承担包含流体的工厂供需清单测量，复用同一个 `LabWorld.Advance` 模拟推进入口。
+
+### 验证生成链路
+
+```powershell
+cargo run -p priority-merge
+cargo run -p diagonal-cut --bin diagonal-cut
+cargo run -p quarter-cut -- --solve
+```
+
+原生验收串行执行，共享宿主暂存目录只允许一个实例持有。quarter-cut 默认仍打包已保存模板；验证布局或路由修改必须传 `--solve`，重新求解并验收生成结果。

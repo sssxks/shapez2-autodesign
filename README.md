@@ -19,8 +19,11 @@ tasks/
   cmam-compact/      CMAM 接入设计、旧版生成、原生生产/接入插件、模板与套件
   scaffold-recipe/   脚手架竖列配方策略、原生验证编排与用例生成
   quarter-cut/       1×3 平台的 12 带输入、48 带统一象限输出切割器
+  diagonal-cut/     两种对角切割器、共享格子级布线与原生验收
   priority-merge/    三种 1×1 平台的 12 带优先合并器、蓝图生成与原生验收
 ```
+
+三个平台内设计共用生产单元、命名端口、完整占地、格子级布线和原生供料计量组件；外部 socket 同时驱动路由、测试夹具和实验端口。新增设计的接入方式见[可组合的实体产线设计](docs/architecture.md#可组合的实体产线设计)。
 
 具体设计及已有诊断保存在 [CMAM 任务](tasks/cmam-compact/README.md) 和 [配方任务](tasks/scaffold-recipe/README.md)。公共接口与添加任务的方法见 [架构说明](docs/architecture.md)。
 
