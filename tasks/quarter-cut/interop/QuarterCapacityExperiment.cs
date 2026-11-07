@@ -32,6 +32,25 @@ public sealed class QuarterCapacityExperiment : IBlueprintExperiment
         File.WriteAllText(Path.Combine(root, "rotator-capacity.json"), JsonConvert.SerializeObject(report, Formatting.Indented));
         if (report.Any(m => m.count == 0))
             throw new InvalidOperationException("Rotator capacity probe produced no output");
-        return report;
+        var cutters = ((ISimulator)world.Simulator).Simulations.Select(s => s.Simulation).OfType<FullCutterSimulation>().ToArray();
+        var cutMeters = cutters.SelectMany(_ => new[] { new BeltMeter(), new BeltMeter() }).ToArray();
+        for (int i = 0; i < cutters.Length; i++)
+        {
+            cutters[i].LeftOutputLane.NextLane = cutMeters[2*i];
+            cutters[i].RightOutputLane.NextLane = cutMeters[2*i+1];
+        }
+        var full = GameBindings.Shapes.GetItem(GameBindings.ShapeIds.Resolve("CuCuCuCu"));
+        void FeedCutters(Ticks start, Ticks delta)
+        {
+            foreach (var cutter in cutters)
+                if (cutter.InputLane.CanAcceptItem(full))
+                    cutter.InputLane.HandOverItem(full, Ticks.Zero);
+        }
+        BeltMeasurement.Run(world, 30, 120, cutMeters, FeedCutters);
+        var cutterReport = cutMeters.Select(m => new { count=m.Counts.Values.Sum(),rate=m.Counts.Values.Sum()/120.0,shapes=m.Counts }).ToArray();
+        File.WriteAllText(Path.Combine(root,"cutter-capacity.json"),JsonConvert.SerializeObject(cutterReport,Formatting.Indented));
+        if (cutterReport.Any(m => m.count != 60))
+            throw new InvalidOperationException("Native full-cutter rate changed; update the capacity model");
+        return new { rotators=report,cutters=cutterReport };
     }
 }
