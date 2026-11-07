@@ -1,0 +1,11 @@
+{
+  "clone": "C:\\Users\\27773\\AppData\\Local\\Temp\\shapez-fresh-clone-1794080093159",
+  "head": "facc273cc40c88ee1c64e6a62dbd737bf0e37ae3",
+  "blueprint_sha256": "D029D294A1136EC591F4E91899E78EADD5D6A057485A1F15AB12E9137DBC0085",
+  "game_root": "C:\\Users\\27773\\AppData\\Local\\Temp\\shapez-fresh-clone-1794080093159\\missing-game",
+  "dotnet": "C:\\Users\\27773\\AppData\\Local\\Temp\\shapez-fresh-clone-1794080093159\\missing-dotnet.exe",
+  "target": "C:\\Users\\27773\\AppData\\Local\\Temp\\shapez-fresh-clone-1794080093159\\target",
+  "status": "PASS",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "command": "cd tasks/quarter-cut; cargo run --locked --release"
+}

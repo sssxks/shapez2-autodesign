@@ -44,3 +44,9 @@ To rebuild arbitrary solved bank files and immediately run native acceptance, us
 See [BANKS.md](BANKS.md). Dot-source `environment.ps1` to download/configure the pinned official OR-Tools Windows SDK. The search feature uses existing Rust bindings to CP-SAT and SCIP and needs their native build toolchain. Saved witnesses are warm-start hints; omit `--hint` for a cold solve. Time-limited, parallel solving can return different layouts or hit the time limit; it is not the deterministic reconstruction command above.
 
 The four 17×7 regions and fixed cutting cores are explicit design inputs in the Rust formulation. The original bank dimensions came from geometry and successful regional trials, not from an outer global partition optimizer.
+
+## Verified fresh-clone run
+
+On 2026-11-08, commit `facc273` was cloned with `git clone --no-local` into a new directory. The build used the clone's new `target` directory, with `CARGO_TARGET_DIR`, `ORTOOLS_PREFIX`, and `PROTOC` unset. Game and .NET paths were deliberately set to nonexistent locations. Running `cargo run --locked --release` inside `tasks/quarter-cut` produced the blueprint and interactive HTML successfully with Rust 1.98.1 on Windows.
+
+The generated blueprint was byte-identical to the native-verified template (SHA-256 above). Cargo's normal dependency cache was available. The [machine-readable result](../results/fresh-clone-reconstruction.json) records the checkout, command, paths and hash. This checks reconstruction from tracked solutions; cold solving and native acceptance have the separate prerequisites described above.
