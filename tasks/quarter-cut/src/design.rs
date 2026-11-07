@@ -14,9 +14,9 @@ pub fn cell(x: i32, y: i32) -> Vec<Building> {
         (3, 2, 0, "RotatorOneQuadCCWInternalVariant"),
         (3, 3, 0, "RotatorHalfInternalVariant"),
         (4, 0, 0, "BeltDefaultLeftInternalVariantMirrored"),
-        (4, 1, 1, "Merger3To1InternalVariant"),
-        (4, 2, 1, "Merger3To1InternalVariant"),
-        (4, 3, 0, "Merger3To1InternalVariant"),
+        (4, 1, 1, "Merger2To1LInternalVariantMirrored"),
+        (4, 2, 1, "Merger2To1LInternalVariantMirrored"),
+        (4, 3, 0, "Merger2To1LInternalVariant"),
     ] {
         b.push(Building::new(t, x + dx, y + dy, 0, Rotation::new(r)));
     }
