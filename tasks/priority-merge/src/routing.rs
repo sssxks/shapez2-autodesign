@@ -128,8 +128,9 @@ fn search(n: Net, occupied: &HashSet<Point>, ends: &HashSet<Point>) -> Option<Ve
                     continue;
                 }
                 let p = (s.p.0 + direction.0 * length, s.p.1 + direction.1 * length);
-                if !(2..=17).contains(&p.0)
-                    || !(2..=17).contains(&p.1)
+                // Foundation_1x1 has a 14x14 floor, not a filled 16x16 square.
+                // Boundary cells are only legal at the dedicated external ports.
+                if (!((3..=16).contains(&p.0) && (3..=16).contains(&p.1)) && p != n.b)
                     || occupied.contains(&p)
                     || (ends.contains(&p) && p != n.b)
                     || (p == n.b && length > 1)
