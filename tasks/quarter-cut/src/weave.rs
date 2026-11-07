@@ -35,6 +35,10 @@ struct Args {
     free_ports: bool,
     #[arg(long)]
     hint: Option<PathBuf>,
+    #[arg(long, default_value_t = 2)]
+    units: i64,
+    #[arg(long, requires = "free_ports")]
+    all_edges: bool,
 }
 #[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 struct Socket {
@@ -54,6 +58,7 @@ struct Boundary {
     enabled: Var,
     position: Point,
     supply: bool,
+    direction: usize,
 }
 #[derive(Default)]
 struct Synthesis {
@@ -145,6 +150,7 @@ impl Synthesis {
             enabled,
             position,
             supply,
+            direction,
         });
         enabled
     }
@@ -378,17 +384,26 @@ fn build(args: &Args) -> Synthesis {
         } else {
             vec![2, args.height - 2]
         };
-        let ports: Vec<_> = rows
+        let mut ports: Vec<_> = rows
             .into_iter()
             .map(|y| result.boundary((-1, y, 0), 0, 15, 1, true))
             .collect();
-        result.model.equal(Expr::sum(ports), 2);
+        if args.all_edges {
+            for y in 0..args.height {
+                ports.push(result.boundary((args.width, y, 0), 2, 15, 1, true));
+            }
+            for x in 0..args.width {
+                ports.push(result.boundary((x, -1, 0), 1, 15, 1, true));
+                ports.push(result.boundary((x, args.height, 0), 3, 15, 1, true));
+            }
+        }
+        result.model.equal(Expr::sum(ports), args.units);
         let cutters = result
             .choices
             .iter()
             .filter(|c| c.building.definition.starts_with("Cutter"))
             .map(|c| c.enabled);
-        result.model.equal(Expr::sum(cutters), 6);
+        result.model.equal(Expr::sum(cutters), 3 * args.units);
     } else {
         for y in 0..8 {
             let port = result.boundary(
@@ -406,11 +421,20 @@ fn build(args: &Args) -> Synthesis {
     } else {
         vec![1, args.height - 3]
     };
-    let ports: Vec<_> = rows
+    let mut ports: Vec<_> = rows
         .into_iter()
         .map(|y| result.boundary((args.width - 1, y, 0), 0, 1, 4, false))
         .collect();
-    result.model.equal(Expr::sum(ports), 2);
+    if args.all_edges {
+        for y in 0..args.height {
+            ports.push(result.boundary((0, y, 0), 2, 1, 4, false));
+        }
+        for x in 0..args.width {
+            ports.push(result.boundary((x, 0, 0), 3, 1, 4, false));
+            ports.push(result.boundary((x, args.height - 1, 0), 1, 1, 4, false));
+        }
+    }
+    result.model.equal(Expr::sum(ports), args.units);
     result.finish(args.rotators);
     result
 }
@@ -450,7 +474,9 @@ pub fn run() -> Result<()> {
     let args = Args::parse();
     ensure!(
         args.width > 0
-            && args.height >= 5
+            && args.height >= 2
+            && args.units > 0
+            && (args.units == 2 || args.whole && args.free_ports)
             && (args.whole || args.height == 8)
             && (1..=3).contains(&args.layers)
             && args.rotators >= 0
@@ -525,7 +551,7 @@ pub fn run() -> Result<()> {
             .boundaries
             .iter()
             .filter(|b| solution.value(b.enabled) == 1)
-            .map(|b| serde_json::json!({"position":b.position,"supply":b.supply}))
+            .map(|b| serde_json::json!({"position":b.position,"supply":b.supply,"direction":b.direction}))
             .collect();
         fs::write(path(".ports.json"), serde_json::to_vec_pretty(&ports)?)?;
         if args.native {
@@ -579,25 +605,33 @@ fn native(
             .boundaries
             .iter()
             .filter(|b| b.supply && solution.value(b.enabled) == 1)
-            .map(|b| (8 + b.position.0, 4 + b.position.1, b.position.2))
+            .map(|b| {
+                (
+                    (8 + b.position.0, 4 + b.position.1, b.position.2),
+                    b.direction,
+                )
+            })
             .collect::<Vec<_>>()
     } else {
-        vec![(7, 6, 0), (7, args.height + 2, 0)]
+        vec![((7, 6, 0), 0), ((7, args.height + 2, 0), 0)]
     };
     let offset = if args.whole { 8 } else { 11 };
     let outputs: Vec<_> = model
         .boundaries
         .iter()
         .filter(|b| !b.supply && solution.value(b.enabled) == 1)
-        .map(|b| (offset + b.position.0 + 1, 4 + b.position.1, b.position.2))
+        .map(|b| {
+            let q = neighbor(b.position, b.direction);
+            ((offset + q.0, 4 + q.1, q.2), b.direction)
+        })
         .collect();
-    for &(x, y, z) in inputs.iter().chain(&outputs) {
+    for &((x, y, z), direction) in inputs.iter().chain(&outputs) {
         buildings.push(Building::new(
             "BeltDefaultForwardInternalVariant",
             x,
             y,
             z,
-            Rotation::new(0),
+            Rotation::new(direction),
         ));
     }
     let count = buildings.len();
@@ -611,6 +645,8 @@ fn native(
     };
     let blueprint = run.path.join("weave.spz2bp");
     fs::write(&blueprint, encode_blueprint(&bp)?)?;
+    let inputs: Vec<_> = inputs.into_iter().map(|(p, _)| p).collect();
+    let outputs: Vec<_> = outputs.into_iter().map(|(p, _)| p).collect();
     let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[{"name":"weave","blueprint":blueprint,"expected_buildings":count,"inputs":inputs,"outputs":outputs,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":"QuarterWeaveExperiment"}}]});
     let suite_path = run.path.join("suite.json");
     fs::write(&suite_path, serde_json::to_vec_pretty(&suite)?)?;
