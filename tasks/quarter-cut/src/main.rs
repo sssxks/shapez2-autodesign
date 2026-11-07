@@ -13,8 +13,11 @@ fn main() -> Result<()> {
     let paths = LabPaths::discover();
     let run = RunDirectory::create(&paths.root, "quarter-cut")?;
     let argument = std::env::args().nth(1);
-    if matches!(argument.as_deref(), Some("--cell" | "--definitions")) {
-        return probe(&paths, &run, argument.as_deref() == Some("--cell"));
+    if matches!(
+        argument.as_deref(),
+        Some("--cell" | "--definitions" | "--capacity")
+    ) {
+        return probe(&paths, &run, argument.as_deref().unwrap());
     }
     let source = argument.map(std::path::PathBuf::from).unwrap_or_else(|| {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -75,7 +78,8 @@ fn main() -> Result<()> {
 }
 
 /// Run a bounded native discovery or unit-cell experiment without publishing a factory.
-fn probe(paths: &LabPaths, run: &RunDirectory, cell: bool) -> Result<()> {
+fn probe(paths: &LabPaths, run: &RunDirectory, mode: &str) -> Result<()> {
+    let cell = mode != "--definitions";
     let buildings = if cell {
         design::cell(false)
             .placed(shapez_blueprint::Placement {
@@ -97,7 +101,12 @@ fn probe(paths: &LabPaths, run: &RunDirectory, cell: bool) -> Result<()> {
     };
     let blueprint = run.path.join("probe.spz2bp");
     fs::write(&blueprint, encode_blueprint(&bp)?)?;
-    let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[{"name":if cell {"cell"}else{"definitions"},"blueprint":blueprint,"expected_buildings":count,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":if cell {"QuarterCellExperiment"}else{"QuarterCutDefinitions"}}}]});
+    let experiment = match mode {
+        "--capacity" => "QuarterCapacityExperiment",
+        "--cell" => "QuarterCellExperiment",
+        _ => "QuarterCutDefinitions",
+    };
+    let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[{"name":mode.trim_start_matches('-'),"blueprint":blueprint,"expected_buildings":count,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":experiment}}]});
     let suite_path = run.path.join("suite.json");
     fs::write(&suite_path, serde_json::to_vec_pretty(&suite)?)?;
     run_suite(paths, &suite_path, Duration::from_secs(180))
