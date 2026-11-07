@@ -49,6 +49,46 @@ pub fn reachable_targets(problem: &TileRoutingProblem) -> Vec<Vec<usize>> {
         })
         .collect()
 }
+
+/// Find source reservations separating a terminal from all equivalent destinations.
+/// Production buildings remain hard obstacles; reservations are priced to prefer
+/// explanations involving fewer terminals.
+pub fn source_blockers(problem: &TileRoutingProblem, id: usize) -> Option<Vec<usize>> {
+    let net = &problem.nets[id];
+    let targets: Vec<_> = problem
+        .nets
+        .iter()
+        .enumerate()
+        .filter(|(j, n)| *j == id || net.exchange.is_some() && n.exchange == net.exchange)
+        .map(|(_, n)| (n.b, n.bd))
+        .collect();
+    let usage: HashMap<_, _> = problem
+        .nets
+        .iter()
+        .enumerate()
+        .filter(|(j, _)| *j != id)
+        .map(|(_, n)| (TileResource::Occupancy(n.a), 1))
+        .collect();
+    let path = search(
+        net,
+        &problem.geometry,
+        &problem.fixed,
+        &usage,
+        &HashMap::new(),
+        10000,
+        &targets,
+    )?;
+    let occupied = resources(&path);
+    Some(
+        problem
+            .nets
+            .iter()
+            .enumerate()
+            .filter(|(j, n)| *j != id && occupied.contains(&TileResource::Occupancy(n.a)))
+            .map(|(j, _)| j)
+            .collect(),
+    )
+}
 use std::{
     cmp::Reverse,
     collections::{BinaryHeap, HashMap, HashSet},
