@@ -17,6 +17,11 @@ name = "quarter-weave"
 path = "src/bin/quarter-weave.rs"
 required-features = ["search"]
 
+[[bin]]
+name = "quarter-grid"
+path = "src/bin/quarter-grid.rs"
+required-features = ["search"]
+
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
