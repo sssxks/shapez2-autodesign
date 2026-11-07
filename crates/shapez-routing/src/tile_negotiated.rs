@@ -4,10 +4,146 @@ use shapez_model::{
     FoundationGeometry, TILE_DIRECTIONS as D, TileNet as Net, TilePoint as Point, TileResource,
     TileRoute, TileRouteStep as State, TileRoutingProblem, tile_resources as resources,
 };
+
+/// Destination indices reachable with production buildings and source tiles reserved.
+pub fn reachable_targets(problem: &TileRoutingProblem) -> Vec<Vec<usize>> {
+    let mut fixed = problem.fixed.clone();
+    fixed.extend(problem.nets.iter().map(|n| n.a));
+    problem
+        .nets
+        .iter()
+        .enumerate()
+        .map(|(i, net)| {
+            let mut remaining: Vec<_> = problem
+                .nets
+                .iter()
+                .enumerate()
+                .filter(|(j, n)| *j == i || net.exchange.is_some() && n.exchange == net.exchange)
+                .map(|(j, _)| j)
+                .collect();
+            let mut result = Vec::new();
+            while !remaining.is_empty() {
+                let targets: Vec<_> = remaining
+                    .iter()
+                    .map(|&j| (problem.nets[j].b, problem.nets[j].bd))
+                    .collect();
+                let Some(path) = search(
+                    net,
+                    &problem.geometry,
+                    &fixed,
+                    &HashMap::new(),
+                    &HashMap::new(),
+                    1,
+                    &targets,
+                ) else {
+                    break;
+                };
+                let p = path.last().unwrap().p;
+                let k = remaining
+                    .iter()
+                    .position(|&j| problem.nets[j].b == p)
+                    .unwrap();
+                result.push(remaining.remove(k));
+            }
+            result
+        })
+        .collect()
+}
 use std::{
     cmp::Reverse,
     collections::{BinaryHeap, HashMap, HashSet},
 };
+
+/// Match equivalent destinations before routing, preserving scarce accessible exits.
+pub fn assign_reachable_targets(problem: &mut TileRoutingProblem) -> Result<()> {
+    let mut fixed = problem.fixed.clone();
+    fixed.extend(problem.nets.iter().map(|n| n.a));
+    let mut groups = Vec::new();
+    for net in &problem.nets {
+        if let Some(group) = net.exchange
+            && !groups.contains(&group)
+        {
+            groups.push(group);
+        }
+    }
+    for group in groups {
+        let ids: Vec<_> = problem
+            .nets
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| n.exchange == Some(group))
+            .map(|(i, _)| i)
+            .collect();
+        let targets: Vec<_> = ids
+            .iter()
+            .map(|&i| (problem.nets[i].b, problem.nets[i].bd))
+            .collect();
+        let mut edges = Vec::new();
+        for &id in &ids {
+            let mut remaining: Vec<_> = (0..targets.len()).collect();
+            let mut reachable = Vec::new();
+            while !remaining.is_empty() {
+                let candidates: Vec<_> = remaining.iter().map(|&j| targets[j]).collect();
+                let Some(path) = search(
+                    &problem.nets[id],
+                    &problem.geometry,
+                    &fixed,
+                    &HashMap::new(),
+                    &HashMap::new(),
+                    1,
+                    &candidates,
+                ) else {
+                    break;
+                };
+                let p = path.last().unwrap().p;
+                let j = remaining.iter().position(|&j| targets[j].0 == p).unwrap();
+                reachable.push(remaining.remove(j));
+            }
+            anyhow::ensure!(
+                !reachable.is_empty(),
+                "Connection {id} at {:?} cannot reach any equivalent target",
+                problem.nets[id].a
+            );
+            edges.push(reachable);
+        }
+        fn augment(
+            i: usize,
+            edges: &[Vec<usize>],
+            seen: &mut [bool],
+            matched: &mut [Option<usize>],
+        ) -> bool {
+            for &j in &edges[i] {
+                if seen[j] {
+                    continue;
+                }
+                seen[j] = true;
+                if matched[j].is_none_or(|previous| augment(previous, edges, seen, matched)) {
+                    matched[j] = Some(i);
+                    return true;
+                }
+            }
+            false
+        }
+        let mut matched = vec![None; ids.len()];
+        let mut order: Vec<_> = (0..ids.len()).collect();
+        order.sort_by_key(|&i| edges[i].len());
+        for i in order {
+            anyhow::ensure!(
+                augment(i, &edges, &mut vec![false; ids.len()], &mut matched),
+                "No reachable destination matching in group {:?}; source {}",
+                group,
+                ids[i]
+            );
+        }
+        for (j, i) in matched.into_iter().enumerate() {
+            let net = &mut problem.nets[ids[i.unwrap()]];
+            (net.b, net.bd) = targets[j];
+            net.exchange = None;
+        }
+        eprintln!("Matched {} connections in group {:?}", ids.len(), group);
+    }
+    Ok(())
+}
 /// Find a directional path, pricing conflicts for the next negotiated routing round.
 fn search(
     n: &Net,
@@ -207,7 +343,11 @@ pub fn solve_tiles_negotiated(
                     &targets,
                 )
             }) else {
-                bail!("Unreachable connection {id}");
+                bail!(
+                    "Unreachable connection {id} from {:?} toward {:?}",
+                    nets[id].a,
+                    targets
+                );
             };
             let endpoint = path
                 .last()
