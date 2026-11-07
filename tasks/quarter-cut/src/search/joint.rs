@@ -245,6 +245,99 @@ pub struct ExportedRoute {
     pub steps: Vec<State>,
 }
 impl Joint {
+    pub fn buildings(&self, solution: &Solution) -> Result<Vec<shapez_blueprint::Building>> {
+        use shapez_blueprint::{Building, Placement, Rotation, route_buildings};
+        let selected: Vec<_> = self
+            .choices
+            .iter()
+            .filter(|c| solution.value(c.enabled) == 1)
+            .collect();
+        let mut buildings = Vec::new();
+        let mut targets = BTreeMap::new();
+        let mut sources = Vec::new();
+        for &p in &self.inputs {
+            sources.push((0, p, true));
+        }
+        for c in selected {
+            let cell = &c.cell;
+            let z = c.layer as i16;
+            buildings.extend(
+                crate::design::variant(cell.out, cell.mirror)
+                    .placed(Placement {
+                        origin: (cell.x, cell.y, z),
+                        rotation: Rotation::new(cell.r),
+                    })
+                    .buildings,
+            );
+            if cell.split >= 0 {
+                let (name, r) = [
+                    ("Splitter1To2LInternalVariant", 0),
+                    ("Splitter1To2LInternalVariantMirrored", 0),
+                    ("Splitter1To2LInternalVariantMirrored", 3),
+                    ("Splitter1To2LInternalVariant", 1),
+                ][cell.split as usize];
+                let p = cell.position((-1, if cell.mirror { 1 } else { 2 }), z);
+                buildings.push(Building::new(
+                    name,
+                    p.0,
+                    p.1,
+                    p.2,
+                    Rotation::new((cell.r + r) % 4),
+                ));
+            }
+            let input = cell.input(z);
+            targets.insert((0, input.p), input.d);
+            if let Some(p) = cell.continuation(z) {
+                sources.push((0, p, false));
+            }
+            sources.push((1, cell.output(z), false));
+        }
+        for p in &self.outputs {
+            targets.insert((1, p.p), p.d);
+        }
+        let next: BTreeMap<_, _> = self
+            .network
+            .arcs
+            .iter()
+            .filter(|a| solution.value(a.selected) != 0)
+            .map(|a| ((a.commodity, a.from), a.to))
+            .collect();
+        for (commodity, port, input) in sources {
+            let mut state = port.state();
+            if input
+                && !next.contains_key(&(commodity, state))
+                && !targets.contains_key(&(commodity, port.p))
+            {
+                continue;
+            }
+            let mut steps = vec![state.step()];
+            let mut seen = BTreeSet::new();
+            while let Some(&to) = next.get(&(commodity, state)) {
+                ensure!(seen.insert(state), "Source-connected cycle");
+                state = to;
+                steps.push(state.step());
+            }
+            let &bd = targets
+                .get(&(commodity, state.point()))
+                .ok_or_else(|| anyhow::anyhow!("Disconnected partial source"))?;
+            route_buildings(
+                &shapez_model::TileRoute {
+                    net: shapez_model::TileNet {
+                        a: port.p,
+                        ad: port.d,
+                        b: state.point(),
+                        bd,
+                        input,
+                        output: commodity == 1,
+                        exchange: None,
+                    },
+                    steps,
+                },
+                &mut buildings,
+            );
+        }
+        Ok(buildings)
+    }
     pub fn export(
         &self,
         solution: &Solution,

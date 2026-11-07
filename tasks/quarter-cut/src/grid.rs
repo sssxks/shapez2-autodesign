@@ -5,8 +5,18 @@ use serde::{Deserialize, Serialize};
 use shapez_blueprint::{Building, Rotation};
 use shapez_solver::{Expr, Limits, Model, Solution, Var};
 use std::{collections::BTreeMap, fs, path::PathBuf};
-type Point = (i32, i32);
-const D: [Point; 4] = [(1, 0), (0, 1), (-1, 0), (0, -1)];
+type Point = (i32, i32, i16);
+const D: [Point; 6] = [
+    (1, 0, 0),
+    (0, 1, 0),
+    (-1, 0, 0),
+    (0, -1, 0),
+    (0, 0, 1),
+    (0, 0, -1),
+];
+fn opposite(d: usize) -> usize {
+    if d < 4 { (d + 2) % 4 } else { 9 - d }
+}
 const SHAPES: [i64; 9] = [1, 2, 4, 8, 3, 6, 9, 12, 15];
 #[derive(Parser)]
 struct Args {
@@ -29,6 +39,18 @@ struct Args {
     /// Fix only cutting/half-rotation cores; synthesize the entire shared quarter network.
     #[arg(long)]
     cores: bool,
+    #[arg(long, default_value_t = 1)]
+    layers: i16,
+    #[arg(long)]
+    infer_hint: bool,
+    #[arg(long, num_args = 4, requires = "hint")]
+    window: Vec<i32>,
+    #[arg(long, default_value_t = 0)]
+    minimum: i64,
+    #[arg(long)]
+    buildings_hint: Option<PathBuf>,
+    #[arg(long, requires = "buildings_hint")]
+    lock_layout: bool,
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct Kind {
@@ -36,13 +58,15 @@ struct Kind {
     rotation: usize,
     auxiliary: bool,
     jump: Option<usize>,
+    #[serde(default)]
+    lift: bool,
 }
 struct Grammar {
     kinds: Vec<Kind>,
     rows: Vec<Vec<i64>>,
 }
 fn step(p: Point, d: usize, n: i32) -> Point {
-    (p.0 + D[d].0 * n, p.1 + D[d].1 * n)
+    (p.0 + D[d].0 * n, p.1 + D[d].1 * n, p.2 + D[d].2 * n as i16)
 }
 fn token(shape: i64, q: i64) -> i64 {
     4 * shape + q
@@ -61,17 +85,18 @@ impl Grammar {
             rotation,
             auxiliary,
             jump,
+            lift: definition.is_some_and(|d| d.starts_with("Lift")),
         });
         id
     }
     fn row(&mut self, kind: usize, inputs: &[(usize, i64)], outputs: &[(usize, i64)]) {
-        let mut row = vec![0; 9];
+        let mut row = vec![0; 13];
         row[0] = kind as i64;
         for &(d, t) in inputs {
             row[1 + d] = t;
         }
         for &(d, t) in outputs {
-            row[5 + d] = t;
+            row[7 + d] = t;
         }
         self.rows.push(row);
     }
@@ -200,6 +225,56 @@ impl Grammar {
                     }
                 }
             }
+            for (turn, (suffix, out)) in [
+                ("Forward", 0),
+                ("Left", 3),
+                ("LeftMirrored", 1),
+                ("Backward", 2),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                for (up, axis) in [(true, 4), (false, 5)] {
+                    let code = r * 8 + turn * 2 + usize::from(up);
+                    for length in 1..=2 {
+                        let name = format!(
+                            "Lift{length}{}{}InternalVariant{}",
+                            if up { "Up" } else { "Down" },
+                            suffix.trim_end_matches("Mirrored"),
+                            if suffix.ends_with("Mirrored") {
+                                "Mirrored"
+                            } else {
+                                ""
+                            }
+                        );
+                        let main = g.kind(Some(&name), r, false, None);
+                        let end = g.kind(None, r, true, None);
+                        g.kinds[end].lift = true;
+                        let middle = (length == 2).then(|| {
+                            let k = g.kind(None, r, true, None);
+                            g.kinds[k].lift = true;
+                            k
+                        });
+                        for shape in SHAPES {
+                            for q in 1..=4 {
+                                let a = 1000
+                                    + ((if length == 1 { 10 } else { 42 }) + code as i64) * 128
+                                    + token(shape, q);
+                                let b = 1000 + (74 + code as i64) * 128 + token(shape, q);
+                                g.row(main, &[(dir(2), token(shape, q))], &[(axis, a)]);
+                                g.row(
+                                    end,
+                                    &[(opposite(axis), if length == 1 { a } else { b })],
+                                    &[(dir(out), token(shape, q))],
+                                );
+                                if let Some(m) = middle {
+                                    g.row(m, &[(opposite(axis), a)], &[(axis, b)]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         g
     }
@@ -215,7 +290,7 @@ struct Edge {
 }
 struct Tile {
     kind: Var,
-    ports: [Edge; 8],
+    ports: [Edge; 12],
     jumps: [Var; 32],
     shapes: [Var; 3],
 }
@@ -228,6 +303,7 @@ struct Grid {
     targets: Vec<(Point, usize, Edge)>,
     width: i32,
     height: i32,
+    layers: i16,
 }
 fn operation(k: &Kind) -> i64 {
     match k.definition.as_deref() {
@@ -283,6 +359,8 @@ fn edge_value(e: Edge, s: &Solution) -> i64 {
         0
     } else if wire == 1 {
         token(shape, rate)
+    } else if wire >= 10 {
+        1000 + wire * 128 + token(shape, rate)
     } else {
         80 + (wire - 2) * 3
             + match shape {
@@ -295,6 +373,7 @@ fn edge_value(e: Edge, s: &Solution) -> i64 {
 }
 fn build(args: &Args) -> Grid {
     let (width, height) = if args.cell { (5, 4) } else { (34, 14) };
+    let layers = args.layers;
     let mut grammar = Grammar::build();
     let mut kinds = Vec::<Kind>::new();
     let remap: Vec<_> = grammar
@@ -306,6 +385,7 @@ fn build(args: &Args) -> Grid {
                     && other.rotation == k.rotation
                     && other.auxiliary == k.auxiliary
                     && other.jump == k.jump
+                    && other.lift == k.lift
             }) {
                 i
             } else {
@@ -323,6 +403,8 @@ fn build(args: &Args) -> Grid {
             for v in &mut row[1..] {
                 *v = if *v == 0 {
                     0
+                } else if *v >= 1000 {
+                    (*v - 1000) / 128
                 } else if *v < 80 {
                     1
                 } else {
@@ -338,8 +420,16 @@ fn build(args: &Args) -> Grid {
     let wiring = model.relation(grammar.rows.clone());
     let transforms = model.relation(shape_relations());
     let edge_types = model.relation(
-        (0..=9)
-            .map(|k| vec![k, i64::from(k != 0), i64::from(k == 1), i64::from(k >= 2)])
+        (0..=105)
+            .map(|k| {
+                vec![
+                    k,
+                    i64::from(k != 0),
+                    i64::from(k == 1),
+                    i64::from(k >= 2),
+                    i64::from((2..=9).contains(&k)),
+                ]
+            })
             .collect(),
     );
     let mut shape_rows = vec![vec![0, 0]];
@@ -355,7 +445,7 @@ fn build(args: &Args) -> Grid {
                 let def = k.definition.as_deref().unwrap_or("");
                 let capacity = if i == 0 {
                     0
-                } else if k.auxiliary || op == 4 {
+                } else if k.auxiliary && !k.lift || op == 4 {
                     1
                 } else if op != 0 {
                     2
@@ -424,7 +514,9 @@ fn build(args: &Args) -> Grid {
                 }
                 allowed.sort_unstable();
                 allowed.dedup();
-                cores.insert(p, (allowed, mask));
+                for z in 0..layers {
+                    cores.insert((p.0, p.1, z), (allowed.clone(), mask));
+                }
             }
         }
     }
@@ -432,7 +524,7 @@ fn build(args: &Args) -> Grid {
         .kinds
         .iter()
         .enumerate()
-        .filter(|(_, k)| !k.auxiliary && operation(k) != 4)
+        .filter(|(_, k)| (!k.auxiliary || k.lift) && operation(k) != 4)
         .map(|(i, _)| vec![i as i64])
         .collect();
     let open_table = model.relation(open_kinds);
@@ -442,110 +534,113 @@ fn build(args: &Args) -> Grid {
     let mut cuts = Expr::default();
     let mut stream_balance = Expr::default();
     let mut source_flow = Expr::default();
-    for y in 0..height {
-        for x in 0..width {
-            let p = (x, y);
-            let kind = model.variable(0, grammar.kinds.len() as i64 - 1);
-            let ports = std::array::from_fn(|i| {
-                let d = i % 4;
-                let key = if i < 4 {
-                    (step(p, d, 1), (d + 2) % 4)
-                } else {
-                    (p, d)
-                };
-                *edges.entry(key).or_insert_with(|| {
-                    let wire = model.variable(0, 9);
-                    let active = model.boolean();
-                    let normal = model.boolean();
-                    let internal = model.boolean();
-                    let shape = model.variable(0, 15);
-                    let rate = model.flow(active, 4);
-                    model.allow(edge_types, vec![wire, active, normal, internal]);
-                    model.allow(edge_shapes, vec![active, shape]);
+    for z in 0..layers {
+        for y in 0..height {
+            for x in 0..width {
+                let p = (x, y, z);
+                let kind = model.variable(0, grammar.kinds.len() as i64 - 1);
+                let ports = std::array::from_fn(|i| {
+                    let d = i % 6;
+                    let key = if i < 6 {
+                        (step(p, d, 1), opposite(d))
+                    } else {
+                        (p, d)
+                    };
+                    *edges.entry(key).or_insert_with(|| {
+                        let wire = model.variable(0, 105);
+                        let active = model.boolean();
+                        let normal = model.boolean();
+                        let internal = model.boolean();
+                        let shape = model.variable(0, 15);
+                        let rate = model.flow(active, 4);
+                        let narrow = model.boolean();
+                        model.allow(edge_types, vec![wire, active, normal, internal, narrow]);
+                        model.allow(edge_shapes, vec![active, shape]);
+                        model.bounded(
+                            Expr {
+                                terms: vec![(rate, 1), (narrow, 3)],
+                                constant: 0,
+                            },
+                            i64::MIN,
+                            4,
+                        );
+                        Edge {
+                            wire,
+                            shape,
+                            rate,
+                            active,
+                            normal,
+                            internal,
+                        }
+                    })
+                });
+                let used = model.boolean();
+                let cut = model.boolean();
+                let cap = model.variable(0, 4);
+                let op = model.variable(0, 4);
+                let delta = model.variable(-2, 1);
+                let jumps = std::array::from_fn(|_| model.boolean());
+                let shapes = std::array::from_fn(|_| model.variable(0, 15));
+                let mut cls = vec![kind, used, cut, cap, op, delta];
+                cls.extend(jumps);
+                model.allow(classes, cls);
+                let mut state = vec![kind];
+                state.extend(ports.map(|e| e.wire));
+                model.allow(wiring, state);
+                model.allow(transforms, vec![op, shapes[0], shapes[1], shapes[2]]);
+                let mut balance = Expr::from(cut);
+                for (i, e) in ports.iter().enumerate() {
                     model.bounded(
                         Expr {
-                            terms: vec![(rate, 1), (internal, 3)],
+                            terms: vec![(e.rate, 1), (cap, -1)],
                             constant: 0,
                         },
                         i64::MIN,
-                        4,
+                        0,
                     );
-                    Edge {
-                        wire,
-                        shape,
-                        rate,
-                        active,
-                        normal,
-                        internal,
+                    if i < 6 {
+                        equal_if(&mut model, e.active, e.shape, shapes[0], 15);
+                        balance.term(e.rate, 1);
+                    } else {
+                        equal_if(&mut model, e.normal, e.shape, shapes[1], 15);
+                        equal_if(&mut model, e.internal, e.shape, shapes[2], 15);
+                        balance.term(e.rate, -1);
                     }
-                })
-            });
-            let used = model.boolean();
-            let cut = model.boolean();
-            let cap = model.variable(0, 4);
-            let op = model.variable(0, 4);
-            let delta = model.variable(-2, 1);
-            let jumps = std::array::from_fn(|_| model.boolean());
-            let shapes = std::array::from_fn(|_| model.variable(0, 15));
-            let mut cls = vec![kind, used, cut, cap, op, delta];
-            cls.extend(jumps);
-            model.allow(classes, cls);
-            let mut state = vec![kind];
-            state.extend(ports.map(|e| e.wire));
-            model.allow(wiring, state);
-            model.allow(transforms, vec![op, shapes[0], shapes[1], shapes[2]]);
-            let mut balance = Expr::from(cut);
-            for (i, e) in ports.iter().enumerate() {
-                model.bounded(
-                    Expr {
-                        terms: vec![(e.rate, 1), (cap, -1)],
-                        constant: 0,
+                }
+                let mut upper = balance.clone();
+                let mut lower = balance;
+                for j in jumps {
+                    upper.term(j, -4);
+                    lower.term(j, 4);
+                }
+                model.bounded(upper, i64::MIN, 0);
+                model.bounded(lower, 0, i64::MAX);
+                if args.cores {
+                    if let Some((allowed, mask)) = cores.get(&p) {
+                        let rel = model.relation(allowed.iter().map(|&k| vec![k]).collect());
+                        model.allow(rel, vec![kind]);
+                        if *mask != 0 {
+                            let wanted = model.variable(*mask, *mask);
+                            equal_if(&mut model, used, shapes[0], wanted, 15);
+                        }
+                    } else {
+                        model.allow(open_table, vec![kind]);
+                    }
+                }
+                objective.term(used, 1);
+                cuts.term(cut, 1);
+                stream_balance.term(delta, 1);
+                model.hint(kind, 0);
+                tiles.insert(
+                    p,
+                    Tile {
+                        kind,
+                        ports,
+                        jumps,
+                        shapes,
                     },
-                    i64::MIN,
-                    0,
                 );
-                if i < 4 {
-                    equal_if(&mut model, e.active, e.shape, shapes[0], 15);
-                    balance.term(e.rate, 1);
-                } else {
-                    equal_if(&mut model, e.normal, e.shape, shapes[1], 15);
-                    equal_if(&mut model, e.internal, e.shape, shapes[2], 15);
-                    balance.term(e.rate, -1);
-                }
             }
-            let mut upper = balance.clone();
-            let mut lower = balance;
-            for j in jumps {
-                upper.term(j, -4);
-                lower.term(j, 4);
-            }
-            model.bounded(upper, i64::MIN, 0);
-            model.bounded(lower, 0, i64::MAX);
-            if args.cores {
-                if let Some((allowed, mask)) = cores.get(&p) {
-                    let rel = model.relation(allowed.iter().map(|&k| vec![k]).collect());
-                    model.allow(rel, vec![kind]);
-                    if *mask != 0 {
-                        let wanted = model.variable(*mask, *mask);
-                        equal_if(&mut model, used, shapes[0], wanted, 15);
-                    }
-                } else {
-                    model.allow(open_table, vec![kind]);
-                }
-            }
-            objective.term(used, 1);
-            cuts.term(cut, 1);
-            stream_balance.term(delta, 1);
-            model.hint(kind, 0);
-            tiles.insert(
-                p,
-                Tile {
-                    kind,
-                    ports,
-                    jumps,
-                    shapes,
-                },
-            );
         }
     }
     for (&p, t) in &tiles {
@@ -568,14 +663,14 @@ fn build(args: &Args) -> Grid {
                         &mut model,
                         sender,
                         t.ports[(r + 2) % 4].shape,
-                        other.ports[4 + r].shape,
+                        other.ports[6 + r].shape,
                         15,
                     );
                     equal_if(
                         &mut model,
                         sender,
                         t.ports[(r + 2) % 4].rate,
-                        other.ports[4 + r].rate,
+                        other.ports[6 + r].rate,
                         4,
                     );
                     for k in 0..4 {
@@ -598,20 +693,25 @@ fn build(args: &Args) -> Grid {
         }
     }
     let source_ports = if args.cell {
-        vec![((-1, 2), 0)]
+        vec![((-1, 2, layers - 1), 0)]
     } else {
-        (5..9).map(|x| ((x, -1), 1)).collect()
+        (0..layers)
+            .flat_map(|z| (5..9).map(move |x| ((x, -1, z), 1)))
+            .collect()
     };
     let target_ports = if args.cell {
-        vec![((4, 3), 0)]
+        vec![((4, 3, 0), 0)]
     } else {
-        (5..9)
-            .flat_map(|y| [((0, y), 2), ((33, y), 0)])
-            .chain(
-                [5, 25]
-                    .into_iter()
-                    .flat_map(|x| (x..x + 4).map(|x| ((x, 13), 1))),
-            )
+        (0..layers)
+            .flat_map(|z| {
+                (5..9)
+                    .flat_map(move |y| [((0, y, z), 2), ((33, y, z), 0)])
+                    .chain(
+                        [5, 25]
+                            .into_iter()
+                            .flat_map(move |x| (x..x + 4).map(move |x| ((x, 13, z), 1))),
+                    )
+            })
             .collect::<Vec<_>>()
     };
     let mut sources = Vec::new();
@@ -683,13 +783,14 @@ fn build(args: &Args) -> Grid {
         targets,
         width,
         height,
+        layers,
     }
 }
 #[derive(Serialize, Deserialize)]
 struct CellState {
     position: Point,
     kind: usize,
-    ports: [i64; 8],
+    ports: [i64; 12],
 }
 fn selected(grid: &Grid, solution: &Solution) -> Vec<CellState> {
     grid.tiles
@@ -704,12 +805,15 @@ fn selected(grid: &Grid, solution: &Solution) -> Vec<CellState> {
         })
         .collect()
 }
-fn apply_hint(grid: &mut Grid, p: Point, ports: [i64; 8], kind: Option<usize>) -> Result<()> {
+fn apply_hint(grid: &mut Grid, p: Point, ports: [i64; 12], kind: Option<usize>) -> Result<usize> {
     let decoded = ports.map(|value| {
         if value == 0 {
             (0, 0, 0)
         } else if value < 80 {
             (1, (value - 1) / 4, (value - 1) % 4 + 1)
+        } else if value >= 1000 {
+            let normal = (value - 1000) % 128;
+            ((value - 1000) / 128, (normal - 1) / 4, (normal - 1) % 4 + 1)
         } else {
             (
                 2 + (value - 80) / 3,
@@ -736,7 +840,7 @@ fn apply_hint(grid: &mut Grid, p: Point, ports: [i64; 8], kind: Option<usize>) -
                         && decoded.iter().enumerate().all(|(i, &(w, shape, _))| {
                             w == 0
                                 || shape
-                                    == s[if i < 4 {
+                                    == s[if i < 6 {
                                         1
                                     } else if w == 1 {
                                         2
@@ -765,31 +869,122 @@ fn apply_hint(grid: &mut Grid, p: Point, ports: [i64; 8], kind: Option<usize>) -
             grid.model.hint(v, value);
         }
     }
-    Ok(())
+    Ok(found.0 as usize)
 }
 pub fn run() -> Result<()> {
     let args = Args::parse();
+    ensure!(
+        (1..=3).contains(&args.layers),
+        "One to three native layers are supported"
+    );
     let mut grid = build(&args);
+    grid.model.bounded(
+        Expr::sum(grid.served.iter().copied()),
+        args.minimum,
+        grid.served.len() as i64,
+    );
+    if let Some(path) = &args.buildings_hint {
+        let buildings: Vec<Building> = serde_json::from_slice(&fs::read(path)?)?;
+        let lookup: BTreeMap<_, _> = buildings
+            .iter()
+            .map(|b| ((b.x - 3, b.y - 3, b.layer), b))
+            .collect();
+        let mut known = BTreeMap::new();
+        for (&p, b) in &lookup {
+            if !grid.tiles.contains_key(&p) {
+                continue;
+            }
+            let r = b.rotation.index();
+            let jump = if b.definition.starts_with("BeltPort") {
+                let sender = b.definition.contains("Sender");
+                let d = if sender { r } else { opposite(r) };
+                let distance = (2..=5)
+                    .find(|&n| {
+                        lookup.get(&step(p, d, n)).is_some_and(|other| {
+                            other.rotation.index() == r
+                                && other.definition.contains(if sender {
+                                    "Receiver"
+                                } else {
+                                    "Sender"
+                                })
+                        })
+                    })
+                    .ok_or_else(|| anyhow::anyhow!("Unpaired native jump at {p:?}"))?;
+                Some(if sender { 0 } else { 16 } + r * 4 + (distance - 2) as usize)
+            } else {
+                None
+            };
+            let kind = grid
+                .grammar
+                .kinds
+                .iter()
+                .position(|k| {
+                    k.definition.as_deref() == Some(&b.definition)
+                        && k.rotation == r
+                        && k.jump == jump
+                })
+                .ok_or_else(|| anyhow::anyhow!("Unsupported native hint {}", b.definition))?;
+            known.insert(p, kind);
+            if b.definition.starts_with("Cutter") {
+                let side = (r + if b.definition.ends_with("Mirrored") {
+                    1
+                } else {
+                    3
+                }) % 4;
+                let aux = grid
+                    .grammar
+                    .kinds
+                    .iter()
+                    .position(|k| k.auxiliary && !k.lift && k.rotation == r)
+                    .unwrap();
+                known.insert(step(p, side, 1), aux);
+            } else if b.definition.starts_with("Lift") {
+                let length = b.definition.as_bytes()[4] - b'0';
+                let axis = if b.definition.contains("Up") { 4 } else { 5 };
+                let aux = grid
+                    .grammar
+                    .kinds
+                    .iter()
+                    .position(|k| k.auxiliary && k.lift && k.rotation == r)
+                    .unwrap();
+                for n in 1..=length {
+                    known.insert(step(p, axis, i32::from(n)), aux);
+                }
+            }
+        }
+        for (&p, t) in &grid.tiles {
+            let kind = known.get(&p).copied().unwrap_or(0) as i64;
+            grid.model.hint(t.kind, kind);
+            if args.lock_layout {
+                grid.model.equal(t.kind, kind);
+            }
+        }
+    }
     if let Some(path) = &args.unit_hint {
         ensure!(!args.cell, "Unit placement hint is for the platform");
         let states: Vec<CellState> = serde_json::from_slice(&fs::read(path)?)?;
         let mut placed = Vec::new();
         for state in states {
-            let mut ports = [0; 8];
+            let mut ports = [0; 12];
             for (i, value) in state.ports.into_iter().enumerate() {
-                ports[(i % 4 + 2) % 4 + 4 * (i / 4)] = if value >= 80 {
-                    80 + (value - 80 + 12) % 24
-                } else {
-                    value
-                };
+                ports[(if i % 6 < 4 { (i % 6 + 2) % 4 } else { i % 6 }) + 6 * (i / 6)] =
+                    if (80..104).contains(&value) {
+                        80 + (value - 80 + 12) % 24
+                    } else {
+                        value
+                    };
             }
-            placed.push(((4 - state.position.0, 9 - state.position.1), ports));
+            for z in 0..grid.layers {
+                placed.push(((4 - state.position.0, 9 - state.position.1, z), ports));
+            }
         }
         for y in 0..=7 {
-            let mut ports = [0; 8];
+            let mut ports = [0; 12];
             ports[3] = 61;
-            ports[4 + if y == 7 { 2 } else { 1 }] = 61;
-            placed.push(((5, y), ports));
+            ports[6 + if y == 7 { 2 } else { 1 }] = 61;
+            for z in 0..grid.layers {
+                placed.push(((5, y, z), ports));
+            }
         }
         for (p, ports) in placed {
             apply_hint(&mut grid, p, ports, None)?;
@@ -797,8 +992,51 @@ pub fn run() -> Result<()> {
     }
     if let Some(path) = &args.hint {
         let states: Vec<CellState> = serde_json::from_slice(&fs::read(path)?)?;
-        for s in states {
-            apply_hint(&mut grid, s.position, s.ports, Some(s.kind))?;
+        let mut known = BTreeMap::new();
+        for s in &states {
+            let kind = if args.infer_hint {
+                let direction = s.ports[..4].iter().position(|&v| v > 0 && v < 80);
+                let receiver = s.ports[6..10].iter().position(|&v| v > 0 && v < 80);
+                let jump = if let Some(input) =
+                    direction.filter(|_| s.ports[6..].iter().all(|&v| v == 0))
+                {
+                    let d = opposite(input);
+                    (2..=5)
+                        .find(|&n| {
+                            states.iter().any(|b| {
+                                b.position == step(s.position, d, n)
+                                    && b.ports[..6].iter().all(|&v| v == 0)
+                                    && b.ports[6 + d] == s.ports[input]
+                            })
+                        })
+                        .map(|n| d * 4 + (n - 2) as usize)
+                } else if let Some(d) = receiver.filter(|_| s.ports[..6].iter().all(|&v| v == 0)) {
+                    (2..=5)
+                        .find(|&n| {
+                            states.iter().any(|b| {
+                                b.position == step(s.position, opposite(d), n)
+                                    && b.ports[6..].iter().all(|&v| v == 0)
+                                    && b.ports[opposite(d)] == s.ports[6 + d]
+                            })
+                        })
+                        .map(|n| 16 + d * 4 + (n - 2) as usize)
+                } else {
+                    None
+                };
+                jump.and_then(|j| grid.grammar.kinds.iter().position(|k| k.jump == Some(j)))
+            } else {
+                Some(s.kind)
+            };
+            let kind = apply_hint(&mut grid, s.position, s.ports, kind)?;
+            known.insert(s.position, kind);
+        }
+        if let [x0, y0, x1, y1] = args.window[..] {
+            for (&p, t) in &grid.tiles {
+                if p.0 < x0 || p.0 >= x1 || p.1 < y0 || p.1 >= y1 {
+                    grid.model
+                        .equal(t.kind, known.get(&p).copied().unwrap_or(0) as i64);
+                }
+            }
         }
     }
     let (vars, rows) = grid.model.counts();
@@ -840,7 +1078,13 @@ pub fn run() -> Result<()> {
             .filter_map(|s| {
                 let k = &grid.grammar.kinds[s.kind];
                 k.definition.as_ref().map(|d| {
-                    Building::new(d, s.position.0, s.position.1, 0, Rotation::new(k.rotation))
+                    Building::new(
+                        d,
+                        s.position.0,
+                        s.position.1,
+                        s.position.2,
+                        Rotation::new(k.rotation),
+                    )
                 })
             })
             .collect();
@@ -864,15 +1108,26 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
     };
     use shapez_runtime::{LabPaths, RunDirectory, run_suite};
     let paths = LabPaths::discover();
-    let run = RunDirectory::create(&paths.root, "quarter-grid")?;
-    let (offset, layers) = if args.cell { ((8, 4), 1) } else { ((3, 3), 3) };
+    let run = RunDirectory::create(
+        &paths.root,
+        if args.cell {
+            "quarter-grid"
+        } else {
+            "quarter-cut"
+        },
+    )?;
+    let (offset, layers) = if args.cell {
+        ((8, 4), 1)
+    } else {
+        ((3, 3), if grid.layers == 1 { 3 } else { 1 })
+    };
     let mut buildings = Vec::new();
     for z in 0..layers {
         for b in &base {
             let mut b = b.clone();
             b.x += offset.0;
             b.y += offset.1;
-            b.layer = z;
+            b.layer += z;
             buildings.push(b);
         }
     }
@@ -881,7 +1136,7 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
     for z in 0..layers {
         for &(p, d, v) in &grid.sources {
             ensure!(solution.value(v.rate) > 0, "Unused required source");
-            let p = (p.0 + offset.0, p.1 + offset.1, z);
+            let p = (p.0 + offset.0, p.1 + offset.1, p.2 + z);
             inputs.push(p);
             buildings.push(Building::new(
                 if args.cell {
@@ -897,7 +1152,7 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         }
         for &(p, d, _) in &grid.targets {
             let p = step(p, d, 1);
-            let p = (p.0 + offset.0, p.1 + offset.1, z);
+            let p = (p.0 + offset.0, p.1 + offset.1, p.2 + z);
             outputs.push(p);
             buildings.push(Building::new(
                 if args.cell {
@@ -913,6 +1168,10 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         }
     }
     let count = buildings.len();
+    let mergers = buildings
+        .iter()
+        .filter(|b| b.definition.starts_with("Merger"))
+        .count();
     let mut island = Island::new(
         if args.cell {
             "Foundation_2x2"
@@ -925,13 +1184,25 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         Rotation::new(0),
     );
     island.buildings = Some(BuildingBlueprint::new(buildings));
-    let bp = Blueprint {
+    let mut bp = Blueprint {
         game_version: 1138,
         content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
         icon: None,
         source_format_version: None,
     };
-    let blueprint = run.path.join("grid.spz2bp");
+    bp.icon = Some(shapez_blueprint::BlueprintIcon {
+        components: [
+            Some(shapez_blueprint::IconComponent::Shape("CuCuCuCu".into())),
+            Some(shapez_blueprint::IconComponent::Shape("Cu------".into())),
+            Some(shapez_blueprint::IconComponent::Shape("Cu------".into())),
+            Some(shapez_blueprint::IconComponent::Shape("Cu------".into())),
+        ],
+    });
+    let blueprint = run.path.join(if args.cell {
+        "grid.spz2bp"
+    } else {
+        "quarter-cut-1x2.spz2bp"
+    });
     fs::write(&blueprint, encode_blueprint(&bp)?)?;
     eprintln!(
         "Blueprint {} ({}x{})",
@@ -944,6 +1215,39 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         let file = run.path.join("suite.json");
         fs::write(&file, serde_json::to_vec_pretty(&suite)?)?;
         run_suite(&paths, &file, std::time::Duration::from_secs(180))?;
+    } else {
+        use shapez_model::{Direction, FoundationGeometry, FoundationSocket};
+        ensure!(
+            grid.layers == 1 || grid.layers == 3,
+            "Factory acceptance requires three resulting layers"
+        );
+        let geometry = FoundationGeometry::strip(2, 3);
+        let sockets = [
+            (Direction::North, 0, false, "input"),
+            (Direction::West, 0, true, "west"),
+            (Direction::East, 0, true, "east"),
+            (Direction::South, 0, true, "sw"),
+            (Direction::South, 1, true, "se"),
+        ]
+        .map(|(side, segment, output, role)| FoundationSocket {
+            side,
+            segment,
+            output,
+            role,
+        });
+        let mut harness = bp.clone();
+        if let BlueprintContent::Islands(islands) = &mut harness.content {
+            islands
+                .entries
+                .extend(shapez_blueprint::foundation_harness(&geometry, &sockets));
+        }
+        let test = run.path.join("harness.spz2bp");
+        fs::write(&test, encode_blueprint(&harness)?)?;
+        let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[{"name":"factory","blueprint":test,"ports":geometry.ports(&sockets),"expected_buildings":count,"expected_mergers":mergers,"export_graph":true,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":"QuarterFactoryExperiment"}},{"name":"library-icon","operation":"inspect-blueprint","blueprint":blueprint,"expected_format_version":5,"expected_library_warning":false,"expected_icon":bp.icon.as_ref().unwrap().components}]});
+        let file = run.path.join("suite.json");
+        fs::write(&file, serde_json::to_vec_pretty(&suite)?)?;
+        run_suite(&paths, &file, std::time::Duration::from_secs(180))?;
+        run.publish(&paths.root)?;
     }
     Ok(())
 }

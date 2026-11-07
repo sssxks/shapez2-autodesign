@@ -160,6 +160,10 @@ pub fn run() -> Result<()> {
             serde_json::to_vec_pretty(&partial)?,
         )?;
         eprintln!("Completed full-rate outputs: {completed}/48");
+        fs::write(
+            output(".buildings.json"),
+            serde_json::to_vec_pretty(&built.buildings(&solution)?)?,
+        )?;
         if completed != 48 {
             return Ok(());
         }
