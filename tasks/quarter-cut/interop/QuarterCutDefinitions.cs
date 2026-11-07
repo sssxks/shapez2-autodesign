@@ -17,7 +17,16 @@ public sealed class QuarterCutDefinitions : IBlueprintExperiment
             .Where(definition => definition.Id.ToString().Contains("Cutter") || definition.Id.ToString().Contains("Rotator"))
             .Select(definition => new {
                 id = definition.Id.ToString(),
-                connectors = definition.CustomData.Get<IBuildingConnectorData>().Tiles.Select(tile => tile.ToString()).ToArray(),
+                tiles = definition.CustomData.Get<IBuildingConnectorData>().Tiles.Select(tile => tile.ToString()).ToArray(),
+                connectors = definition.CustomData.Get<IBuildingConnectorData>().AllBuildingConnectors.Select(io => new {
+                    type = io.GetType().FullName,
+                    pivot = io.Pivot().ToString(),
+                    properties = io.GetType().GetProperties().Where(p => p.GetIndexParameters().Length == 0)
+                        .Where(p => p.PropertyType.IsPrimitive || p.PropertyType.IsEnum || p.PropertyType == typeof(string))
+                        .ToDictionary(p => p.Name, p => p.GetValue(io)?.ToString()),
+                    fields = io.GetType().GetFields().Where(f => f.FieldType.IsPrimitive || f.FieldType.IsEnum || f.FieldType == typeof(string))
+                        .ToDictionary(f => f.Name, f => f.GetValue(io)?.ToString())
+                }).ToArray(),
                 configuration = definition.Id.ToString().Contains("Cutter") ? (object)new { speed = definition.ConfigAs<ICutterConfiguration>().BeltSpeed.ToString(), delay = definition.ConfigAs<ICutterConfiguration>().ProcessingDelay.ToString() } : null
             }).ToArray();
         var path = Path.Combine(root, "quarter-cut-definitions.json");
