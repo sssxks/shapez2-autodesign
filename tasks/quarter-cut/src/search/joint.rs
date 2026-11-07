@@ -1,0 +1,288 @@
+use super::{
+    SearchArgs,
+    geometry::*,
+    network::{Network, Witness},
+};
+use anyhow::{Result, ensure};
+use serde::Serialize;
+use shapez_solver::{Expr, Solution, Var};
+use std::collections::{BTreeMap, BTreeSet};
+
+struct Pose {
+    cell: PackedCell,
+    body: BTreeSet<Point>,
+}
+pub struct Choice {
+    pub enabled: Var,
+    pub layer: usize,
+    pub index: usize,
+    pub cell: PackedCell,
+}
+pub struct Joint {
+    pub network: Network,
+    pub choices: Vec<Choice>,
+    pub inputs: Vec<Port>,
+    pub outputs: Vec<Port>,
+}
+pub fn build(
+    seed: &[Vec<PackedCell>],
+    args: &SearchArgs,
+    witness: Option<&Witness>,
+) -> Result<Joint> {
+    ensure!(
+        seed.len() == 3 && seed.iter().all(|row| row.len() == 16),
+        "Expected 3 layers with 16 cells each"
+    );
+    let floor = floor(args.chunks);
+    let (inputs, outputs) = ports(args.chunks, args.west());
+    let approaches: BTreeSet<_> = inputs.iter().map(|p| shift(p.p, p.d, 1, p.p.2)).collect();
+    let mut poses = Vec::new();
+    let mut fixed = BTreeSet::new();
+    for (z, layer) in seed.iter().enumerate() {
+        for cell in layer {
+            let mut candidates = Vec::new();
+            for dx in -args.radius..=args.radius {
+                for dy in -args.radius..=args.radius {
+                    for turn in if args.half_turn {
+                        &[0, 2][..]
+                    } else {
+                        &[0][..]
+                    } {
+                        let offset = if *turn == 0 {
+                            (0, 0)
+                        } else {
+                            rotate((4, 3), cell.r)
+                        };
+                        let mut candidate = cell.clone();
+                        candidate.x += dx + offset.0;
+                        candidate.y += dy + offset.1;
+                        candidate.r = (candidate.r + turn) % 4;
+                        let body = candidate.body(z as i16);
+                        if body.is_subset(&floor) && body.is_disjoint(&approaches) {
+                            candidates.push(Pose {
+                                cell: candidate,
+                                body,
+                            });
+                        }
+                    }
+                }
+            }
+            ensure!(
+                !candidates.is_empty(),
+                "No candidate poses for cell {}",
+                poses.len()
+            );
+            let common = candidates
+                .iter()
+                .skip(1)
+                .fold(candidates[0].body.clone(), |s, p| {
+                    s.intersection(&p.body).copied().collect()
+                });
+            fixed.extend(common);
+            poses.push(candidates);
+        }
+    }
+    let free: BTreeSet<_> = floor.difference(&fixed).copied().collect();
+    let mut network = Network::default();
+    network.transport(&free, &inputs, &outputs, &[4, 1], witness)?;
+    let input_map: BTreeMap<_, _> = inputs.iter().map(|p| (p.p, p.d)).collect();
+    let output_map: BTreeMap<_, _> = outputs.iter().map(|p| (p.p, p.d)).collect();
+    let mut choices = Vec::new();
+    let mut terminal_groups = BTreeMap::<(Point, usize), (Expr, Expr)>::new();
+    for (cell_id, candidates) in poses.iter().enumerate() {
+        let z = (cell_id / 16) as i16;
+        let index = cell_id % 16;
+        let reference = &seed[z as usize][index];
+        let mut cell_choices = Vec::new();
+        for pose in candidates {
+            let pose_enabled = network.model.boolean();
+            let mut pose_choices = Vec::new();
+            for &p in pose.body.difference(&fixed) {
+                network.occupy(p, pose_enabled);
+            }
+            for mirror in [false, true] {
+                for split in -1..=3 {
+                    let mut variants = Vec::new();
+                    let mut configured = None;
+                    for out in 0..4 {
+                        let (cell, ip) = pose.cell.configure(z, mirror, out, split);
+                        let a = cell.input(z);
+                        let op = cell.output(z);
+                        let b = cell.continuation(z);
+                        let mut required = vec![a.p, op.p];
+                        if let Some(b) = b {
+                            required.extend([ip, b.p]);
+                        }
+                        if required.iter().copied().collect::<BTreeSet<_>>().len() != required.len()
+                            || required.iter().any(|p| pose.body.contains(p))
+                        {
+                            continue;
+                        }
+                        if required.iter().any(|&p| {
+                            !(free.contains(&p)
+                                || p == op.p && output_map.get(&p) == Some(&op.d)
+                                || p == a.p && input_map.get(&p) == Some(&a.d))
+                        }) {
+                            continue;
+                        }
+                        let selected = network.model.boolean();
+                        let original = cell.x == reference.x
+                            && cell.y == reference.y
+                            && cell.r == reference.r
+                            && cell.mirror == reference.mirror
+                            && cell.out == reference.out
+                            && cell.split == reference.split;
+                        network.model.hint(selected, i64::from(original));
+                        variants.push(selected);
+                        pose_choices.push(selected);
+                        cell_choices.push(selected);
+                        network.emit(1, op, selected.into(), selected);
+                        configured = Some((a, b, ip));
+                        choices.push(Choice {
+                            enabled: selected,
+                            layer: z as usize,
+                            index,
+                            cell,
+                        });
+                    }
+                    let Some((input, continuation, ip)) = configured else {
+                        continue;
+                    };
+                    let enabled = network.model.boolean();
+                    let mut selection = Expr::sum(variants);
+                    selection.term(enabled, -1);
+                    network.model.equal(selection, 0);
+                    let amount = network.model.flow(enabled, 4);
+                    if let Some(b) = continuation {
+                        network.model.bounded(
+                            Expr {
+                                terms: vec![(amount, 1), (enabled, -2)],
+                                constant: 0,
+                            },
+                            0,
+                            i64::MAX,
+                        );
+                        network.occupy(ip, enabled);
+                        network.emit(
+                            0,
+                            b,
+                            Expr {
+                                terms: vec![(amount, 1), (enabled, -1)],
+                                constant: 0,
+                            },
+                            enabled,
+                        );
+                    } else {
+                        network.model.equal(
+                            Expr {
+                                terms: vec![(amount, 1), (enabled, -1)],
+                                constant: 0,
+                            },
+                            0,
+                        );
+                    }
+                    let (enabled_sum, amount_sum) =
+                        terminal_groups.entry((input.p, input.d)).or_default();
+                    enabled_sum.term(enabled, 1);
+                    amount_sum.term(amount, 1);
+                }
+            }
+            let mut selected = Expr::sum(pose_choices);
+            selected.term(pose_enabled, -1);
+            network.model.equal(selected, 0);
+        }
+        network.model.exactly_one(cell_choices);
+    }
+    for ((p, d), (enabled, amount)) in terminal_groups {
+        network.receive(0, Port { p, d }, 4, enabled, amount);
+    }
+    network.external(&inputs, &outputs, 1, 4, 1);
+    network.finish();
+    Ok(Joint {
+        network,
+        choices,
+        inputs,
+        outputs,
+    })
+}
+#[derive(Serialize)]
+pub struct ExportedRoute {
+    pub source: usize,
+    pub destination: Point,
+    pub steps: Vec<State>,
+}
+impl Joint {
+    pub fn export(
+        &self,
+        solution: &Solution,
+    ) -> Result<(Vec<Vec<PackedCell>>, Vec<ExportedRoute>)> {
+        ensure!(
+            solution.feasible(),
+            "Only feasible solutions can be exported"
+        );
+        let mut selected: Vec<_> = self
+            .choices
+            .iter()
+            .filter(|c| solution.value(c.enabled) == 1)
+            .collect();
+        selected.sort_by_key(|c| (c.layer, c.index));
+        ensure!(selected.len() == 48, "Expected 48 selected cells");
+        let cells: Vec<Vec<_>> = (0..3)
+            .map(|z| {
+                selected
+                    .iter()
+                    .filter(|c| c.layer == z)
+                    .map(|c| c.cell.clone())
+                    .collect()
+            })
+            .collect();
+        let mut sources = self.inputs.clone();
+        sources.extend(
+            selected
+                .iter()
+                .filter_map(|c| c.cell.continuation(c.layer as i16)),
+        );
+        ensure!(
+            sources.len() == 48,
+            "Expected twelve four-cell supply chains"
+        );
+        sources.extend(selected.iter().map(|c| c.cell.output(c.layer as i16)));
+        let chosen: BTreeMap<_, _> = self
+            .network
+            .arcs
+            .iter()
+            .filter(|a| solution.value(a.selected) != 0)
+            .map(|a| ((a.commodity, a.from), a.to))
+            .collect();
+        let mut routes = Vec::new();
+        let mut targets = BTreeSet::new();
+        for (source, port) in sources.into_iter().enumerate() {
+            let commodity = u8::from(source >= 48);
+            let mut state = port.state();
+            let mut steps = vec![state];
+            let mut seen = BTreeSet::new();
+            while let Some(&next) = chosen.get(&(commodity, state)) {
+                ensure!(seen.insert(state), "Cycle in source-connected route");
+                state = next;
+                steps.push(state);
+            }
+            let correct = if commodity == 0 {
+                selected
+                    .iter()
+                    .any(|c| c.cell.input(c.layer as i16).p == state.point())
+            } else {
+                self.outputs.iter().any(|p| p.p == state.point())
+            };
+            ensure!(
+                correct && targets.insert((commodity, state.point())),
+                "Invalid or duplicate solved destination"
+            );
+            routes.push(ExportedRoute {
+                source,
+                destination: state.point(),
+                steps,
+            });
+        }
+        Ok((cells, routes))
+    }
+}

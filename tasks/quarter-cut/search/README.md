@@ -18,7 +18,7 @@
 - 输入和输出可直接连接外部接口；内部接收器可直接接机器输入。
 - 一条供料连接的首尾可以是同一个带格。
 
-Python 负责建模，实际搜索运行于 OR-Tools 原生 C++ 后端（CP-SAT 或 SCIP/SoPlex）。Rust 负责建筑生成、蓝图封装和游戏验收。`uv` 按脚本元数据安装固定版本依赖，无需全局 Python。
+建模、整数约束验证和路线导出全部使用 Rust。`shapez-solver` 通过已有 `cpsat-rs` 和 `russcip` 绑定调用原生 CP-SAT 与 SCIP/SoPlex；不需要 Python。首次运行前 dot-source `environment.ps1`，它将固定版本的官方 OR-Tools Windows SDK 安装在临时实验目录，并只设置当前 PowerShell 的环境变量。SCIP 由其 Rust 绑定安装。
 
 **模型范围是限定单元结构、起始摆法、移动半径及旋转选项。** `INFEASIBLE` 对应该范围，`UNKNOWN` 表示到达搜索时限。模型没有覆盖任意原生建筑组合，也没有给出全局不可行性结论。
 
@@ -27,14 +27,15 @@ Python 负责建模，实际搜索运行于 OR-Tools 原生 C++ 后端（CP-SAT 
 从仓库根目录执行：
 
 ```powershell
+. tasks/quarter-cut/search/environment.ps1
 $env:QUARTER_PORTS = 'original'
 $candidate = "$env:TEMP/shapez-lab/quarter-1x2-search"
-uv run tasks/quarter-cut/search/joint.py `
+cargo run -p quarter-cut --features search --bin quarter-search -- `
   tasks/quarter-cut/search/original-ports-seed.json $candidate `
   --radius 1 --seconds 300 --workers 8
 ```
 
-`original` 对应上方输入、左/右/下方两口输出。另一种布局使用 `$env:QUARTER_PORTS = 'west'` 和 `west-input-seed.json`，对应左侧输入、上下各两口输出。
+`original` 对应上方输入、左/右/下方两口输出。另一种布局使用 `$env:QUARTER_PORTS = 'west'` 和 `west-input-seed.json`，对应左侧输入、上下各两口输出；搜索命令同时加 `--ports west`。
 
 `outward-rows-seed.json` 同样使用 `west` 接口，每层单元分为朝向外侧的两排，中央留作供料。
 
@@ -46,7 +47,7 @@ uv run tasks/quarter-cut/search/joint.py `
 | `--seconds N` | 求解时间上限，不含模型构造 |
 | `--workers N` | 工作线程数；SCIP 会创建多个并发求解器 |
 
-每次写出 `<candidate>.status.json`。只有可行解才写出摆法 `<candidate>.json` 和路线 `<candidate>.routes.json`。生成蓝图并运行原生整机验收：
+每次写出 `<candidate>.status.json`。可行解还写出逐弧整数流量 `<candidate>.flows.json`。只有可行解才写出摆法 `<candidate>.json` 和路线 `<candidate>.routes.json`。生成蓝图并运行原生整机验收：
 
 ```powershell
 $env:QUARTER_PACK = "$candidate.json"
@@ -61,7 +62,7 @@ Rust 检查 96 条路线、来源与目的地唯一性、端点及实际占格�
 `known-1x3-witness.json` 从已验收的 1×3 成品提取，包含 **96 条连接、734 个运输步骤**。将这些步骤固定在同一模型中：
 
 ```powershell
-uv run tasks/quarter-cut/search/joint.py `
+cargo run -p quarter-cut --features search --bin quarter-search -- `
   tasks/quarter-cut/search/known-1x3-seed.json `
   "$env:TEMP/shapez-lab/quarter-model-witness" `
   --chunks 3 --radius 0 --seconds 30 --workers 1 `

@@ -856,12 +856,14 @@ name = "quarter-cut"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "serde",
  "serde_json",
  "shapez-blueprint",
  "shapez-model",
  "shapez-routing",
  "shapez-runtime",
+ "shapez-solver",
  "varisat",
 ]
 

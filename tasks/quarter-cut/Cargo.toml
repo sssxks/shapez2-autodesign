@@ -2,9 +2,20 @@
 name = "quarter-cut"
 version.workspace = true
 edition.workspace = true
+default-run = "quarter-cut"
+
+[features]
+search = ["dep:shapez-solver", "shapez-solver/cp-sat", "shapez-solver/scip"]
+
+[[bin]]
+name = "quarter-search"
+path = "src/bin/quarter-search.rs"
+required-features = ["search"]
 
 [dependencies]
 anyhow.workspace = true
+clap.workspace = true
+shapez-solver = { path = "../../crates/shapez-solver", optional = true }
 serde.workspace = true
 serde_json.workspace = true
 varisat.workspace = true
