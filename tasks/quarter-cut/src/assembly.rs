@@ -44,6 +44,49 @@ pub fn factory_sockets() -> [FoundationSocket; 5] {
         role,
     })
 }
+
+/// Fixed interfaces in the user's original image: north input, west/east/south outputs.
+pub fn original_sockets() -> [FoundationSocket; 5] {
+    [
+        (Direction::North, 0, false, "input"),
+        (Direction::West, 0, true, "west"),
+        (Direction::East, 0, true, "east"),
+        (Direction::South, 0, true, "sw"),
+        (Direction::South, 1, true, "se"),
+    ]
+    .map(|(side, segment, output, role)| FoundationSocket {
+        side,
+        segment,
+        output,
+        role,
+    })
+}
+
+/// Join two 17x14 regions without reflecting either solved region.
+pub fn assemble_original_halves(left: &[Building], right: &[Building]) -> Result<Blueprint> {
+    let mut buildings = Vec::new();
+    for (half, dx) in [(left, 0), (right, 17)] {
+        let layers = half.iter().map(|b| b.layer).max().context("Empty region")? + 1;
+        ensure!(
+            layers == 1 || layers == 3,
+            "Region must use one or three layers"
+        );
+        for z in 0..if layers == 1 { 3 } else { 1 } {
+            for b in half {
+                ensure!(
+                    (0..17).contains(&b.x) && (0..14).contains(&b.y),
+                    "Region outside 17x14"
+                );
+                let mut b = b.clone();
+                b.x += 3 + dx;
+                b.y += 3;
+                b.layer += z;
+                buildings.push(b);
+            }
+        }
+    }
+    finish(buildings, original_sockets())
+}
 /// Combine local bank solutions, reflect the southern half, and attach external ports.
 pub fn assemble_banks(left: &[Building], right: &[Building]) -> Result<Blueprint> {
     let mut buildings = Vec::new();
@@ -68,7 +111,11 @@ pub fn assemble_banks(left: &[Building], right: &[Building]) -> Result<Blueprint
             }
         }
     }
-    let sockets = factory_sockets();
+    finish(buildings, factory_sockets())
+}
+
+/// Package a complete set of buildings with the selected physical interfaces.
+fn finish(mut buildings: Vec<Building>, sockets: [FoundationSocket; 5]) -> Result<Blueprint> {
     let geometry = FoundationGeometry::strip(2, 3);
     for socket in sockets {
         for z in 0..3 {

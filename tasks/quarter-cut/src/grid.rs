@@ -1,6 +1,6 @@
 //! Finite-domain production and routing on one complete platform layer.
 use anyhow::{Result, ensure};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use shapez_blueprint::{Building, Rotation};
 use shapez_solver::{Expr, Limits, Model, Solution, Var};
@@ -18,6 +18,12 @@ fn opposite(d: usize) -> usize {
     if d < 4 { (d + 2) % 4 } else { 9 - d }
 }
 const SHAPES: [i64; 9] = [1, 2, 4, 8, 3, 6, 9, 12, 15];
+/// Two vertical regions matching the original north-input interface layout.
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum OriginalHalf {
+    Left,
+    Right,
+}
 #[derive(Parser)]
 struct Args {
     output: PathBuf,
@@ -27,6 +33,18 @@ struct Args {
     workers: i32,
     #[arg(long)]
     cell: bool,
+    /// Solve one 17x14 half of the original five-port layout.
+    #[arg(long, conflicts_with_all = ["cell", "bank"])]
+    original_half: Option<OriginalHalf>,
+    /// Point the upper cutting cores inward to receive the original northern input.
+    #[arg(long, requires = "original_half")]
+    inward_top: bool,
+    /// Reflect fixed core geometry horizontally while preserving shape operations.
+    #[arg(long, requires = "original_half")]
+    mirror_cores: bool,
+    /// Jointly choose a small set of cutting-core poses and all remaining transport.
+    #[arg(long, requires = "original_half", conflicts_with = "cores")]
+    flex_cores: bool,
     /// Synthesize a four-output bank with one full input per layer.
     #[arg(long, conflicts_with = "cell")]
     bank: bool,
@@ -43,6 +61,9 @@ struct Args {
     bank_input_row: Option<i32>,
     #[arg(long)]
     quiet: bool,
+    /// Stop at the first complete feasible layout instead of minimizing occupied tiles.
+    #[arg(long)]
+    feasibility: bool,
     #[arg(long)]
     native: bool,
     #[arg(long)]
@@ -304,6 +325,7 @@ struct Edge {
 }
 struct Tile {
     kind: Var,
+    cut: Var,
     ports: [Edge; 12],
     jumps: [Var; 32],
     shapes: [Var; 3],
@@ -385,9 +407,109 @@ fn edge_value(e: Edge, s: &Solution) -> i64 {
             }
     }
 }
+/// Choose each core's translation and vertical orientation together with its transport.
+fn flexible_cores(
+    model: &mut Model,
+    grammar: &Grammar,
+    tiles: &BTreeMap<Point, Tile>,
+    layers: i16,
+) {
+    let mut occupied = BTreeMap::<Point, Vec<Var>>::new();
+    let mut cutters = BTreeMap::<Point, Vec<Var>>::new();
+    let mut constants = BTreeMap::new();
+    for z in 0..layers {
+        for group in 0..8 {
+            let poses = if group < 4 {
+                vec![(false, 4), (false, 5), (true, 1), (true, 2)]
+            } else {
+                vec![(true, 8), (true, 9)]
+            };
+            let mut choices = Vec::new();
+            for (reflected, row) in poses {
+                for (shift, mirror_x) in
+                    (0..=1).flat_map(|shift| [false, true].map(move |mirror| (shift, mirror)))
+                {
+                    let on = model.boolean();
+                    choices.push(on);
+                    let r = if reflected { 1 } else { 3 };
+                    for (x, y, definition, mask, aux) in [
+                        (0, 2, "CutterDefaultInternalVariant", 15, false),
+                        (0, 1, "", 0, true),
+                        (1, 1, "RotatorOneQuadInternalVariant", 12, false),
+                        (1, 2, "RotatorOneQuadCCWInternalVariant", 3, false),
+                        (2, 1, "CutterDefaultInternalVariant", 9, false),
+                        (2, 0, "", 0, true),
+                        (2, 2, "CutterDefaultInternalVariantMirrored", 9, false),
+                        (2, 3, "", 0, true),
+                    ] {
+                        let p = (
+                            4 * (group % 4) + shift + if mirror_x { 3 - y } else { y },
+                            row + if reflected { x } else { -x },
+                            z,
+                        );
+                        let definition =
+                            if reflected != mirror_x && definition.starts_with("Cutter") {
+                                if definition.ends_with("Mirrored") {
+                                    "CutterDefaultInternalVariant"
+                                } else {
+                                    "CutterDefaultInternalVariantMirrored"
+                                }
+                            } else {
+                                definition
+                            };
+                        let k = grammar
+                            .kinds
+                            .iter()
+                            .position(|k| {
+                                k.rotation == r
+                                    && k.auxiliary == aux
+                                    && !k.lift
+                                    && if aux {
+                                        k.definition.is_none()
+                                    } else {
+                                        k.definition.as_deref() == Some(definition)
+                                    }
+                            })
+                            .unwrap() as i64;
+                        let wanted = *constants.entry(k).or_insert_with(|| model.variable(k, k));
+                        equal_if(
+                            model,
+                            on,
+                            tiles[&p].kind,
+                            wanted,
+                            grammar.kinds.len() as i64,
+                        );
+                        if mask != 0 {
+                            let value = model.variable(mask, mask);
+                            equal_if(model, on, tiles[&p].shapes[0], value, 15);
+                        }
+                        occupied.entry(p).or_default().push(on);
+                        if definition.starts_with("Cutter") {
+                            cutters.entry(p).or_default().push(on);
+                        }
+                    }
+                }
+            }
+            model.exactly_one(choices);
+        }
+    }
+    for choices in occupied.into_values() {
+        model.at_most_one(choices);
+    }
+    for (&p, tile) in tiles {
+        let mut count = Expr::from(tile.cut);
+        for &on in cutters.get(&p).into_iter().flatten() {
+            count.term(on, -1);
+        }
+        model.equal(count, 0);
+    }
+}
+
 fn build(args: &Args) -> Grid {
     let (width, height) = if args.cell {
         (5, 4)
+    } else if args.original_half.is_some() {
+        (17, 14)
     } else if args.bank {
         (args.bank_width, args.bank_height)
     } else {
@@ -499,9 +621,33 @@ fn build(args: &Args) -> Grid {
     );
     let mut cores = BTreeMap::<Point, (Vec<i64>, i64)>::new();
     if args.cores {
-        for i in 0..if args.bank { 4 } else { 16 } {
-            let r = if args.bank || i < 8 { 3 } else { 1 };
-            let origin = if args.bank {
+        for i in 0..if args.original_half.is_some() {
+            8
+        } else if args.bank {
+            4
+        } else {
+            16
+        } {
+            let reflected = args.original_half.is_some() && (i >= 4 || args.inward_top);
+            let r = if args.original_half.is_some() {
+                if reflected { 1 } else { 3 }
+            } else if args.bank || i < 8 {
+                3
+            } else {
+                1
+            };
+            let origin = if args.original_half.is_some() {
+                (
+                    4 * (i % 4) + if reflected { 3 } else { 0 },
+                    if i >= 4 {
+                        8
+                    } else if args.inward_top {
+                        1
+                    } else {
+                        5
+                    },
+                )
+            } else if args.bank {
                 (4 * i, height - 2)
             } else if i < 8 {
                 (1 + 4 * (i % 8), 5)
@@ -518,8 +664,31 @@ fn build(args: &Args) -> Grid {
                 (2, 2, "CutterDefaultInternalVariantMirrored", 9, false, true),
                 (2, 3, "", 0, true, true),
             ] {
+                let y = if reflected { 3 - y } else { y };
+                let mirrored = if reflected != args.mirror_cores {
+                    !mirrored
+                } else {
+                    mirrored
+                };
+                let definition =
+                    if reflected != args.mirror_cores && definition.starts_with("Cutter") {
+                        if definition.ends_with("Mirrored") {
+                            "CutterDefaultInternalVariant"
+                        } else {
+                            "CutterDefaultInternalVariantMirrored"
+                        }
+                    } else {
+                        definition
+                    };
                 let (dx, dy) = if r == 3 { (y, -x) } else { (-y, x) };
-                let p = (origin.0 + dx, origin.1 + dy);
+                let p = (
+                    if args.mirror_cores {
+                        width - 1 - origin.0 - dx
+                    } else {
+                        origin.0 + dx
+                    },
+                    origin.1 + dy,
+                );
                 let mut allowed = vec![0];
                 for row in &grammar.rows {
                     let k = &grammar.kinds[row[0] as usize];
@@ -657,6 +826,7 @@ fn build(args: &Args) -> Grid {
                     p,
                     Tile {
                         kind,
+                        cut,
                         ports,
                         jumps,
                         shapes,
@@ -664,6 +834,9 @@ fn build(args: &Args) -> Grid {
                 );
             }
         }
+    }
+    if args.flex_cores {
+        flexible_cores(&mut model, &grammar, &tiles, layers);
     }
     for (&p, t) in &tiles {
         for r in 0..4 {
@@ -716,6 +889,16 @@ fn build(args: &Args) -> Grid {
     }
     let source_ports = if args.cell {
         vec![((-1, 2, layers - 1), 0)]
+    } else if let Some(half) = args.original_half {
+        (0..layers)
+            .flat_map(|z| {
+                if half == OriginalHalf::Left {
+                    (5..9).map(|x| ((x, -1, z), 1)).collect::<Vec<_>>()
+                } else {
+                    [5, 8].map(|y| ((-1, y, z), 0)).into()
+                }
+            })
+            .collect()
     } else if args.bank {
         (0..layers)
             .flat_map(|z| {
@@ -733,6 +916,19 @@ fn build(args: &Args) -> Grid {
     };
     let target_ports = if args.cell {
         vec![((4, 3, 0), 0)]
+    } else if let Some(half) = args.original_half {
+        (0..layers)
+            .flat_map(|z| {
+                let (x, d, bottom) = if half == OriginalHalf::Left {
+                    (0, 2, 5)
+                } else {
+                    (16, 0, 8)
+                };
+                (5..9)
+                    .map(move |y| ((x, y, z), d))
+                    .chain((bottom..bottom + 4).map(move |x| ((x, 13, z), 1)))
+            })
+            .collect()
     } else if args.bank {
         (0..layers)
             .flat_map(|z| (args.bank_output..args.bank_output + 4).map(move |x| ((x, 0, z), 3)))
@@ -795,16 +991,22 @@ fn build(args: &Args) -> Grid {
         served.push(yes);
         targets.push((p, d, e));
     }
-    if args.bank_through {
+    if args.bank_through || args.original_half == Some(OriginalHalf::Left) {
         for z in 0..layers {
-            let p = (width - 1, height - 2, z);
-            let e = edges[&(p, 0)];
-            model.equal(e.wire, 1);
-            model.equal(e.shape, 15);
-            model.equal(e.rate, 4);
-            source_flow.term(e.rate, -1);
-            stream_balance.term(e.active, -1);
-            targets.push((p, 0, e));
+            for y in if args.bank_through {
+                vec![height - 2]
+            } else {
+                vec![5, 8]
+            } {
+                let p = (width - 1, y, z);
+                let e = edges[&(p, 0)];
+                model.equal(e.wire, 1);
+                model.equal(e.shape, 15);
+                model.equal(e.rate, 4);
+                source_flow.term(e.rate, -1);
+                stream_balance.term(e.active, -1);
+                targets.push((p, 0, e));
+            }
         }
     }
     for (&(p, d), e) in &edges {
@@ -951,6 +1153,13 @@ pub fn run() -> Result<()> {
         args.minimum,
         grid.served.len() as i64,
     );
+    if args.feasibility {
+        ensure!(
+            args.minimum == grid.served.len() as i64,
+            "Feasibility search requires all outputs"
+        );
+        grid.model.minimize(Expr::default());
+    }
     if let Some(path) = &args.buildings_hint {
         let buildings: Vec<Building> = serde_json::from_slice(&fs::read(path)?)?;
         let lookup: BTreeMap<_, _> = buildings
@@ -1178,13 +1387,13 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
     let paths = LabPaths::discover();
     let run = RunDirectory::create(
         &paths.root,
-        if args.cell || args.bank {
+        if args.cell || args.bank || args.original_half.is_some() {
             "quarter-grid"
         } else {
             "quarter-cut"
         },
     )?;
-    let (offset, layers) = if args.cell || args.bank {
+    let (offset, layers) = if args.cell || args.bank || args.original_half.is_some() {
         ((8, 4), 1)
     } else {
         ((3, 3), if grid.layers == 1 { 3 } else { 1 })
@@ -1210,7 +1419,7 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
             inputs.push(p);
             input_rates.push(solution.value(v.rate) as f64 * 0.5);
             buildings.push(Building::new(
-                if args.cell || args.bank {
+                if args.cell || args.bank || args.original_half.is_some() {
                     "BeltDefaultForwardInternalVariant"
                 } else {
                     "BeltPortReceiverInternalVariant"
@@ -1227,7 +1436,7 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
             outputs.push(p);
             output_full.push(solution.value(e.shape) == 15);
             buildings.push(Building::new(
-                if args.cell || args.bank {
+                if args.cell || args.bank || args.original_half.is_some() {
                     "BeltDefaultForwardInternalVariant"
                 } else {
                     "BeltPortSenderInternalVariant"
@@ -1245,7 +1454,7 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         .filter(|b| b.definition.starts_with("Merger"))
         .count();
     let mut island = Island::new(
-        if args.cell || args.bank {
+        if args.cell || args.bank || args.original_half.is_some() {
             "Foundation_2x2"
         } else {
             "Foundation_1x2"
@@ -1270,11 +1479,13 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
             Some(shapez_blueprint::IconComponent::Shape("Cu------".into())),
         ],
     });
-    let blueprint = run.path.join(if args.cell || args.bank {
-        "grid.spz2bp"
-    } else {
-        "quarter-cut-1x2.spz2bp"
-    });
+    let blueprint = run
+        .path
+        .join(if args.cell || args.bank || args.original_half.is_some() {
+            "grid.spz2bp"
+        } else {
+            "quarter-cut-1x2.spz2bp"
+        });
     fs::write(&blueprint, encode_blueprint(&bp)?)?;
     eprintln!(
         "Blueprint {} ({}x{})",
@@ -1282,7 +1493,7 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         grid.width,
         grid.height
     );
-    if args.cell || args.bank {
+    if args.cell || args.bank || args.original_half.is_some() {
         let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[{"name":"grid","blueprint":blueprint,"expected_buildings":count,"inputs":inputs,"input_rates":input_rates,"outputs":outputs,"output_full":output_full,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":"QuarterWeaveExperiment"}}]});
         let file = run.path.join("suite.json");
         fs::write(&file, serde_json::to_vec_pretty(&suite)?)?;

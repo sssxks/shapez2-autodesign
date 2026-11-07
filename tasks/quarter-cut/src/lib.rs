@@ -2,7 +2,7 @@
 mod assembly;
 mod visualization;
 use anyhow::Result;
-pub use assembly::{assemble_banks, factory_sockets};
+pub use assembly::{assemble_banks, assemble_original_halves, factory_sockets, original_sockets};
 use shapez_blueprint::{Blueprint, Building, encode_blueprint};
 use std::{fs, path::Path};
 

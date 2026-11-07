@@ -9,15 +9,25 @@ use std::{fs, path::PathBuf, time::Duration};
 struct Args {
     left: PathBuf,
     right: PathBuf,
+    #[arg(long)]
+    original: bool,
 }
 fn main() -> Result<()> {
     let args = Args::parse();
     let left: Vec<Building> = serde_json::from_slice(&fs::read(args.left)?)?;
     let right: Vec<Building> = serde_json::from_slice(&fs::read(args.right)?)?;
-    let bp = quarter_cut::assemble_banks(&left, &right)?;
+    let bp = if args.original {
+        quarter_cut::assemble_original_halves(&left, &right)?
+    } else {
+        quarter_cut::assemble_banks(&left, &right)?
+    };
     let paths = LabPaths::discover();
     let run = RunDirectory::create(&paths.root, "quarter-cut")?;
-    let sockets = quarter_cut::factory_sockets();
+    let sockets = if args.original {
+        quarter_cut::original_sockets()
+    } else {
+        quarter_cut::factory_sockets()
+    };
     let geometry = FoundationGeometry::strip(2, 3);
     let buildings = bp.islands()[0].buildings();
     fs::write(
@@ -29,7 +39,11 @@ fn main() -> Result<()> {
         .iter()
         .filter(|b| b.definition.starts_with("Merger"))
         .count();
-    let output = run.path.join("quarter-cut-1x2.spz2bp");
+    let output = run.path.join(if args.original {
+        "quarter-cut-1x2-original.spz2bp"
+    } else {
+        "quarter-cut-1x2.spz2bp"
+    });
     fs::write(&output, encode_blueprint(&bp)?)?;
     let mut harness = bp.clone();
     if let BlueprintContent::Islands(islands) = &mut harness.content {
