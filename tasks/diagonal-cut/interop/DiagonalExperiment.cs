@@ -33,9 +33,9 @@ public sealed class DiagonalExperiment : IBlueprintExperiment
             if (!(s is ILocalizedTileSimulation tile))
                 continue;
             var p = tile.GetOccupiedTile(0);
-            if (p.y == 2 && p.x >= 28 && p.x <= 31)
+            if (p.y == 2 && p.x >= 8 && p.x <= 11)
                 sources.Add(((SpaceBeltPortReceiverSimulation)s.Simulation).InputLane);
-            if ((p.y == 2 || p.y == 17) && p.x >= 8 && p.x <= 11)
+            if (p.y == 17 && ((p.x >= 8 && p.x <= 11) || (p.x >= 28 && p.x <= 31)))
             {
                 var m = new Meter();
                 ((SpaceBeltPortSenderSimulation)s.Simulation).PathLane.NextLane = m;
@@ -76,4 +76,5 @@ public sealed class DiagonalExperiment : IBlueprintExperiment
         };
     }
 }
+
 

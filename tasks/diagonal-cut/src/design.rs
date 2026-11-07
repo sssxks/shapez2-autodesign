@@ -48,12 +48,30 @@ pub fn layout(
             );
             add("HalvesSwapperDefaultInternalVariant", x + 2, y + 1, 0);
             add("BeltPortSenderInternalVariant", x + 3, y, 0);
-            // Jump across the downward output bus to the upward merger bus.
+            // Jump across the downward output bus to the second downward merger bus.
 
             add("BeltPortReceiverInternalVariant", x + 5, y, 0);
-            add("Merger3To1InternalVariant", x + 6, y, 3);
+            add(
+                if j == 0 {
+                    "BeltDefaultLeftInternalVariantMirrored"
+                } else {
+                    "Merger2To1LInternalVariantMirrored"
+                },
+                x + 6,
+                y,
+                if j == 0 { 0 } else { 1 },
+            );
             add("RotatorOneQuadInternalVariant", x + 3, y + 1, 0);
-            add("Merger3To1InternalVariant", x + 4, y + 1, 1);
+            add(
+                if j == 0 {
+                    "BeltDefaultLeftInternalVariantMirrored"
+                } else {
+                    "Merger2To1LInternalVariantMirrored"
+                },
+                x + 4,
+                y + 1,
+                if j == 0 { 0 } else { 1 },
+            );
             add(
                 if j < 3 {
                     "Splitter1To2LInternalVariant"
@@ -72,7 +90,7 @@ pub fn layout(
                 }
                 {
                     let dy = 1;
-                    add("BeltDefaultForwardInternalVariant", x + 6, y + dy, 3);
+                    add("BeltDefaultForwardInternalVariant", x + 6, y + dy, 1);
                 }
             }
         }
@@ -88,8 +106,8 @@ pub fn layout(
             output: false,
         });
         nets.push(Net {
-            a: (x + 6, 5),
-            ad: 3,
+            a: (x + 6, 13),
+            ad: 1,
             b: op,
             bd: (od + 2) % 4,
             input: false,

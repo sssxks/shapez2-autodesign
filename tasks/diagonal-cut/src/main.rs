@@ -3,8 +3,8 @@ mod design;
 mod routing;
 use anyhow::Result;
 use shapez_blueprint::{
-    Blueprint, BlueprintContent, BuildingBlueprint, Island, IslandBlueprint, Rotation,
-    encode_blueprint,
+    Blueprint, BlueprintContent, BlueprintIcon, BuildingBlueprint, IconComponent, Island,
+    IslandBlueprint, Rotation, encode_blueprint,
 };
 use shapez_runtime::{LabPaths, RunDirectory, run_suite};
 use std::{fs, time::Duration};
@@ -14,7 +14,7 @@ fn main() -> Result<()> {
     let mut cases = Vec::new();
     for (name, ne) in [("NE-SW", true), ("NW-SE", false)] {
         let (mut buildings, fixed, nets) =
-            design::layout(ne, [1, 0, 2], [[3, 0, 1, 2], [3, 1, 2, 0], [1, 0, 2, 3]]);
+            design::layout(ne, [0, 2, 3], [[1, 0, 3, 2], [2, 3, 1, 0], [2, 1, 0, 3]]);
         routing::connect(&mut buildings, &fixed, &nets)?;
         let layer = buildings.clone();
         for z in 1..3 {
@@ -28,14 +28,26 @@ fn main() -> Result<()> {
         let bp = Blueprint {
             game_version: 1138,
             content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
-            icon: None,
+            icon: Some(BlueprintIcon {
+                components: [
+                    Some(IconComponent::Shape("CgCgCgCg".into())),
+                    Some(IconComponent::Icon("ArrowDown".into())),
+                    Some(IconComponent::Shape(
+                        if ne { "Cg--Cg--" } else { "--Cg--Cg" }.into(),
+                    )),
+                    Some(IconComponent::Shape(
+                        if ne { "Cg--Cg--" } else { "--Cg--Cg" }.into(),
+                    )),
+                ],
+            }),
             source_format_version: None,
         };
         let file = run.path.join(format!("{name}.spz2bp"));
         fs::write(&file, encode_blueprint(&bp)?)?;
+        cases.push(serde_json::json!({"name":format!("{name}-icon"),"operation":"inspect-blueprint","blueprint":file,"expected_format_version":5,"expected_library_warning":false,"expected_icon":bp.icon.as_ref().map(|i| &i.components)}));
         let mut harness = bp.clone();
         if let BlueprintContent::Islands(islands) = &mut harness.content {
-            for (x, y, r) in [(1, -1, 1), (0, -1, 3), (0, 1, 1)] {
+            for (x, y, r) in [(0, -1, 1), (0, 1, 1), (1, 1, 1)] {
                 islands
                     .entries
                     .push(Island::new("SpaceBelt_Forward", x, y, 0, Rotation::new(r)));
