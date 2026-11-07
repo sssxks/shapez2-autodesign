@@ -25,48 +25,8 @@ public sealed class PriorityExperiment : IBlueprintExperiment
     }
     public bool KeepBuilding(GlobalTileCoordinate position) => true;
 
-    private sealed class Source
-    {
-        internal readonly IItemReceiver Lane;
-        internal readonly IBeltItem Item;
-        internal double Credit;
-        internal Source(IItemReceiver lane, string shape)
-        {
-            Lane = lane;
-            Item = GameBindings.Shapes.GetItem(GameBindings.ShapeIds.Resolve(shape));
-        }
-        internal void Feed(double delta, double rate)
-        {
-            Credit = Math.Min(1, Credit + delta * rate);
-            if (rate > 0 && Credit >= 1 && Lane.CanAcceptItem(Item))
-            {
-                Lane.HandOverItem(Item, Ticks.Zero);
-                Credit -= 1;
-            }
-        }
-    }
-    private sealed class Meter : IItemReceiver
-    {
-        private readonly string primary;
-        private readonly string secondary;
-        internal Meter(int lane)
-        {
-            primary = Shape(lane, true);
-            secondary = Shape(lane, false);
-        }
-        internal readonly Dictionary<string, long> Counts = new Dictionary<string, long>();
-        internal bool Blocked;
-        public Steps MaxStep_S => LaneConstants.ItemSpacing;
-        public bool CanAcceptItem(IBeltItem item) => !Blocked;
-        public void HandOverItem(IBeltItem item, Ticks remainingTicks)
-        {
-            var key = item.ToString();
-            if (key != primary && key != secondary)
-                throw new InvalidOperationException("Crossed output lane: " + key);
-            Counts.TryGetValue(key, out var count);
-            Counts[key] = count + 1;
-        }
-    }
+
+
 
     private static string Shape(int lane, bool primary)
     {
@@ -88,9 +48,9 @@ public sealed class PriorityExperiment : IBlueprintExperiment
 
     public object Run(LabWorld world, JObject args, string root)
     {
-        var a = new Dictionary<int, Source>();
-        var b = new Dictionary<int, Source>();
-        var sinks = new Dictionary<int, Meter>();
+        var a = new Dictionary<int, BeltSource>();
+        var b = new Dictionary<int, BeltSource>();
+        var sinks = new Dictionary<int, BeltMeter>();
         foreach (var localized in ((ISimulator)world.Simulator).Simulations)
         {
             if (!(localized is ILocalizedTileSimulation tile) || !(localized.Simulation is IItemSimulation belt))
@@ -99,12 +59,12 @@ public sealed class PriorityExperiment : IBlueprintExperiment
             int primaryLane = InputLane(p, primarySide);
             int secondaryLane = InputLane(p, secondarySide);
             if (primaryLane >= 0)
-                a.Add(primaryLane, new Source(((SpaceBeltPortReceiverSimulation)belt).InputLane, Shape(primaryLane, true)));
+                a.Add(primaryLane, new BeltSource(((SpaceBeltPortReceiverSimulation)belt).InputLane, Shape(primaryLane, true)));
             if (secondaryLane >= 0)
-                b.Add(secondaryLane, new Source(((SpaceBeltPortReceiverSimulation)belt).InputLane, Shape(secondaryLane, false)));
+                b.Add(secondaryLane, new BeltSource(((SpaceBeltPortReceiverSimulation)belt).InputLane, Shape(secondaryLane, false)));
             if (p.x == 17 && p.y >= 8 && p.y <= 11)
             {
-                var meter = new Meter(p.z * 4 + p.y - 8);
+                var meter = new BeltMeter(Shape(p.z * 4 + p.y - 8, true), Shape(p.z * 4 + p.y - 8, false));
                 ((SpaceBeltPortSenderSimulation)belt).PathLane.NextLane = meter;
                 sinks.Add(p.z * 4 + p.y - 8, meter);
             }
@@ -123,10 +83,7 @@ public sealed class PriorityExperiment : IBlueprintExperiment
                 foreach (var source in b.Values)
                     source.Feed(delta.FloatSeconds, rate * phase.Item3);
             }
-            world.Advance(30, 120, Feed);
-            foreach (var sink in sinks.Values)
-                sink.Counts.Clear();
-            world.Advance(120, 120, Feed);
+            BeltMeasurement.Run(world, 30, 120, sinks.Values, Feed);
             foreach (var pair in sinks)
             {
                 double fraction = phase.Item2 < 0 ? (pair.Key % 4) / 3.0 : phase.Item2;

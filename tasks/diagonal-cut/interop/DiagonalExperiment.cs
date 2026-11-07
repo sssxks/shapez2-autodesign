@@ -13,21 +13,11 @@ public sealed class DiagonalExperiment : IBlueprintExperiment
     {
     }
     public bool KeepBuilding(GlobalTileCoordinate p) => true;
-    private sealed class Meter : IItemReceiver
-    {
-        internal readonly Dictionary<string, long> Counts = new Dictionary<string, long>();
-        public Steps MaxStep_S => LaneConstants.ItemSpacing; public bool CanAcceptItem(IBeltItem item) => true;
-        public void HandOverItem(IBeltItem item, Ticks t)
-        {
-            var k = item.ToString();
-            Counts.TryGetValue(k, out var n);
-            Counts[k] = n + 1;
-        }
-    }
+
     public object Run(LabWorld w, JObject args, string root)
     {
         var sources = new List<IItemReceiver>();
-        var sinks = new List<Meter>();
+        var sinks = new List<BeltMeter>();
         foreach (var s in ((ISimulator)w.Simulator).Simulations)
         {
             if (!(s is ILocalizedTileSimulation tile))
@@ -37,7 +27,7 @@ public sealed class DiagonalExperiment : IBlueprintExperiment
                 sources.Add(((SpaceBeltPortReceiverSimulation)s.Simulation).InputLane);
             if (p.y == 17 && ((p.x >= 8 && p.x <= 11) || (p.x >= 28 && p.x <= 31)))
             {
-                var m = new Meter();
+                var m = new BeltMeter();
                 ((SpaceBeltPortSenderSimulation)s.Simulation).PathLane.NextLane = m;
                 sinks.Add(m);
             }
@@ -51,10 +41,7 @@ public sealed class DiagonalExperiment : IBlueprintExperiment
             if (s.CanAcceptItem(item))
                 s.HandOverItem(item, Ticks.Zero);
         }
-        w.Advance(120, 120, Feed);
-        foreach (var s in sinks)
-            s.Counts.Clear();
-        w.Advance(120, 120, Feed);
+        BeltMeasurement.Run(w, 120, 120, sinks, Feed);
         string expected = args.Value<string>("name") == "NE-SW" ? "Cu--Cu--" : "--Cu--Cu";
         var speed = GameBindings.Mode.Buildings.ForwardBelt.ConfigAs<IConveyorConfiguration>().ConveyorSpeed;
         double rate = (speed.StepsPerTick * Ticks.OneSecond).Value / (double)LaneConstants.ItemSpacing.Value;
