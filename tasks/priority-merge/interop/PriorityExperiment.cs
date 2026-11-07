@@ -68,22 +68,6 @@ public sealed class PriorityExperiment : IBlueprintExperiment
 
     public object Run(LabWorld world, JObject args, string root)
     {
-        var map = GameBindings.Field<MapModel>(world, "model");
-        var placementFailures = new List<string>();
-        foreach (var building in map.Buildings)
-        {
-            var group = building.Definition.CustomData.Get<IBuildingDefinitionGroup>();
-            var query = new IslandLayoutQuery(building.Island.ToDescriptor(), GameBindings.Mode.MaxBuildingLayer);
-            foreach (var tile in building.Definition.CustomData.Get<IBuildingConnectorData>().Tiles)
-            {
-                var p = tile.To_I(building.Transform_I);
-                if (!(group.AllowPlaceOnNonFilledTiles ? query.IsValidTile_I(p) : query.IsValidAndBuildableTile_I(p)) ||
-                    !group.AllowPlaceOnNotch && query.GetNotchFlag_I(p).HasValue)
-                    placementFailures.Add($"{building.Definition.Id} at {p}");
-            }
-        }
-        if (placementFailures.Count != 0)
-            throw new InvalidOperationException("Invalid placement: " + string.Join("; ", placementFailures));
         var a = new Dictionary<int, Source>();
         var b = new Dictionary<int, Source>();
         var sinks = new Dictionary<int, Meter>();

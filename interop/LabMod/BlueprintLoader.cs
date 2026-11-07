@@ -47,9 +47,28 @@ internal static class BlueprintLoader
                     building.Definition.TryCreateConfiguration(out var config);
                     if (building.AdditionalConfigData != null && config != null)
                         converter.DeserializeByteArrayIntoData(building.AdditionalConfigData, GameVersionEnvironment.CurrentVersion, config.Sync);
+                    CheckPlacement(world.Model.GetIsland(transform.Position), building.Definition, position);
                     world.Model.CreateBuilding(building.Definition, position, config);
                 }
             }
+        }
+    }
+
+    /// Apply the native floor, layer, and notch queries used by ActionModifyBuildings.CheckPlace.
+    /// CreateBuilding is a low-level mutation and does not enforce these player placement rules.
+    private static void CheckPlacement(IslandModel island, IBuildingDefinition definition, GlobalTileTransform transform)
+    {
+        var group = definition.CustomData.Get<IBuildingDefinitionGroup>();
+        var maximumLayer = GameBindings.Mode.MaxBuildingLayer;
+        var query = new IslandLayoutQuery(island.ToDescriptor(), maximumLayer);
+        foreach (var tile in definition.CustomData.Get<IBuildingConnectorData>().Tiles)
+        {
+            var position = tile.ToGlobal(transform).ToIslandCoordinate(island.Transform.Position);
+            string? reason = position.z < 0 || position.z > maximumLayer ? "building layer outside mode range" :
+                !(group.AllowPlaceOnNonFilledTiles ? query.IsValidTile_I(position) : query.IsValidAndBuildableTile_I(position)) ? "outside buildable island floor" :
+                !group.AllowPlaceOnNotch && query.GetNotchFlag_I(position).HasValue ? "building cannot occupy a notch" : null;
+            if (reason != null)
+                throw new InvalidOperationException($"Invalid placement: {definition.Id} at island-local {position}, island {island.Definition.Id} at {island.Transform.Position}: {reason}");
         }
     }
 }

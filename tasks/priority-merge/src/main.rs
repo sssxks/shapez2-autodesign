@@ -82,7 +82,22 @@ fn main() -> Result<()> {
     }
     let test_blueprint = run.path.join("harness.spz2bp");
     fs::write(&test_blueprint, encode_blueprint(&harness)?)?;
+    // A minimal reproducer must fail in the shared loader, without a task plugin.
+    let mut invalid = bp.clone();
+    if let BlueprintContent::Islands(islands) = &mut invalid.content {
+        islands.entries[0].buildings = Some(BuildingBlueprint::new(vec![Building::new(
+            "BeltDefaultForwardInternalVariant",
+            5,
+            17,
+            0,
+            Rotation::new(0),
+        )]));
+    }
+    let invalid_floor = run.path.join("invalid-floor.spz2bp");
+    fs::write(&invalid_floor, encode_blueprint(&invalid)?)?;
     let suite = serde_json::json!({"projects":["${REPO}/tasks/priority-merge/interop/PriorityTask.csproj"],"cases":[{
+        "name":"reject-off-floor-without-plugin","blueprint":invalid_floor,"expected_ok":false
+    },{
         "name":"priority-12","blueprint":test_blueprint,"expected_buildings":count,"export_graph":true,
         "experiment":{"assembly":"${LAB}/bin/PriorityTask/Release/netstandard2.1/ShapezLab.Priority.dll","type":"PriorityExperiment"}
     }]});
