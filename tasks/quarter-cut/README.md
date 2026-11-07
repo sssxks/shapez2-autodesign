@@ -1,19 +1,47 @@
-# Quarter-cut — implementation in progress
+# 12 带输入 → 48 带四分之一形状
 
-Target: horizontal Foundation_1x2, top-left 12-belt input CuCuCuCu, four 12-belt outputs (left, right, bottom-left, bottom-right), all Cu------. Three floors, four input lanes per floor. Preserve all four quadrants using two successive full cuts and rotations.
+已完成 **2×2 平台、三层**版本。输入四个象限相同的普通形状，每个输入形状保留全部四份，输出统一为第一个象限：`CuCuCuCu → Cu------`。用户已确认可以扩大平台，优先满足满带输入输出。
 
-Currently implemented: task-owned Rust entry point and C# runtime definition probe. Run `cargo run -p quarter-cut`. This creates an empty foundation only for probing; it is NOT the requested factory blueprint. No latest pointer is published.
+可直接导入的成品：[quarter-cut-12-to-48.spz2bp](templates/quarter-cut-12-to-48.spz2bp)。复制文件全部文本，在游戏中粘贴蓝图。需要解锁三层建筑及蓝图中使用的切割、旋转、分流、合流、跳跃带和升降机。
 
-The probe uses resolved GameBindings.Mode.Buildings definitions and native blueprint placement in an isolated host. Native occupancy checks remain enabled. It excludes virtual buildings and serializes bounded primitive data, avoiding recursive serialization of native configuration objects.
+## 接口
 
-Verified against installed 1.2.0-rc3:
+以蓝图原始朝向为准，每口均为三层 × 四带 = 12 带：
 
-- CutterDefaultInternalVariant occupies (0,0,0), (0,-1,0).
-- Mirrored full cutter occupies (0,0,0), (0,1,0).
-- Both full cutters report belt speed 1 units/second and processing delay 1.5 seconds.
-- Half cutter occupies one tile and reports delay 1 second.
-- RotatorHalfInternalVariant, RotatorOneQuadCCWInternalVariant, RotatorOneQuadInternalVariant occupy one tile each.
+| 位置 | 用途 |
+| --- | --- |
+| 上边左侧接口 | 输入 12 带完整形状 |
+| 左边上半部接口 | 输出 12 带四分之一形状 |
+| 右边上半部接口 | 输出 12 带四分之一形状 |
+| 下边左侧接口 | 输出 12 带四分之一形状 |
+| 下边右侧接口 | 输出 12 带四分之一形状 |
 
-Successful discovery report: `%TEMP%/shapez-lab/runs/1794051900937-27708-1/report.json`; resolved definitions are beside it in `quarter-cut-definitions.json`. Rust and C# compile successfully; the native definitions case passes.
+四个出口需同时接走才能保持整机满速。生产线在单元内混合四份切片，并跨层布线；不保留输入带与输出带的一一对应关系。12 条输入应供应同一个目标形状。多层形状、销钉和晶体不在本任务验收范围内。
 
-Remaining implementation: extract directed input/output connectors and cutter simulation timing, generate and route the four independent processing cells per floor, orient the two-chunk foundation correctly, add all 48 native output meters and 12 full-rate sources, assert Cu------ and full belt utilization, and publish the final importable blueprint only after those checks pass. The current probe does not perform throughput verification.
+## 结构
+
+原生宿主中普通带速为 2 个/秒，全切割器持续吞吐为 0.5 个/秒。48 个并联处理单元各接收 0.5 个完整形状/秒，使用三台完整切割器切出四份，旋转到同一象限后合并成 2 个/秒的输出带。共 144 台完整切割器、240 台旋转器、144 台合流器、36 台分流器。
+
+成品保存在任务自有模板中，运行入口重新编码并执行原生验收，避免每次使用重新搜索布局。`src/design.rs` 保留已验证的 5×4 单元构造。最终走线修正了同一直线上两组跳跃带的配对干扰：第二层 `(13,24)` 到 `(13,27)` 通过 `x=14` 的普通带绕行。
+
+## 运行与验收
+
+```powershell
+cargo run -p quarter-cut                 # 打包成品并运行整机验收
+cargo run -p quarter-cut -- --cell        # 单元吞吐验收
+cargo run -p quarter-cut -- --definitions # 当前游戏原生建筑定义
+cargo run -p quarter-cut -- path/to/blueprint.spz2bp # 验收指定成品
+```
+
+整机用独立游戏宿主运行，测试用太空带及源/表不写入成品。每次生成保存在 `%TEMP%/shapez-lab/runs/<run-id>`；只有全部用例通过才发布 `%TEMP%/shapez-lab/tasks/quarter-cut/latest.json`。
+
+已在本机 Shapez 2 **1.2.0-rc3** 完成以下验收：
+
+- 原生蓝图导入与每格建筑占地检查通过。
+- `CuCuCuCu`：预热 180 秒后测量 120 秒，48 条输出各 **240 个 `Cu------`**，总计 **11,520 个**。
+- `RrRrRrRr`：同样 48 条输出各 **240 个 `Rr------`**，总计 **11,520 个**。
+- 全部出口堵塞 20 秒，放开并预热后，再测量 120 秒，所有输出恢复满带。
+- 图库图标、当前蓝图格式以及无旧版本警告检查通过。
+
+原生完整报告：`%TEMP%/shapez-lab/runs/1794054060966-13572-1/report.json`；逐带测量：同目录 `quarter-cut-measurements.json`。
+
