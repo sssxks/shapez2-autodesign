@@ -18,7 +18,7 @@ interop/
 tasks/
   cmam-compact/      CMAM 接入设计、旧版生成、原生生产/接入插件、模板与套件
   scaffold-recipe/   脚手架竖列配方策略、原生验证编排与用例生成
-  quarter-cut/       2×2 平台的 12 带输入、48 带统一象限输出切割器
+  quarter-cut/       1×3 平台的 12 带输入、48 带统一象限输出切割器
   priority-merge/    三种 1×1 平台的 12 带优先合并器、蓝图生成与原生验收
 ```
 
@@ -26,7 +26,7 @@ tasks/
 
 [12 带优先合并器](tasks/priority-merge/README.md) 提供直列优先、反向直列优先和左右输入左侧优先三个版本；运行 `cargo run -p priority-merge` 一次生成并验收三份带图库图标的单平台蓝图。
 
-[四象限切割器](tasks/quarter-cut/README.md) 提供 2×2 平台成品：`CuCuCuCu` 满带输入 12 带，四口各满带输出 12 带 `Cu------`。运行 `cargo run -p quarter-cut` 打包并执行原生整机验收。
+[四象限切割器](tasks/quarter-cut/README.md) 提供 1×3 平台成品：`CuCuCuCu` 满带输入 12 带，四口各满带输出 12 带 `Cu------`。运行 `cargo run -p quarter-cut` 打包并执行原生整机验收。
 
 ## 构建与验证
 
@@ -99,4 +99,5 @@ cargo run -p scaffold-recipe -- test
 ```
 
 CMAM 的 `test` 默认执行本任务的紧凑接入套件；配方任务的 `test` 默认读取最近一次 `check` 生成的套件。`prepare` 与 `probe` 也可从配方任务独立执行。
+
 
