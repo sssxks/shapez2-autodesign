@@ -38,6 +38,7 @@ pub fn build(
     let approaches: BTreeSet<_> = inputs.iter().map(|p| shift(p.p, p.d, 1, p.p.2)).collect();
     let mut poses = Vec::new();
     let mut fixed = BTreeSet::new();
+    let mut own_fixed = Vec::new();
     for (z, layer) in seed.iter().enumerate() {
         for cell in layer {
             let mut candidates = Vec::new();
@@ -78,9 +79,17 @@ pub fn build(
                 .fold(candidates[0].body.clone(), |s, p| {
                     s.intersection(&p.body).copied().collect()
                 });
-            fixed.extend(common);
+            fixed.extend(common.iter().copied());
+            own_fixed.push(common);
             poses.push(candidates);
         }
+    }
+    for (candidates, own) in poses.iter_mut().zip(&own_fixed) {
+        candidates.retain(|pose| {
+            pose.body
+                .iter()
+                .all(|p| !fixed.contains(p) || own.contains(p))
+        });
     }
     let free: BTreeSet<_> = floor.difference(&fixed).copied().collect();
     let mut network = Network::default();
@@ -132,7 +141,9 @@ pub fn build(
                             && cell.mirror == reference.mirror
                             && cell.out == reference.out
                             && cell.split == reference.split;
-                        network.model.hint(selected, i64::from(original));
+                        network
+                            .model
+                            .hint(selected, i64::from(original && !args.maximize_outputs));
                         variants.push(selected);
                         pose_choices.push(selected);
                         cell_choices.push(selected);
@@ -191,12 +202,34 @@ pub fn build(
             selected.term(pose_enabled, -1);
             network.model.equal(selected, 0);
         }
-        network.model.exactly_one(cell_choices);
+        if args.maximize_outputs {
+            network.model.at_most_one(cell_choices);
+        } else {
+            network.model.exactly_one(cell_choices);
+        }
     }
     for ((p, d), (enabled, amount)) in terminal_groups {
         network.receive(0, Port { p, d }, 4, enabled, amount);
     }
-    network.external(&inputs, &outputs, 1, 4, 1);
+    if args.maximize_outputs {
+        for p in &inputs {
+            let amount = network.model.variable(0, 4);
+            network.add_flow((0, p.state()), &amount.into(), 1);
+            network.fanin.entry((0, p.p)).or_default().constant += 1;
+        }
+        for p in &outputs {
+            let amount = network.model.boolean();
+            network.add_flow((1, p.state()), &amount.into(), -1);
+            network.capacity.entry(p.p).or_default().constant += 1;
+        }
+        let mut objective = Expr::default();
+        for c in &choices {
+            objective.term(c.enabled, -1);
+        }
+        network.model.minimize(objective);
+    } else {
+        network.external(&inputs, &outputs, 1, 4, 1);
+    }
     network.finish();
     Ok(Joint {
         network,

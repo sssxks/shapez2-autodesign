@@ -40,6 +40,11 @@ pub struct SearchArgs {
     ports: Ports,
     #[arg(long)]
     quiet: bool,
+    /// Maximize completed full-rate outputs, retaining a feasible incumbent.
+    #[arg(long)]
+    maximize_outputs: bool,
+    #[arg(long)]
+    warm_start: Option<PathBuf>,
 }
 impl SearchArgs {
     fn west(&self) -> bool {
@@ -68,7 +73,41 @@ pub fn run() -> Result<()> {
         None
     };
     let start = Instant::now();
-    let built = joint::build(&seed, &args, witness.as_ref())?;
+    let mut built = joint::build(&seed, &args, witness.as_ref())?;
+    if let Some(prefix) = &args.warm_start {
+        let cells: Vec<(usize, usize, geometry::PackedCell)> =
+            serde_json::from_slice(&fs::read(format!("{}.selected.json", prefix.display()))?)?;
+        for choice in &built.choices {
+            let value = cells.iter().any(|(layer, index, c)| {
+                *layer == choice.layer
+                    && *index == choice.index
+                    && c.x == choice.cell.x
+                    && c.y == choice.cell.y
+                    && c.r == choice.cell.r
+                    && c.mirror == choice.cell.mirror
+                    && c.out == choice.cell.out
+                    && c.split == choice.cell.split
+            });
+            built.network.model.hint(choice.enabled, i64::from(value));
+        }
+        let flows: Vec<(u8, geometry::State, geometry::State, i64)> =
+            serde_json::from_slice(&fs::read(format!("{}.flows.json", prefix.display()))?)?;
+        let flows: network::Witness = flows
+            .into_iter()
+            .map(|(c, a, b, f)| ((c, a, b), f))
+            .collect();
+        for arc in &built.network.arcs {
+            let amount = flows
+                .get(&(arc.commodity, arc.from, arc.to))
+                .copied()
+                .unwrap_or(0);
+            built
+                .network
+                .model
+                .hint(arc.selected, i64::from(amount != 0));
+            built.network.model.hint(arc.amount, amount);
+        }
+    }
     let (variables, constraints) = built.network.model.counts();
     eprintln!(
         "Rust model: {variables} variables, {constraints} constraints, {} arcs, built in {:.2}s",
@@ -85,10 +124,19 @@ pub fn run() -> Result<()> {
         Backend::Scip => built.network.model.solve_scip(&limits)?,
     };
     let output = |suffix: &str| PathBuf::from(format!("{}{suffix}", args.output.display()));
+    let completed = if solution.feasible() {
+        built
+            .choices
+            .iter()
+            .filter(|c| solution.value(c.enabled) == 1)
+            .count()
+    } else {
+        0
+    };
     fs::write(
         output(".status.json"),
         serde_json::to_vec_pretty(
-            &serde_json::json!({"status":solution.status,"seconds":solution.seconds,"backend":solution.backend,"variables":variables,"constraints":constraints,"seed":args.seed,"radius":args.radius,"half_turn":args.half_turn,"chunks":args.chunks,"ports":args.ports}),
+            &serde_json::json!({"status":solution.status,"seconds":solution.seconds,"completed_outputs":completed,"backend":solution.backend,"variables":variables,"constraints":constraints,"seed":args.seed,"radius":args.radius,"half_turn":args.half_turn,"chunks":args.chunks,"ports":args.ports}),
         )?,
     )?;
     eprintln!("Result: {:?} in {:.3}s", solution.status, solution.seconds);
@@ -101,6 +149,20 @@ pub fn run() -> Result<()> {
             .map(|a| (a.commodity, a.from, a.to, solution.value(a.amount)))
             .collect();
         fs::write(output(".flows.json"), serde_json::to_vec(&flows)?)?;
+        let partial: Vec<_> = built
+            .choices
+            .iter()
+            .filter(|c| solution.value(c.enabled) == 1)
+            .map(|c| (c.layer, c.index, &c.cell))
+            .collect();
+        fs::write(
+            output(".selected.json"),
+            serde_json::to_vec_pretty(&partial)?,
+        )?;
+        eprintln!("Completed full-rate outputs: {completed}/48");
+        if completed != 48 {
+            return Ok(());
+        }
         let (cells, routes) = built.export(&solution)?;
         fs::write(output(".json"), serde_json::to_vec_pretty(&cells)?)?;
         fs::write(output(".routes.json"), serde_json::to_vec(&routes)?)?;
