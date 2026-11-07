@@ -9,7 +9,12 @@ use shapez_model::{
 use std::collections::HashSet;
 
 pub fn sockets() -> [FoundationSocket; 5] {
-    let definitions = if std::env::var("QUARTER_PORTS").as_deref() != Ok("west") {
+    sockets_for(std::env::var("QUARTER_PORTS").as_deref() == Ok("west"))
+}
+
+/// Explicit interface selection for delivered templates and experimental layouts.
+pub fn sockets_for(west: bool) -> [FoundationSocket; 5] {
+    let definitions = if !west {
         [
             (Direction::North, 0, false, "input"),
             (Direction::West, 0, true, "west"),

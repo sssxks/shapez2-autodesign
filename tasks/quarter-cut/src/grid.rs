@@ -925,6 +925,26 @@ pub fn run() -> Result<()> {
         (1..=3).contains(&args.layers),
         "One to three native layers are supported"
     );
+    if args.bank {
+        ensure!(
+            args.bank_width >= 4
+                && args.bank_height >= 3
+                && args.bank_output >= 0
+                && args.bank_output + 4 <= args.bank_width,
+            "Bank outputs must fit its dimensions"
+        );
+        if let Some(row) = args.bank_input_row {
+            ensure!(
+                (0..args.bank_height).contains(&row)
+                    && (!args.bank_through || row != args.bank_height - 2),
+                "Bank input must be a distinct boundary port"
+            );
+        }
+        ensure!(
+            !args.cores || args.bank_width >= 16 && args.bank_height >= 6,
+            "Fixed bank cores need at least 16x6"
+        );
+    }
     let mut grid = build(&args);
     grid.model.bounded(
         Expr::sum(grid.served.iter().copied()),

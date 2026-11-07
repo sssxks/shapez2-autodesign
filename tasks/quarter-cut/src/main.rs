@@ -1,4 +1,4 @@
-//! Validate the delivered 1x3 cutter and experimentally solve its 1x2 replacement.
+//! Package and validate the delivered 1x2 four-quadrant cutter.
 mod compact;
 mod design;
 mod distribution;
@@ -31,15 +31,9 @@ fn main() -> Result<()> {
     }
     let source = argument.map(std::path::PathBuf::from).unwrap_or_else(|| {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("templates/quarter-cut-1x3.spz2bp")
+            .join("templates/quarter-cut-1x2.spz2bp")
     });
     let compact = source.to_string_lossy() == "--compact";
-    let chunks = if compact { 2 } else { 3 };
-    let sockets = if compact {
-        compact::sockets()
-    } else {
-        design::sockets()
-    };
     let bp = if source.to_string_lossy() == "--solve" || compact {
         let mut island = Island::new(
             if compact {
@@ -76,6 +70,19 @@ fn main() -> Result<()> {
     } else {
         Blueprint::read(source)?
     };
+    anyhow::ensure!(bp.islands().len() == 1, "Expected one factory platform");
+    let (chunks, sockets) = match bp.islands()[0].definition.as_str() {
+        "Foundation_1x2" => (
+            2,
+            if compact {
+                compact::sockets()
+            } else {
+                compact::sockets_for(true)
+            },
+        ),
+        "Foundation_1x3" => (3, design::sockets()),
+        other => anyhow::bail!("Unsupported quarter-cut foundation {other}"),
+    };
     let mut bp = bp;
     bp.icon = Some(BlueprintIcon {
         components: [
@@ -85,7 +92,7 @@ fn main() -> Result<()> {
             Some(IconComponent::Shape("Cu------".into())),
         ],
     });
-    let output = run.path.join(if compact {
+    let output = run.path.join(if chunks == 2 {
         "quarter-cut-1x2.spz2bp"
     } else {
         "quarter-cut-1x3.spz2bp"

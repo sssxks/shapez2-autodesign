@@ -87,7 +87,7 @@ object Run(LabWorld world, JObject args, string outputDirectory);
 4. `shapez-routing` 返回 `Vec<TileRoute>`；结果保留实际选择的终点。`route_buildings` 将路线转换为原生建筑，求解器不依赖蓝图 crate。
 5. `FoundationSocket` 同时生成外部路由端点、`foundation_harness` 测试夹具，以及传给原生插件的 `FactoryBeltPort` 清单。
 
-`FoundationGeometry::strip` 对应当前使用的原生 1×N 平台族，采用设计坐标系中的长轴 x、短轴 y；不是任意平台形状生成器。`socket_tile` 提供四带接口的格子坐标，`socket_harness` 提供相邻运输平台坐标。quarter-cut 将 1×3 平台放在区块 x=1，并将建筑局部 x 减去 20；端口清单使用变换后的世界坐标，仍为设计中的 2..57。原生加载器继续使用游戏 `IslandLayoutQuery` 验证实际占地。
+`FoundationGeometry::strip` 对应当前使用的原生 1×N 平台族，采用设计坐标系中的长轴 x、短轴 y；不是任意平台形状生成器。`socket_tile` 提供四带接口的格子坐标，`socket_harness` 提供相邻运输平台坐标。quarter-cut 的历史 1×3 生成器将平台放在区块 x=1，并将建筑局部 x 减去 20；端口清单使用变换后的世界坐标，仍为设计中的 2..57。原生加载器继续使用游戏 `IslandLayoutQuery` 验证实际占地。
 
 ### 路由策略
 
@@ -114,4 +114,4 @@ cargo run -p diagonal-cut --bin diagonal-cut
 cargo run -p quarter-cut -- --solve
 ```
 
-原生验收串行执行，共享宿主暂存目录只允许一个实例持有。quarter-cut 默认仍打包已保存模板；验证布局或路由修改必须传 `--solve`，重新求解并验收生成结果。
+原生验收串行执行，共享宿主暂存目录只允许一个实例持有。quarter-cut 默认打包已保存的 1×2 模板；`quarter-assemble` 从已保存分区建筑解重建并验收，`quarter-grid` 求解新的分区。`--solve` 保留历史 1×3 布局生成器。
