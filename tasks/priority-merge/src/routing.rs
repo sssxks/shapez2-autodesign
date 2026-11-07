@@ -1,4 +1,5 @@
 //! Small-grid directed belt routing, including native two-to-five-tile jumps.
+use crate::design::Design;
 use anyhow::{Result, bail};
 use shapez_blueprint::{Building, Rotation};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -21,20 +22,22 @@ struct Net {
     input: bool,
 }
 /// Route all twelve connections, restarting deterministic permutations on congestion.
-pub fn connect(buildings: &mut Vec<Building>, centers: &[Point; 4]) -> Result<()> {
+pub fn connect(buildings: &mut Vec<Building>, centers: &[Point; 4], design: &Design) -> Result<()> {
     let mut nets = Vec::new();
     for (i, &(x, y)) in centers.iter().enumerate() {
         let k = i as i32;
+        let (primary, primary_direction) = design.primary.port(k);
+        let (secondary, secondary_direction) = design.secondary.port(k);
         nets.push(Net {
-            a: (2, 8 + k),
-            ad: 0,
+            a: primary,
+            ad: primary_direction,
             b: (x - 2, y - 2),
             bd: 1,
             input: true,
         });
         nets.push(Net {
-            a: (8 + k, 2),
-            ad: 1,
+            a: secondary,
+            ad: secondary_direction,
             b: (x + 1, y + 1),
             bd: 2,
             input: true,
@@ -48,7 +51,17 @@ pub fn connect(buildings: &mut Vec<Building>, centers: &[Point; 4]) -> Result<()
         });
     }
     let fixed: HashSet<_> = buildings.iter().map(|b| (b.x, b.y)).collect();
-    let ends: HashSet<_> = nets.iter().flat_map(|n| [n.a, n.b]).collect();
+    let reservations: Vec<_> = nets
+        .iter()
+        .map(|n| {
+            let approach = if n.input {
+                (n.a.0 + D[n.ad].0, n.a.1 + D[n.ad].1)
+            } else {
+                (n.b.0 - D[n.bd].0, n.b.1 - D[n.bd].1)
+            };
+            [n.a, n.b, approach]
+        })
+        .collect();
     let mut seed = 1234567_u64;
     for _ in 0..2000 {
         let mut order: Vec<_> = (0..nets.len()).collect();
@@ -62,7 +75,13 @@ pub fn connect(buildings: &mut Vec<Building>, centers: &[Point; 4]) -> Result<()
         let mut result = Vec::new();
         for id in order {
             let net = nets[id];
-            let Some(path) = search(net, &occupied, &ends) else {
+            let forbidden: HashSet<_> = reservations
+                .iter()
+                .enumerate()
+                .filter(|(other, _)| *other != id)
+                .flat_map(|(_, points)| points.iter().copied())
+                .collect();
+            let Some(path) = search(net, &occupied, &forbidden, (seed as usize + id) % 4) else {
                 break;
             };
             for (i, s) in path.iter().enumerate() {
@@ -96,7 +115,12 @@ pub fn connect(buildings: &mut Vec<Building>, centers: &[Point; 4]) -> Result<()
     bail!("No disjoint twelve-connection route found")
 }
 /// Breadth-first search with straight-only launchers and catchers.
-fn search(n: Net, occupied: &HashSet<Point>, ends: &HashSet<Point>) -> Option<Vec<State>> {
+fn search(
+    n: Net,
+    occupied: &HashSet<Point>,
+    ends: &HashSet<Point>,
+    preference: usize,
+) -> Option<Vec<State>> {
     let start = State {
         p: n.a,
         d: n.ad,
@@ -116,10 +140,17 @@ fn search(n: Net, occupied: &HashSet<Point>, ends: &HashSet<Point>) -> Option<Ve
                 path.push(p);
                 current = p;
             }
+            // Directional BFS can revisit a tile from another direction; a real
+            // belt route cannot occupy that tile twice to perform a U-turn.
+            if path.iter().map(|node| node.p).collect::<HashSet<_>>().len() != path.len() {
+                continue;
+            }
             path.reverse();
             return Some(path);
         }
-        for (d, direction) in D.iter().enumerate() {
+        for offset in 0..4 {
+            let d = (offset + preference) % 4;
+            let direction = D[d];
             if (d + 4 - s.d) % 4 == 2 || ((s.catch || s == start && n.input) && d != s.d) {
                 continue;
             }
@@ -142,6 +173,18 @@ fn search(n: Net, occupied: &HashSet<Point>, ends: &HashSet<Point>) -> Option<Ve
                     d,
                     catch: length > 1,
                 };
+                let mut ancestor = Some(s);
+                let mut repeated = false;
+                while let Some(node) = ancestor {
+                    if node.p == p {
+                        repeated = true;
+                        break;
+                    }
+                    ancestor = previous[&node];
+                }
+                if repeated {
+                    continue;
+                }
                 if let std::collections::hash_map::Entry::Vacant(e) = previous.entry(next) {
                     e.insert(Some(s));
                     queue.push_back(next);

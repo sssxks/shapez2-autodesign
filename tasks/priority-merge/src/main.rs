@@ -1,6 +1,8 @@
 //! Generate a twelve-lane overflow-controlled priority merger on one foundation.
+mod design;
 mod routing;
 use anyhow::Result;
+use design::{DESIGNS, Design};
 use shapez_blueprint::{
     Blueprint, BlueprintContent, Building, BuildingBlueprint, Configuration, Island,
     IslandBlueprint, Rotation, encode_blueprint,
@@ -40,16 +42,18 @@ fn cell(x: i32, y: i32) -> Vec<Building> {
         .collect()
 }
 
-/// Build, validate in the native host, and publish the successful run.
-fn main() -> Result<()> {
-    let paths = LabPaths::discover();
-    let run = RunDirectory::create(&paths.root, "priority-merge")?;
-    let centers = [(6, 6), (13, 6), (6, 13), (13, 13)];
+/// Build one independently routed interface with three identical building layers.
+fn build(design: &Design) -> Result<Blueprint> {
+    let centers = if matches!(design.secondary, design::Side::South) {
+        [(5, 6), (12, 6), (5, 12), (12, 12)]
+    } else {
+        [(6, 6), (13, 6), (6, 13), (13, 13)]
+    };
     let mut buildings = centers
         .into_iter()
         .flat_map(|(x, y)| cell(x, y))
         .collect::<Vec<_>>();
-    routing::connect(&mut buildings, &centers)?;
+    routing::connect(&mut buildings, &centers, design)?;
     let layer = buildings.clone();
     for z in 1..3 {
         buildings.extend(layer.iter().cloned().map(|mut b| {
@@ -57,53 +61,76 @@ fn main() -> Result<()> {
             b
         }));
     }
-    let count = buildings.len();
     let mut island = Island::new("Foundation_1x1", 0, 0, 0, Rotation::new(0));
     island.buildings = Some(BuildingBlueprint::new(buildings));
-    let bp = Blueprint {
+    Ok(Blueprint {
         game_version: 1138,
         content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
-        icon: None,
+        icon: Some(design.icon()),
         source_format_version: None,
-    };
-    let output = run.path.join("priority-12.spz2bp");
-    fs::write(&output, encode_blueprint(&bp)?)?;
-    fs::write(
-        run.path.join("layout.json"),
-        serde_json::to_vec_pretty(&bp)?,
-    )?;
-    let mut harness = bp.clone();
-    if let BlueprintContent::Islands(islands) = &mut harness.content {
-        for (x, y, r) in [(-1, 0, 0), (0, -1, 1), (1, 0, 0)] {
-            islands
-                .entries
-                .push(Island::new("SpaceBelt_Forward", x, y, 0, Rotation::new(r)));
+    })
+}
+
+/// Build all variants, validate transport and library icons, then publish together.
+fn main() -> Result<()> {
+    let paths = LabPaths::discover();
+    let run = RunDirectory::create(&paths.root, "priority-merge")?;
+    let mut cases = Vec::new();
+    for design in &DESIGNS {
+        let bp = build(design)?;
+        let count = bp.islands()[0].buildings().len();
+        let output = run.path.join(format!("{}.spz2bp", design.name));
+        fs::write(&output, encode_blueprint(&bp)?)?;
+        fs::write(
+            run.path.join(format!("{}-layout.json", design.id)),
+            serde_json::to_vec_pretty(&bp)?,
+        )?;
+        let mut harness = bp.clone();
+        if let BlueprintContent::Islands(islands) = &mut harness.content {
+            for (x, y, r) in [
+                design.primary.harness(),
+                design.secondary.harness(),
+                (1, 0, 0),
+            ] {
+                islands
+                    .entries
+                    .push(Island::new("SpaceBelt_Forward", x, y, 0, Rotation::new(r)));
+            }
+        }
+        let test_blueprint = run.path.join(format!("{}-harness.spz2bp", design.id));
+        fs::write(&test_blueprint, encode_blueprint(&harness)?)?;
+        cases.push(serde_json::json!({
+        "name":design.id,"blueprint":test_blueprint,"expected_buildings":count,"export_graph":true,
+        "primary_side":design.primary.name(),"secondary_side":design.secondary.name(),
+        "experiment":{"assembly":"${LAB}/bin/PriorityTask/Release/netstandard2.1/ShapezLab.Priority.dll","type":"PriorityExperiment"}
+    }));
+        cases.push(serde_json::json!({
+        "name":format!("{}-icon",design.id),"operation":"inspect-blueprint","blueprint":output,
+        "expected_format_version":5,"expected_library_warning":false,"expected_icon":design.icon().components
+    }));
+        println!("Blueprint: {} ({count} buildings)", output.display());
+        if design.id == "inline" {
+            // A minimal reproducer must fail in the shared loader, without a task plugin.
+            let mut invalid = bp.clone();
+            if let BlueprintContent::Islands(islands) = &mut invalid.content {
+                islands.entries[0].buildings = Some(BuildingBlueprint::new(vec![Building::new(
+                    "BeltDefaultForwardInternalVariant",
+                    5,
+                    17,
+                    0,
+                    Rotation::new(0),
+                )]));
+            }
+            let invalid_floor = run.path.join("invalid-floor.spz2bp");
+            fs::write(&invalid_floor, encode_blueprint(&invalid)?)?;
+            cases.push(serde_json::json!({
+        "name":"reject-off-floor-without-plugin","blueprint":invalid_floor,"expected_ok":false
+    }));
         }
     }
-    let test_blueprint = run.path.join("harness.spz2bp");
-    fs::write(&test_blueprint, encode_blueprint(&harness)?)?;
-    // A minimal reproducer must fail in the shared loader, without a task plugin.
-    let mut invalid = bp.clone();
-    if let BlueprintContent::Islands(islands) = &mut invalid.content {
-        islands.entries[0].buildings = Some(BuildingBlueprint::new(vec![Building::new(
-            "BeltDefaultForwardInternalVariant",
-            5,
-            17,
-            0,
-            Rotation::new(0),
-        )]));
-    }
-    let invalid_floor = run.path.join("invalid-floor.spz2bp");
-    fs::write(&invalid_floor, encode_blueprint(&invalid)?)?;
-    let suite = serde_json::json!({"projects":["${REPO}/tasks/priority-merge/interop/PriorityTask.csproj"],"cases":[{
-        "name":"reject-off-floor-without-plugin","blueprint":invalid_floor,"expected_ok":false
-    },{
-        "name":"priority-12","blueprint":test_blueprint,"expected_buildings":count,"export_graph":true,
-        "experiment":{"assembly":"${LAB}/bin/PriorityTask/Release/netstandard2.1/ShapezLab.Priority.dll","type":"PriorityExperiment"}
-    }]});
+    let suite = serde_json::json!({"projects":["${REPO}/tasks/priority-merge/interop/PriorityTask.csproj"],"cases":cases});
     let suite_path = run.path.join("suite.json");
     fs::write(&suite_path, serde_json::to_vec_pretty(&suite)?)?;
-    println!("Blueprint: {} ({count} buildings)", output.display());
     run_suite(&paths, &suite_path, Duration::from_secs(180))?;
     run.publish(&paths.root)?;
     Ok(())

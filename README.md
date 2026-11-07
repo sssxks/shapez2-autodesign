@@ -18,12 +18,12 @@ interop/
 tasks/
   cmam-compact/      CMAM 接入设计、旧版生成、原生生产/接入插件、模板与套件
   scaffold-recipe/   脚手架竖列配方策略、原生验证编排与用例生成
-  priority-merge/    1×1 平台的 12 带优先合流器、蓝图生成与原生验收
+  priority-merge/    三种 1×1 平台的 12 带优先合并器、蓝图生成与原生验收
 ```
 
 具体设计及已有诊断保存在 [CMAM 任务](tasks/cmam-compact/README.md) 和 [配方任务](tasks/scaffold-recipe/README.md)。公共接口与添加任务的方法见 [架构说明](docs/architecture.md)。
 
-[12 带优先合流器](tasks/priority-merge/README.md) 使用西侧 A 优先输入、北侧 B 补流输入、东侧输出；运行 `cargo run -p priority-merge` 生成并验收单平台蓝图。
+[12 带优先合并器](tasks/priority-merge/README.md) 提供直列优先、反向直列优先和左右输入左侧优先三个版本；运行 `cargo run -p priority-merge` 一次生成并验收三份带图库图标的单平台蓝图。
 
 ## 构建与验证
 
