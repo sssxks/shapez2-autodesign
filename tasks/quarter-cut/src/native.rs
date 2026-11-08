@@ -4,6 +4,7 @@ use quarter_cut::design;
 use shapez_blueprint::{Blueprint, BuildingBlueprint, Island, Rotation};
 use shapez_runtime::{LabPaths, RunDirectory, run_suite};
 use std::time::Duration;
+/// Export a single 1x2 factory, attach its socket harness and run native acceptance.
 pub fn validate(bp: Blueprint) -> Result<()> {
     let paths = LabPaths::discover();
     let run = RunDirectory::create(&paths.root, "quarter-cut")?;
