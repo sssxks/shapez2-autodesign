@@ -41,12 +41,12 @@ fn routes_shared_tree_around_obstacles_and_across_layers() {
         },
     )
     .unwrap();
-    assert!(plan.values().all(|n| n.net == 0));
+    assert!(plan.values().all(|n| n.net() == 0));
     assert!(plan.contains_key(&root));
-    assert!(plan.values().any(|n| n.outgoing.len() > 1));
-    assert!(plan.iter().any(|(p, n)| p.2 != n.output_layer));
+    assert!(plan.values().any(|n| n.outgoing().count() > 1));
+    assert!(plan.iter().any(|(p, n)| p.2 != n.output_layer()));
     for (p, n) in &plan {
-        for z in p.2.min(n.output_layer)..=p.2.max(n.output_layer) {
+        for z in p.2.min(n.output_layer())..=p.2.max(n.output_layer()) {
             assert!(!problem.blocked.contains(&ChunkPos(p.0, p.1, z)));
         }
     }

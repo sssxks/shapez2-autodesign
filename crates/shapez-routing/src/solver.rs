@@ -6,7 +6,7 @@ use shapez_model::{
 };
 use std::{
     cmp::Reverse,
-    collections::{BTreeSet, BinaryHeap, HashMap, HashSet},
+    collections::{BinaryHeap, HashMap, HashSet},
 };
 type State = (ChunkPos, Direction);
 fn route(
@@ -20,7 +20,7 @@ fn route(
 ) -> Result<()> {
     let mut occupied = HashMap::new();
     for (&p, node) in nodes.iter() {
-        for z in p.2.min(node.output_layer)..=p.2.max(node.output_layer) {
+        for z in p.2.min(node.output_layer())..=p.2.max(node.output_layer()) {
             occupied.insert(ChunkPos(p.0, p.1, z), p);
         }
     }
@@ -42,14 +42,15 @@ fn route(
         }
         let (p, h) = s;
         if (p.0, p.1) == (end.position.0, end.position.1)
+            && p.2.abs_diff(end.position.2) <= 2
             && (p.2 != end.position.2 || end.direction != h.opposite())
             && (p.2.min(end.position.2)..=p.2.max(end.position.2)).all(|z| {
                 allowed(ChunkPos(p.0, p.1, z))
                     && occupied.get(&ChunkPos(p.0, p.1, z)).is_none_or(|base| {
                         *base == p
-                            && nodes[base].net == netid
-                            && nodes[base].incoming == h
-                            && nodes[base].output_layer == end.position.2
+                            && nodes[base].net() == netid
+                            && nodes[base].incoming() == h
+                            && nodes[base].output_layer() == end.position.2
                     })
             })
         {
@@ -60,18 +61,22 @@ fn route(
             continue;
         }
         if let Some(base) = occupied.get(&p)
-            && (*base != p || nodes[base].net != netid || nodes[base].incoming != h)
+            && (*base != p || nodes[base].net() != netid || nodes[base].incoming() != h)
         {
             continue;
         }
         for z in bounds.min.2..=bounds.max.2 {
             for d in Direction::ALL {
+                if p.2.abs_diff(z) > 2 {
+                    continue;
+                }
                 let (dx, dy) = d.delta();
                 if z == p.2 && d == h.opposite() {
                     continue;
                 }
                 if let Some(node) = nodes.get(&p)
-                    && (node.output_layer != z || z != p.2 && !node.outgoing.contains(&d))
+                    && (node.output_layer() != z
+                        || z != p.2 && !node.outgoing().any(|output| output == d))
                 {
                     continue;
                 }
@@ -87,7 +92,10 @@ fn route(
                 if !allowed(next.0) {
                     continue;
                 }
-                let step = if nodes.get(&p).is_some_and(|v| v.outgoing.contains(&d)) {
+                let step = if nodes
+                    .get(&p)
+                    .is_some_and(|v| v.outgoing().any(|output| output == d))
+                {
                     1
                 } else {
                     10 + if z != p.2 { 8 + 4 * (z - p.2).abs() } else { 0 }
@@ -107,7 +115,9 @@ fn route(
     };
     let mut steps = vec![(s, end.direction, end.position.2)];
     while s != start {
-        let &(parent, d, z) = prev.get(&s).unwrap();
+        let &(parent, d, z) = prev
+            .get(&s)
+            .ok_or_else(|| anyhow::anyhow!("Missing route predecessor"))?;
         steps.push((parent, d, z));
         s = parent;
     }
@@ -121,13 +131,14 @@ fn route(
         }
     }
     for ((p, h), d, z) in steps {
-        let node = nodes.entry(p).or_insert_with(|| RouteNode {
-            net: netid,
-            incoming: h,
-            output_layer: z,
-            outgoing: BTreeSet::new(),
-        });
-        node.outgoing.insert(d);
+        match nodes.entry(p) {
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                entry.get_mut().add_output(d)?
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(RouteNode::new(netid, h, p.2, z, d)?);
+            }
+        }
     }
     Ok(())
 }
@@ -142,6 +153,10 @@ pub fn solve_transport(problem: &TransportProblem, options: SearchOptions) -> Re
             && problem.bounds.min.1 <= problem.bounds.max.1
             && problem.bounds.min.2 <= problem.bounds.max.2,
         "Invalid routing bounds"
+    );
+    ensure!(
+        i16::try_from(problem.bounds.min.2).is_ok() && i16::try_from(problem.bounds.max.2).is_ok(),
+        "Layer outside blueprint coordinates"
     );
     let nets = &problem.nets;
     for net in nets {

@@ -207,13 +207,13 @@ pub fn build_compact(
     let mut routing = vec![];
     let ordered: BTreeMap<_, _> = nodes.iter().collect();
     for (&p, node) in ordered {
-        islands.push(space_island(p, node, problem.nets[node.net].fluid));
+        islands.push(space_island(p.0, p.1, node, problem.nets[node.net()].fluid));
         routing.push(Route {
             p,
-            net: node.net,
-            input: node.incoming.index(),
-            out_z: node.output_layer,
-            outputs: node.outgoing.iter().map(|d| d.index()).collect(),
+            net: node.net(),
+            input: node.incoming().index(),
+            out_z: node.output_layer(),
+            outputs: node.outgoing().map(|d| d.index()).collect(),
         });
     }
     let mut result = original.clone();
