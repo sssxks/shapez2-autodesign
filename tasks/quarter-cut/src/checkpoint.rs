@@ -3,6 +3,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{fs, path::Path};
 
+/// Persist a typed restart state under its solver kind and format version.
 pub(crate) fn save<T: Serialize>(path: &Path, kind: &str, value: &T) -> Result<()> {
     let mut bytes = format!("shapez-quarter-cut/{kind}/1\n").into_bytes();
     bytes.extend(postcard::to_allocvec(value)?);
@@ -11,6 +12,7 @@ pub(crate) fn save<T: Serialize>(path: &Path, kind: &str, value: &T) -> Result<(
     }
     fs::write(path, bytes).with_context(|| format!("Write checkpoint {}", path.display()))
 }
+/// Decode restart state after checking its solver kind and format version.
 pub(crate) fn load<T: DeserializeOwned>(path: &Path, kind: &str) -> Result<T> {
     let bytes = fs::read(path).with_context(|| format!("Read checkpoint {}", path.display()))?;
     let header = format!("shapez-quarter-cut/{kind}/1\n");
@@ -23,9 +25,11 @@ pub(crate) fn load<T: DeserializeOwned>(path: &Path, kind: &str) -> Result<T> {
         .with_context(|| format!("Decode checkpoint {}", path.display()))
 }
 
+/// Restart format compatibility and corruption checks.
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// A saved state round-trips, while mismatched kinds and truncated bodies fail.
     #[test]
     fn round_trip_rejects_other_solver_and_truncated_data() {
         let path = std::env::temp_dir().join(format!(
