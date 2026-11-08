@@ -76,3 +76,25 @@ fn shape_deserialization_validates_wire_input() {
     assert_eq!(shape.layers().count(), 2);
     assert_eq!(serde_json::to_value(shape).unwrap(), "P-cw--Ru:CuCuCuCu");
 }
+
+#[test]
+fn layers_preserve_wire_order_and_node_indices_are_bounded() {
+    use shapez_model::{Color, Layer, Material, Part};
+    let shape: Shape = "CuCuCuCu:P-------".parse().unwrap();
+    let mut layers = shape.layers();
+    assert_eq!(
+        layers.next_back(),
+        Some(Layer([Part::Pin, Part::Empty, Part::Empty, Part::Empty]))
+    );
+    assert_eq!(
+        layers.next(),
+        Some(Layer([Part::Solid(Material::Circle, Color::Uncolored); 4]))
+    );
+    assert_eq!(layers.next(), None);
+    assert_eq!(std::mem::size_of::<Node>(), 4);
+    assert!(serde_json::from_str::<Node>("4294967296").is_err());
+    assert_eq!(
+        serde_json::from_str::<Node>("4294967295").unwrap(),
+        Node(u32::MAX)
+    );
+}

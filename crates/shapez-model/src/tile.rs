@@ -126,7 +126,7 @@ pub struct FoundationSocket {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FactoryBeltPort {
     /// Task-defined port role used by native bindings.
-    pub role: String,
+    pub role: Box<str>,
     /// Layer-major lane index, four lanes per layer.
     pub lane: usize,
     /// Occupied tile coordinate.
