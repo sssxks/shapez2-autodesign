@@ -46,7 +46,23 @@ internal sealed class LabPipe : IDisposable
             Write(replies.Take(stop.Token).Value); // Main-thread readiness after initialization.
             while (!stop.IsCancellationRequested)
             {
-                requests.Enqueue(new LabRequest(Read()));
+                var payload = Read();
+                var token = JsonInput.Required(payload, "id");
+                if (token.Type != JTokenType.Integer)
+                    throw new ArgumentException("Request id must be an unsigned integer");
+                var id = (ulong)token;
+                LabRequest request;
+                try
+                {
+                    request = new LabRequest(id, payload);
+                }
+                catch (Exception error) when (error is ArgumentException || error is OverflowException || error is FormatException || error is JsonException)
+                {
+                    // Reject malformed arguments at the input boundary and keep the session alive.
+                    Write(new LabResponse(id, 0, null, error.Message));
+                    continue;
+                }
+                requests.Enqueue(request);
                 var reply = replies.Take(stop.Token);
                 Write(reply.Value);
                 if (reply.Shutdown)

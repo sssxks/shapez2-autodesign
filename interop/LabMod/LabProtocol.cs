@@ -8,19 +8,15 @@ internal sealed class LabRequest
     {
         get;
     }
-    private readonly JObject payload;
+    internal string Operation { get; }
+    internal LabArguments Arguments { get; }
 
-    internal LabRequest(JObject payload)
+    internal LabRequest(ulong id, JObject payload)
     {
-        var id = JsonInput.Required(payload, "id");
-        if (id.Type != JTokenType.Integer)
-            throw new ArgumentException("Request id must be an unsigned integer");
-        Id = (ulong)id;
-        this.payload = payload;
+        Id = id;
+        Operation = JsonInput.String(payload, "operation");
+        Arguments = new LabArguments(JsonInput.Object(JsonInput.Required(payload, "args"), "args"));
     }
-
-    internal string Operation => JsonInput.String(payload, "operation");
-    internal LabArguments Arguments => new LabArguments(JsonInput.Object(JsonInput.Required(payload, "args"), "args"));
 }
 
 internal sealed class LabResponse
