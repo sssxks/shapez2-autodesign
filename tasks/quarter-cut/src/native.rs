@@ -12,26 +12,21 @@ pub fn validate(bp: Blueprint) -> Result<()> {
         .buildings()
         .iter()
         .any(|b| b.definition == "BeltPortReceiverInternalVariant" && b.x == 8 && b.y == 2);
-    let (chunks, sockets) = match bp.islands()[0].definition.as_str() {
-        "Foundation_1x2" => (
-            2,
-            if original {
-                quarter_cut::original_sockets()
-            } else {
-                quarter_cut::factory_sockets()
-            },
-        ),
-        "Foundation_1x3" => (3, design::sockets()),
-        other => anyhow::bail!("Unsupported foundation {other}"),
+    anyhow::ensure!(
+        bp.islands()[0].definition == "Foundation_1x2",
+        "Expected a 1x2 factory platform"
+    );
+    let sockets = if original {
+        quarter_cut::original_sockets()
+    } else {
+        quarter_cut::factory_sockets()
     };
     let mut bp = bp;
     bp.icon = Some(design::icon());
-    let output = run.path.join(if chunks == 2 && original {
+    let output = run.path.join(if original {
         "quarter-cut-1x2-original.spz2bp"
-    } else if chunks == 2 {
-        "quarter-cut-1x2.spz2bp"
     } else {
-        "quarter-cut-1x3.spz2bp"
+        "quarter-cut-1x2.spz2bp"
     });
     bp.write(&output)?;
 
@@ -42,16 +37,13 @@ pub fn validate(bp: Blueprint) -> Result<()> {
         .iter()
         .filter(|b| b.definition.starts_with("Merger"))
         .count();
-    let harness = bp.with_harness(
-        &shapez_model::FoundationGeometry::strip(chunks, 3),
-        &sockets,
-    )?;
+    let harness = bp.with_harness(&shapez_model::FoundationGeometry::strip(2, 3), &sockets)?;
     let test = run.path.join("harness.spz2bp");
     harness.write(&test)?;
     let suite = shapez_runtime::Suite {
         projects: vec!["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj".into()],
         cases: vec![
-            shapez_runtime::case! {name:"factory",blueprint:test,ports:shapez_model::FoundationGeometry::strip(chunks,3).ports(&sockets),expected_buildings:count,expected_mergers:merger_count,export_graph:true,experiment: shapez_runtime::Experiment { assembly: "${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll".into(), type_name: ("QuarterFactoryExperiment").into() }},
+            shapez_runtime::case! {name:"factory",blueprint:test,ports:shapez_model::FoundationGeometry::strip(2,3).ports(&sockets),expected_buildings:count,expected_mergers:merger_count,export_graph:true,experiment: shapez_runtime::Experiment { assembly: "${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll".into(), type_name: ("QuarterFactoryExperiment").into() }},
             shapez_runtime::case! {name:"library-icon",operation:"inspect-blueprint",blueprint:output.clone(),expected_format_version:5,expected_library_warning:false,expected_icon:bp.icon.as_ref().unwrap().components.clone()},
         ],
     };

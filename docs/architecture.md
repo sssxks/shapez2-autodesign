@@ -76,9 +76,9 @@ ExperimentResult Run(LabWorld world, LabArguments args, string outputDirectory);
 2. `Cell::placed(Placement)` 同时旋转、平移建筑、占地和端口。布局通过 `cell.port("input")` 等名字连接单元。
 3. 任务建立 `TileRoutingProblem`，声明地板几何、障碍及 `TileNet`。`ExchangeGroup` 由任务显式声明等价加工阶段；只有同组终点可以交换。不同优先级或不同流量阶段不得共用组。
 4. `shapez-routing` 返回 `Vec<TileRoute>`；结果保留实际选择的终点。`route_buildings` 将路线转换为原生建筑，求解器不依赖蓝图 crate。
-5. `FoundationSocket` 同时生成外部路由端点、`foundation_harness` 测试夹具，以及传给原生插件的 `FactoryBeltPort` 清单。
+5. `FoundationSocket` 同时生成外部路由端点、`Blueprint::with_harness` 测试夹具，以及传给原生插件的 `FactoryBeltPort` 清单。
 
-`FoundationGeometry::strip` 对应当前使用的原生 1×N 平台族，采用设计坐标系中的长轴 x、短轴 y；不是任意平台形状生成器。`socket_tile` 提供四带接口的格子坐标，`socket_harness` 提供相邻运输平台坐标。quarter-cut 的历史 1×3 生成器将平台放在区块 x=1，并将建筑局部 x 减去 20；端口清单使用变换后的世界坐标，仍为设计中的 2..57。原生加载器继续使用游戏 `IslandLayoutQuery` 验证实际占地。
+`FoundationGeometry::strip` 对应当前使用的原生 1×N 平台族，采用设计坐标系中的长轴 x、短轴 y；不是任意平台形状生成器。`socket_tile` 提供四带接口的格子坐标，`socket_harness` 提供相邻运输平台坐标。原生加载器继续使用游戏 `IslandLayoutQuery` 验证实际占地。
 
 ### 路由策略
 
@@ -102,10 +102,10 @@ ExperimentResult Run(LabWorld world, LabArguments args, string outputDirectory);
 ```powershell
 cargo run -p priority-merge
 cargo run -p diagonal-cut
-cargo run -p quarter-cut -- --solve
+cargo run --release -p quarter-cut -- factory artifacts/quarter-cut --native
 ```
 
-原生验收串行执行，共享宿主暂存目录只允许一个实例持有。quarter-cut 默认从已保存的分区建筑解重建 1×2 蓝图及离线交互视图；`--native` 单独执行原生验收；`quarter-assemble` 从已保存分区建筑解重建并验收，`quarter-grid` 求解新的分区。`--solve` 保留历史 1×3 布局生成器。
+原生验收串行执行，共享宿主暂存目录只允许一个实例持有。quarter-cut 的 `factory` 在内存中求解并装配 1×2 蓝图及离线交互视图；添加 `--native` 验收当前结果。`grid` 求解区域，`native <blueprint>` 验收已有 1×2 工厂蓝图。
 
 `shapez-viz` 只接受类型化场景（占格、建筑 owner、连接、分区、外部接口）并生成离线 HTML，不依赖游戏或求解器。任务负责把自己的蓝图及流量见证适配成场景。quarter-cut 的确定性装配位于任务库，默认入口与原生验收入口共享同一实现。
 

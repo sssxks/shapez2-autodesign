@@ -26,8 +26,7 @@ cargo run --release -p quarter-cut -- factory artifacts/quarter-cut --native
 - `grid`：有限域建筑、形状和流量求解；`--native` 验收当前区域。
 - `weave`：原始端口流模型，直接输出蓝图。
 - `search <seed.toml> <output.spz2bp>`：刚性切割单元与共享布线的联合求解。种子是人工配置的 `layers` 数组。
-- `native <blueprint.spz2bp>`：验收指定的最终游戏蓝图。
-- `legacy`：生成并验收原有 1×3 布局。
+- `native <blueprint.spz2bp>`：验收指定的 1×2 工厂蓝图。
 - `probe <cell|mirror-cell|middle-cell|middle-cell-2|jump-cell|definitions|capacity>`：原生实验。
 
 旧的 `quarter-grid`、`quarter-weave`、`quarter-search`、`quarter-assemble` 独立 binary 已合并。旧 compact 的环境变量、网络导出、反馈文件及路线导入入口已由联合求解流程取代。

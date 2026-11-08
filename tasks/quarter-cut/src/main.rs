@@ -1,9 +1,7 @@
 //! One task executable: solve, visualize, export and optionally validate.
-mod layout;
 mod native;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use quarter_cut::design;
 use std::path::PathBuf;
 #[derive(Parser)]
 struct Cli {
@@ -22,8 +20,6 @@ enum Command {
     Weave(quarter_cut::weave::Args),
     /// Validate an explicitly supplied game blueprint.
     Native { blueprint: PathBuf },
-    /// Generate and validate the legacy three-chunk layout.
-    Legacy,
     /// Run one native cell or definition probe.
     Probe {
         #[arg(value_parser = ["cell", "mirror-cell", "middle-cell", "middle-cell-2", "jump-cell", "definitions", "capacity"])]
@@ -45,20 +41,6 @@ fn main() -> Result<()> {
         Command::Weave(args) => quarter_cut::weave::run(args),
         Command::Native { blueprint } => {
             native::validate(shapez_blueprint::Blueprint::read(blueprint)?)
-        }
-        Command::Legacy => {
-            use shapez_blueprint::{Blueprint, BuildingBlueprint, Island, Rotation};
-            let mut island = Island::new("Foundation_1x3", 1, 0, 0, Rotation::new(0));
-            island.buildings = Some(BuildingBlueprint::new(
-                layout::build()?
-                    .into_iter()
-                    .map(|mut b| {
-                        b.x -= 20;
-                        b
-                    })
-                    .collect(),
-            ));
-            native::validate(Blueprint::platform(island, None))
         }
         Command::Probe { mode } => {
             let paths = shapez_runtime::LabPaths::discover();
