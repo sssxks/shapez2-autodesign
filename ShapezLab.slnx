@@ -5,4 +5,5 @@
   <Project Path="tasks/quarter-cut/interop/QuarterCutTask.csproj" />
   <Project Path="tasks/priority-merge/interop/PriorityTask.csproj" />
   <Project Path="tasks/diagonal-cut/interop/DiagonalTask.csproj" />
+  <Project Path="tasks/native-acceptance/interop/AcceptanceTask.csproj" />
 </Solution>

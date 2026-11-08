@@ -156,7 +156,7 @@ fn main() -> Result<()> {
             let invalid_floor = run.path.join("invalid-floor.spz2bp");
             fs::write(&invalid_floor, encode_blueprint(&invalid)?)?;
             cases.push(shapez_runtime::case! {
-                name:"reject-off-floor-without-plugin",blueprint:invalid_floor,expected_ok:false
+                name:"reject-off-floor-without-plugin",blueprint:invalid_floor,expected_ok:false,expected_error:"Incomplete player blueprint placement".to_owned()
             });
         }
     }

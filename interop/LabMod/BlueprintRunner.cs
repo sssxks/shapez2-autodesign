@@ -7,7 +7,7 @@ using Newtonsoft.Json.Linq;
 
 internal static class BlueprintRunner
 {
-    internal static object Run(JObject args, string root)
+    internal static object Run(JObject args, string root, bool diagnostic = false, bool placementOnly = false)
     {
         var options = new BlueprintRunOptions(args);
         var experiment = BlueprintExperiment.Load(options.Experiment);
@@ -24,23 +24,48 @@ internal static class BlueprintRunner
 
         object? probe = null;
         if (experiment != null)
+        {
             probe = experiment.Run(world, args, root);
+            if (!diagnostic && (probe == null || JObject.FromObject(probe).Value<bool?>("verified") != true))
+                throw new InvalidOperationException("Experiment did not explicitly verify acceptance");
+        }
         else if (options.Rate != null)
+        {
+            if (!diagnostic)
+                throw new InvalidOperationException("Rate probes require blueprint-diagnostic; production acceptance requires an experiment");
             probe = RateScenario.Run(world, options.Rate, root);
+        }
         else
-            world.Advance(options.Seconds, 60);
+        {
+            if (!diagnostic && !placementOnly)
+                throw new InvalidOperationException("Blueprint acceptance requires an experiment; use place-blueprint for placement only");
+            if (diagnostic)
+                world.Advance(options.Seconds, 60);
+        }
 
         var export = options.ExportGraph
             ? GraphExporter.Write(world.Simulator, options.Name, root)
             : (((ISimulator)world.Simulator).Simulations.Count(), new List<object>(), (string?)null);
         return new BlueprintRunReport(world.Model.IslandCount, world.Model.BuildingCount,
             blueprint.BuildingCount, world.Simulator.SimulationTime.FloatSeconds,
-            export.Item1, export.Item2, export.Item3, probe);
+            export.Item1, export.Item2, export.Item3, probe, diagnostic, placementOnly);
     }
 }
 
 internal sealed class BlueprintRunReport
 {
+    [JsonProperty("verified")]
+    public bool? Verified
+    {
+        get;
+    }
+    [JsonProperty("scope")]
+    public string Scope
+    {
+        get;
+    }
+    [JsonProperty("placement")]
+    public string Placement => "ActionModifyIsland/ActionModifyBuildings: LocalHost, checks enabled";
     [JsonProperty("islands")]
     public int Islands
     {
@@ -83,7 +108,7 @@ internal sealed class BlueprintRunReport
     }
 
     internal BlueprintRunReport(int islands, int buildings, int importedBuildings, double seconds,
-        int simulations, IReadOnlyList<object> openConnectors, string? graph, object? probe)
+        int simulations, IReadOnlyList<object> openConnectors, string? graph, object? probe, bool diagnostic, bool placementOnly)
     {
         Islands = islands;
         Buildings = buildings;
@@ -93,5 +118,7 @@ internal sealed class BlueprintRunReport
         OpenConnectors = openConnectors;
         Graph = graph;
         Probe = probe;
+        Verified = diagnostic ? (bool?)null : true;
+        Scope = diagnostic ? "diagnostic" : placementOnly ? "placement" : "experiment";
     }
 }

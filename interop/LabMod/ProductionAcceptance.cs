@@ -33,7 +33,8 @@ public static class ProductionAcceptance
         bool Meets((string Name, string Group, BeltMeter Meter, string Shape) output, int seconds)
         {
             if (output.Meter.Counts.Keys.Any(shape => shape != output.Shape))
-                throw new InvalidOperationException("Wrong output shape at " + output.Name);
+                throw new InvalidOperationException("Wrong output shape at " + output.Name + ": expected " + output.Shape +
+                    ", actual " + Newtonsoft.Json.JsonConvert.SerializeObject(output.Meter.Counts));
             long count = output.Meter.Counts.Values.Sum();
             return output.Meter.Blocked ? count == 0 : Math.Abs(count - seconds * rate) <= 1;
         }
@@ -55,14 +56,20 @@ public static class ProductionAcceptance
             Clear();
             var before = sources.Select(s => s.AcceptedCount).ToArray();
             world.Advance(120, 120, Feed);
-            var snapshot = Snapshot(phase, 120);
+            var snapshot = new
+            {
+                output = Snapshot(phase, 120),
+                inputs = sources.Select((s, i) =>
+                new
+                {
+                    lane = i,
+                    expected = 120 * rates[i],
+                    count = s.AcceptedCount - before[i]
+                }).ToArray()
+            };
             if (outputs.Any(o => !Meets(o, 120)) || sources.Where((s, i) => Math.Abs(s.AcceptedCount - before[i] - 120 * rates[i]) > 1).Any())
                 throw new InvalidOperationException("Nominal throughput failed: " + Newtonsoft.Json.JsonConvert.SerializeObject(snapshot));
-            phases.Add(new
-            {
-                output = snapshot,
-                inputs = sources.Select((s, i) => s.AcceptedCount - before[i]).ToArray()
-            });
+            phases.Add(snapshot);
         }
         void Recover(string phase)
         {

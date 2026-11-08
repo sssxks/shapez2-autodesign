@@ -46,6 +46,9 @@ pub struct TestCase {
     pub name: String,
     pub operation: String,
     pub expected_ok: bool,
+    /// Negative regressions must match the intended failure, not an unrelated host error.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blueprint: Option<PathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -103,6 +106,7 @@ impl Default for TestCase {
             name: String::new(),
             operation: "blueprint".into(),
             expected_ok: true,
+            expected_error: None,
             blueprint: None,
             recipe: None,
             experiment: None,
@@ -155,6 +159,11 @@ impl Suite {
                 "Case names must be nonempty and unique"
             );
             ensure!(!case.operation.is_empty(), "Operation must be nonempty");
+            ensure!(
+                case.expected_ok || case.expected_error.as_ref().is_some_and(|e| !e.is_empty()),
+                "Negative case {} must specify expected_error",
+                case.name
+            );
         }
         Ok(())
     }

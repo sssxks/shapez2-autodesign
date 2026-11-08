@@ -142,10 +142,15 @@ public sealed class LabService : MonoBehaviour
                     data = GameEnvironment.DataPath,
                     simulator = "Simulator",
                     headless = true,
-                    operations = new[] { "capabilities", "blueprint", "catalog", "capacities", "recipe", "inspect-save", "inspect-blueprint" }
+                    scenario = GameBindings.Mode.Scenario.UniqueId.ToString(),
+                    operations = new[] { "capabilities", "blueprint", "place-blueprint", "blueprint-diagnostic", "catalog", "capacities", "recipe", "inspect-save", "inspect-blueprint" }
                 };
             case "blueprint":
                 return BlueprintRunner.Run(args, root);
+            case "blueprint-diagnostic":
+                return BlueprintRunner.Run(args, root, diagnostic: true);
+            case "place-blueprint":
+                return BlueprintRunner.Run(args, root, placementOnly: true);
             case "catalog":
                 return ExportCatalog();
             default:

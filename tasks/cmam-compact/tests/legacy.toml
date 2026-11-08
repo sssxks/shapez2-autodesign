@@ -8,25 +8,29 @@ operation = "capabilities"
 name = "unknown-operation-rejected"
 operation = "deliberately-invalid"
 expected_ok = false
+expected_error = "Unknown operation"
 
 [[cases]]
 name = "host-recovers-after-case-error"
 operation = "capabilities"
 
 [[cases]]
-name = "original-cmam"
+name = "original-cmam-placement"
+operation = "place-blueprint"
 blueprint = "${LIBRARY}/CMAM not connected.spz2bp"
 expected_buildings = 52375
 seconds = 1
 
 [[cases]]
-name = "connected-cmam"
+name = "connected-cmam-placement"
+operation = "place-blueprint"
 blueprint = "${TASK:cmam-legacy}/CMAM connected.spz2bp"
 expected_buildings = 142208
 seconds = 1
 
 [[cases]]
-name = "adapter-480-inlets"
+name = "adapter-480-inlets-diagnostic"
+operation = "blueprint-diagnostic"
 blueprint = "${TASK:cmam-legacy}/CMAM connected.spz2bp"
 adapter_probe = true
 seconds = 1200
@@ -37,3 +41,4 @@ type = "CmamExperiment"
 [[cases]]
 name = "host-survives-world-disposal"
 operation = "capabilities"
+

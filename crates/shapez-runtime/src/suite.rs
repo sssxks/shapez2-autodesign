@@ -88,8 +88,27 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
             }
         };
         let passed = response.ok == case.expected_ok
-            && response.result.as_ref().and_then(|r| r.verified) != Some(false);
-        println!("{}: {}", case.name, if passed { "PASS" } else { "FAIL" });
+            && case.expected_error.as_ref().is_none_or(|expected| {
+                response
+                    .error
+                    .as_ref()
+                    .is_some_and(|actual| actual.contains(expected))
+            })
+            && response.result.as_ref().and_then(|r| r.verified) != Some(false)
+            && (!case.expected_ok
+                || !matches!(case.operation.as_str(), "blueprint" | "place-blueprint")
+                || response.result.as_ref().and_then(|r| r.verified) == Some(true));
+        println!(
+            "{}: {}",
+            case.name,
+            if !passed {
+                "FAIL"
+            } else if case.operation == "blueprint-diagnostic" {
+                "DIAGNOSTIC"
+            } else {
+                "PASS"
+            }
+        );
         if !passed {
             eprintln!(
                 "{}",
