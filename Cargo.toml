@@ -14,8 +14,6 @@ flate2 = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 varisat = "0.2.2"
-
-
 shapez-model = { path = "crates/shapez-model" }
 shapez-routing = { path = "crates/shapez-routing" }
 shapez-blueprint = { path = "crates/shapez-blueprint" }
