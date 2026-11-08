@@ -3,24 +3,34 @@ use anyhow::{Result, ensure};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
+/// Index of an integer variable in allocation order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Var(usize);
+pub struct Var(
+    /// Allocation index into the model variable arrays.
+    usize,
+);
 
+/// Mutable builder for an integer affine expression.
 #[derive(Clone, Default, Debug)]
 pub struct Expr {
+    /// Variable coefficients; repeated variables are summed when constraining.
     pub terms: Vec<(Var, i64)>,
+    /// Constant offset added to the weighted variable sum.
     pub constant: i64,
 }
 impl Expr {
+    /// Append a weighted variable to this expression.
     pub fn term(&mut self, variable: Var, coefficient: i64) {
         self.terms.push((variable, coefficient));
     }
+    /// Build the unit-weight sum of the supplied variables.
     pub fn sum(variables: impl IntoIterator<Item = Var>) -> Self {
         Self {
             terms: variables.into_iter().map(|v| (v, 1)).collect(),
             constant: 0,
         }
     }
+    /// Add a scaled expression, including its constant offset.
     pub fn extend(&mut self, other: &Self, scale: i64) {
         self.terms
             .extend(other.terms.iter().map(|&(v, c)| (v, c * scale)));
@@ -32,46 +42,68 @@ impl From<Var> for Expr {
         Self::sum([v])
     }
 }
+/// Canonical linear constraint with merged nonzero coefficients.
 struct Row {
-    terms: Vec<(Var, i64)>,
+    /// Immutable nonzero variable coefficients.
+    terms: Box<[(Var, i64)]>,
+    /// Inclusive lower bound.
     lower: i64,
+    /// Inclusive upper bound.
     upper: i64,
 }
 /// Reusable finite relation, stored once before native model serialization.
 #[derive(Clone, Copy)]
-pub struct Table(usize);
+pub struct Table(
+    /// Registration index into the finite relation array.
+    usize,
+);
+/// Append-only integer model translated into a selected native backend.
 #[derive(Default)]
 pub struct Model {
+    /// Inclusive variable bounds in allocation order.
     domains: Vec<(i64, i64)>,
+    /// Canonical linear constraints.
     rows: Vec<Row>,
+    /// Last suggested assignment for each hinted variable.
     hints: BTreeMap<Var, i64>,
+    /// Mutable minimization expression replaced by minimize.
     objective: Expr,
-    relations: Vec<Vec<Vec<i64>>>,
-    tables: Vec<(Table, Vec<Var>)>,
+    /// Registered immutable finite relations.
+    relations: Vec<Box<[Box<[i64]>]>>,
+    /// Relation applications with ordered variable arguments.
+    tables: Vec<(Table, Box<[Var]>)>,
 }
 impl Model {
     /// Register a finite relation with a uniform nonzero arity.
+    ///
+    /// Panics for an empty relation, empty tuples, or unequal tuple lengths.
     pub fn relation(&mut self, rows: Vec<Vec<i64>>) -> Table {
         assert!(!rows.is_empty() && !rows[0].is_empty());
         assert!(rows.iter().all(|r| r.len() == rows[0].len()));
         let table = Table(self.relations.len());
-        self.relations.push(rows);
+        self.relations
+            .push(rows.into_iter().map(Vec::into_boxed_slice).collect());
         table
     }
     /// Constrain variables to a tuple in a previously registered relation.
+    ///
+    /// Panics if the argument count differs from the relation arity.
     pub fn allow(&mut self, table: Table, variables: Vec<Var>) {
         assert_eq!(variables.len(), self.relations[table.0][0].len());
-        self.tables.push((table, variables));
+        self.tables.push((table, variables.into_boxed_slice()));
     }
+    /// Allocate an integer variable; panics if bounds are reversed.
     pub fn variable(&mut self, lower: i64, upper: i64) -> Var {
         assert!(lower <= upper, "Ordered variable domain");
         let v = Var(self.domains.len());
         self.domains.push((lower, upper));
         v
     }
+    /// Allocate a variable whose values are zero or one.
     pub fn boolean(&mut self) -> Var {
         self.variable(0, 1)
     }
+    /// Allocate flow that is zero when disabled and between one and capacity when enabled.
     pub fn flow(&mut self, enabled: Var, capacity: i64) -> Var {
         let f = self.variable(0, capacity);
         self.bounded(
@@ -92,6 +124,7 @@ impl Model {
         );
         f
     }
+    /// Constrain an affine expression between inclusive bounds, merging duplicate terms.
     pub fn bounded(&mut self, expr: Expr, lower: i64, upper: i64) {
         let mut terms = BTreeMap::<Var, i64>::new();
         for (v, c) in expr.terms {
@@ -104,28 +137,33 @@ impl Model {
             upper: upper.saturating_sub(expr.constant),
         });
     }
+    /// Require an expression to equal the supplied integer.
     pub fn equal(&mut self, expr: impl Into<Expr>, value: i64) {
         self.bounded(expr.into(), value, value);
     }
+    /// Require the variable sum to be at most one.
     pub fn at_most_one(&mut self, vars: impl IntoIterator<Item = Var>) {
         self.bounded(Expr::sum(vars), i64::MIN, 1);
     }
+    /// Require the variable sum to equal one.
     pub fn exactly_one(&mut self, vars: impl IntoIterator<Item = Var>) {
         self.equal(Expr::sum(vars), 1);
     }
+    /// Suggest a variable value to the backend without adding a constraint.
     pub fn hint(&mut self, v: Var, value: i64) {
         self.hints.insert(v, value);
     }
+    /// Replace the minimization objective.
     pub fn minimize(&mut self, expr: Expr) {
         self.objective = expr;
     }
+    /// Return variable and constraint counts, counting each table application once.
     pub fn counts(&self) -> (usize, usize) {
         (self.domains.len(), self.rows.len() + self.tables.len())
     }
-    pub fn validate(&self, solution: &Solution) -> Result<()> {
-        let Some(values) = &solution.values else {
-            return Ok(());
-        };
+    /// Check every domain, linear constraint and finite relation against an assignment.
+    pub fn validate(&self, solution: &FeasibleSolution) -> Result<()> {
+        let values = &solution.values;
         ensure!(
             values.len() == self.domains.len(),
             "Solution dimension mismatch"
@@ -156,38 +194,107 @@ impl Model {
         Ok(())
     }
 }
-#[derive(Clone, Copy, Debug, Serialize)]
+/// Serializable classification derived from the solve outcome.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Status {
+    /// Optimal assignment found.
     Optimal,
+    /// Incumbent found.
     Feasible,
+    /// No satisfying assignment exists.
     Infeasible,
+    /// Search stopped without a definitive result.
     Unknown,
 }
-#[derive(Serialize)]
-pub struct Solution {
-    pub status: Status,
-    pub seconds: f64,
-    pub backend: &'static str,
-    #[serde(skip)]
-    values: Option<Vec<i64>>,
+/// Solver outcome; only incumbent-bearing variants expose variable values.
+///
+/// Extract an assignment by matching `Optimal` or `Feasible` before reading it.
+/// An outcome itself deliberately has no value accessor:
+/// ```compile_fail
+/// use shapez_solver::{Solution, Var};
+/// fn read(outcome: &Solution, variable: Var) -> i64 {
+///     outcome.value(variable)
+/// }
+/// ```
+#[derive(Debug)]
+pub enum Solution {
+    /// Globally optimal assignment.
+    Optimal(FeasibleSolution),
+    /// Incumbent found before optimality was established.
+    Feasible(FeasibleSolution),
+    /// Model has no satisfying assignment.
+    Infeasible(Metadata),
+    /// Search ended without an incumbent or an infeasibility result.
+    Unknown(Metadata),
+}
+/// Timing and backend recorded by one native solve.
+#[derive(Debug, Serialize)]
+pub struct Metadata {
+    /// Native solver wall time in seconds.
+    seconds: f64,
+    /// Adapter that performed the solve.
+    backend: &'static str,
+}
+impl Metadata {
+    /// Native solver wall time in seconds.
+    pub fn seconds(&self) -> f64 {
+        self.seconds
+    }
+    /// Adapter name.
+    pub fn backend(&self) -> &'static str {
+        self.backend
+    }
+}
+/// Complete integer assignment returned by a native solver.
+#[derive(Debug)]
+pub struct FeasibleSolution {
+    /// Values in variable allocation order.
+    values: Box<[i64]>,
+    /// Measurements for the solve producing this assignment.
+    metadata: Metadata,
+}
+impl FeasibleSolution {
+    /// Read a variable's assigned integer value.
+    pub fn value(&self, v: Var) -> i64 {
+        self.values[v.0]
+    }
+    /// Measurements for this assignment's solve.
+    pub fn metadata(&self) -> &Metadata {
+        &self.metadata
+    }
 }
 impl Solution {
-    pub fn feasible(&self) -> bool {
-        self.values.is_some()
+    /// Classification derived solely from the outcome variant.
+    pub fn status(&self) -> Status {
+        match self {
+            Self::Optimal(_) => Status::Optimal,
+            Self::Feasible(_) => Status::Feasible,
+            Self::Infeasible(_) => Status::Infeasible,
+            Self::Unknown(_) => Status::Unknown,
+        }
     }
-    pub fn value(&self, v: Var) -> i64 {
-        self.values.as_ref().expect("Solution must be feasible")[v.0]
+    /// Measurements shared by all outcome kinds.
+    pub fn metadata(&self) -> &Metadata {
+        match self {
+            Self::Optimal(s) | Self::Feasible(s) => &s.metadata,
+            Self::Infeasible(m) | Self::Unknown(m) => m,
+        }
     }
 }
+/// Native search resource and logging settings.
 pub struct Limits {
+    /// Maximum solve time in seconds.
     pub seconds: f64,
+    /// Requested number of native worker threads.
     pub workers: i32,
+    /// Whether native search progress is printed.
     pub log: bool,
 }
 
 #[cfg(feature = "cp-sat")]
 impl Model {
+    /// Translate and solve with CP-SAT, validating the returned incumbent.
     pub fn solve_cp_sat(&self, limits: &Limits) -> Result<Solution> {
         use cpsat_rs::prelude::*;
         let mut model = CpModel::new();
@@ -206,6 +313,7 @@ impl Model {
                 }
             })
             .collect();
+        let mut bs = Vec::new();
         for row in &self.rows {
             if row.upper == 1
                 && row
@@ -214,11 +322,8 @@ impl Model {
                     .all(|&(v, c)| c == 1 && boolean[v.0].is_some())
                 && (row.lower == 1 || row.lower <= 0)
             {
-                let bs: Vec<_> = row
-                    .terms
-                    .iter()
-                    .map(|&(v, _)| boolean[v.0].expect("Checked boolean domain"))
-                    .collect();
+                bs.clear();
+                bs.extend(row.terms.iter().filter_map(|&(v, _)| boolean[v.0]));
                 if row.lower == 1 {
                     model.add_exactly_one(&bs);
                 } else {
@@ -235,12 +340,16 @@ impl Model {
         for (&v, &value) in &self.hints {
             model.add_hint(variables[v.0], value);
         }
+        let relations: Vec<Vec<Vec<i64>>> = self
+            .relations
+            .iter()
+            .map(|rows| rows.iter().map(|r| r.to_vec()).collect())
+            .collect();
+        let mut table_vars = Vec::new();
         for (table, vars) in &self.tables {
-            model.add_table(
-                &vars.iter().map(|v| variables[v.0]).collect::<Vec<_>>(),
-                &self.relations[table.0],
-                false,
-            );
+            table_vars.clear();
+            table_vars.extend(vars.iter().map(|v| variables[v.0]));
+            model.add_table(&table_vars, &relations[table.0], false);
         }
         if !self.objective.terms.is_empty() {
             let mut objective = LinearExpr::constant(self.objective.constant);
@@ -261,26 +370,33 @@ impl Model {
             "Invalid CP-SAT model: {}",
             result.raw_proto().solution_info
         );
-        let solution = Solution {
-            status: match result.status() {
-                CpSolverStatus::Optimal => crate::Status::Optimal,
-                CpSolverStatus::Feasible => crate::Status::Feasible,
-                CpSolverStatus::Infeasible => crate::Status::Infeasible,
-                _ => crate::Status::Unknown,
-            },
+        let metadata = Metadata {
             seconds: result.wall_time(),
             backend: "cp-sat",
-            values: result
-                .is_feasible()
-                .then(|| variables.iter().map(|&v| result.value(v)).collect()),
         };
-        self.validate(&solution)?;
+        let solution = match result.status() {
+            CpSolverStatus::Optimal | CpSolverStatus::Feasible => {
+                let feasible = FeasibleSolution {
+                    values: variables.iter().map(|&v| result.value(v)).collect(),
+                    metadata,
+                };
+                self.validate(&feasible)?;
+                if result.status() == CpSolverStatus::Optimal {
+                    Solution::Optimal(feasible)
+                } else {
+                    Solution::Feasible(feasible)
+                }
+            }
+            CpSolverStatus::Infeasible => Solution::Infeasible(metadata),
+            _ => Solution::Unknown(metadata),
+        };
         Ok(solution)
     }
 }
 
 #[cfg(feature = "scip")]
 impl Model {
+    /// Solve linear constraints with SCIP; finite relations return an error.
     pub fn solve_scip(&self, limits: &Limits) -> Result<Solution> {
         ensure!(
             self.tables.is_empty(),
@@ -322,10 +438,13 @@ impl Model {
                 )
             })
             .collect();
+        let mut coefficients = Vec::new();
         for (i, row) in self.rows.iter().enumerate() {
+            coefficients.clear();
+            coefficients.extend(row.terms.iter().map(|(_, c)| *c as f64));
             model.add_cons(
                 row.terms.iter().map(|(v, _)| &variables[v.0]).collect(),
-                &row.terms.iter().map(|(_, c)| *c as f64).collect::<Vec<_>>(),
+                &coefficients,
                 if row.lower == i64::MIN {
                     f64::NEG_INFINITY
                 } else {
@@ -353,29 +472,113 @@ impl Model {
         } else {
             model.solve()
         };
-        let values = result
-            .best_sol()
-            .map(|s| variables.iter().map(|v| s.val(v).round() as i64).collect());
-        let status = match result.status() {
-            russcip::Status::Optimal => crate::Status::Optimal,
-            russcip::Status::Infeasible => crate::Status::Infeasible,
-            _ if values.is_some() => crate::Status::Feasible,
-            _ => crate::Status::Unknown,
-        };
-        let solution = Solution {
-            status,
+        let metadata = Metadata {
             seconds: result.solving_time(),
             backend: "scip",
-            values,
         };
-        self.validate(&solution)?;
+        let solution = if let Some(incumbent) = result.best_sol() {
+            let feasible = FeasibleSolution {
+                values: variables
+                    .iter()
+                    .map(|v| incumbent.val(v).round() as i64)
+                    .collect(),
+                metadata,
+            };
+            self.validate(&feasible)?;
+            if result.status() == russcip::Status::Optimal {
+                Solution::Optimal(feasible)
+            } else {
+                Solution::Feasible(feasible)
+            }
+        } else if result.status() == russcip::Status::Infeasible {
+            Solution::Infeasible(metadata)
+        } else {
+            Solution::Unknown(metadata)
+        };
         Ok(solution)
     }
 }
 
+/// Outcome invariant and native adapter regression tests.
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Exercise all outcome variants and reject invalid incumbent assignments.
+    #[test]
+    fn outcomes_and_validation() {
+        let metadata = || Metadata {
+            seconds: 0.25,
+            backend: "test",
+        };
+        for (outcome, status) in [
+            (Solution::Infeasible(metadata()), Status::Infeasible),
+            (Solution::Unknown(metadata()), Status::Unknown),
+        ] {
+            assert_eq!(outcome.status(), status);
+            assert_eq!(outcome.metadata().seconds(), 0.25);
+        }
+        let mut model = Model::default();
+        let x = model.variable(0, 2);
+        model.equal(x, 1);
+        for optimal in [false, true] {
+            let feasible = FeasibleSolution {
+                values: Box::new([1]),
+                metadata: metadata(),
+            };
+            model.validate(&feasible).unwrap();
+            assert_eq!(feasible.value(x), 1);
+            let outcome = if optimal {
+                Solution::Optimal(feasible)
+            } else {
+                Solution::Feasible(feasible)
+            };
+            assert_eq!(
+                outcome.status(),
+                if optimal {
+                    Status::Optimal
+                } else {
+                    Status::Feasible
+                }
+            );
+            assert_eq!(outcome.metadata().backend(), "test");
+        }
+        for values in [vec![], vec![3], vec![2]] {
+            assert!(
+                model
+                    .validate(&FeasibleSolution {
+                        values: values.into_boxed_slice(),
+                        metadata: metadata()
+                    })
+                    .is_err()
+            );
+        }
+    }
+    /// Contradictory equalities must yield infeasible on every enabled adapter.
+    #[cfg(any(feature = "cp-sat", feature = "scip"))]
+    #[test]
+    fn native_infeasible() {
+        let mut model = Model::default();
+        let x = model.boolean();
+        model.equal(x, 0);
+        model.equal(x, 1);
+        let limits = Limits {
+            seconds: 5.,
+            workers: 1,
+            log: false,
+        };
+        #[cfg(feature = "cp-sat")]
+        assert!(matches!(
+            model.solve_cp_sat(&limits).unwrap(),
+            Solution::Infeasible(_)
+        ));
+        #[cfg(feature = "scip")]
+        assert!(matches!(
+            model.solve_scip(&limits).unwrap(),
+            Solution::Infeasible(_)
+        ));
+    }
+
+    /// Verify finite relations preserve nonlinear tuples under minimization.
     #[cfg(feature = "cp-sat")]
     #[test]
     fn finite_relation_preserves_non_linear_pairs() {
@@ -392,8 +595,13 @@ mod tests {
                 log: false,
             })
             .unwrap();
+        let Solution::Optimal(solution) = solution else {
+            panic!("Expected optimum")
+        };
         assert_eq!((solution.value(x), solution.value(y)), (2, 4));
     }
+    /// Verify both adapters honor domains, equalities and minimization.
+    #[cfg(any(feature = "cp-sat", feature = "scip"))]
     #[test]
     fn native_backends_respect_capacity_and_objective() {
         let mut model = Model::default();
@@ -409,11 +617,17 @@ mod tests {
         #[cfg(feature = "cp-sat")]
         {
             let s = model.solve_cp_sat(&limits).unwrap();
+            let Solution::Optimal(s) = s else {
+                panic!("Expected optimum")
+            };
             assert_eq!((s.value(a), s.value(b)), (1, 4));
         }
         #[cfg(feature = "scip")]
         {
             let s = model.solve_scip(&limits).unwrap();
+            let Solution::Optimal(s) = s else {
+                panic!("Expected optimum")
+            };
             assert_eq!((s.value(a), s.value(b)), (1, 4));
         }
         let _ = limits;
