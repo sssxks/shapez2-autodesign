@@ -8,6 +8,10 @@ public sealed class BeltSource
 {
     private readonly IItemReceiver lane;
     private double credit;
+    public long AcceptedCount
+    {
+        get; private set;
+    }
     public IBeltItem Item
     {
         get; set;
@@ -23,6 +27,7 @@ public sealed class BeltSource
         if (rate > 0 && credit >= 1 && lane.CanAcceptItem(Item))
         {
             lane.HandOverItem(Item, Ticks.Zero);
+            AcceptedCount++;
             credit -= 1;
         }
     }
@@ -42,6 +47,8 @@ public sealed class BeltMeter : IItemReceiver
     public bool CanAcceptItem(IBeltItem item) => !Blocked;
     public void HandOverItem(IBeltItem item, Ticks remainingTicks)
     {
+        if (Blocked)
+            throw new InvalidOperationException("Blocked output accepted an item");
         var key = item.ToString();
         if (accepted.Count != 0 && !accepted.Contains(key))
             throw new InvalidOperationException("Unexpected output shape or crossed lane: " + key);

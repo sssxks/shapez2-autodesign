@@ -27,9 +27,12 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
                 throw new InvalidOperationException("Disabled transport: " + sim.Simulation.GetType().Name);
             if (sim.Simulation is MergerSimulation merger && sim is IConnectableSimulation connectors)
             {
-                if (merger.NumItemReceivers == 2) twoInputMergers++;
-                else if (merger.NumItemReceivers == 3) threeInputMergers++;
-                else throw new InvalidOperationException("Unexpected merger input count");
+                if (merger.NumItemReceivers == 2)
+                    twoInputMergers++;
+                else if (merger.NumItemReceivers == 3)
+                    threeInputMergers++;
+                else
+                    throw new InvalidOperationException("Unexpected merger input count");
                 for (int i = 0; i < connectors.NumConnectors; i++)
                     if (!world.Simulator.TryGetConnectedSimulation(sim, i, out _))
                         throw new InvalidOperationException("Unconnected merger socket at " + ((ILocalizedTileSimulation)sim).GetOccupiedTile(0));
@@ -40,6 +43,7 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
             throw new InvalidOperationException("Merger count: " + checkedMergers);
         var sources = new List<BeltSource>();
         var meters = new Dictionary<string, BeltMeter>();
+        var groups = new Dictionary<string, string>();
         var bound = ports.Bind(world);
         foreach (var port in bound.Inputs)
             sources.Add(new BeltSource(port.Receiver, "CuCuCuCu"));
@@ -48,6 +52,7 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
             var meter = new BeltMeter();
             port.Sender.PathLane.NextLane = meter;
             meters.Add(port.Position.ToString(), meter);
+            groups.Add(port.Position.ToString(), port.Role);
         }
         if (sources.Count != 12 || meters.Count != 48)
             throw new InvalidOperationException($"Port counts {sources.Count}/12, {meters.Count}/48");
@@ -87,28 +92,15 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
             if (failures.Count > 0)
                 throw new InvalidOperationException(string.Join("; ", failures));
         }
-        foreach (var m in meters.Values)
-            m.Blocked = true;
-        world.Advance(20, 120, Feed);
-        foreach (var m in meters.Values)
-            m.Blocked = false;
-        world.Advance(120, 120, Feed);
-        foreach (var m in meters.Values)
-            m.Counts.Clear();
-        world.Advance(120, 120, Feed);
-        foreach (var pair in meters)
-        {
-            pair.Value.Counts.TryGetValue("Rr------", out var n);
-            if (n < 120 * rate * 0.995)
-                throw new InvalidOperationException($"Recovery {pair.Key}: {n}");
-        }
+        var recovery = ProductionAcceptance.Run(world, sources,
+            meters.Select(p => (p.Key, groups[p.Key], p.Value, "Rr------")).ToArray());
         var report = new
         {
             verified = true,
             rate,
             input_lanes = sources.Count,
             output_lanes = meters.Count,
-            blocked_output_recovery = true,
+            blocked_output_recovery = recovery,
             connected_two_input_mergers = twoInputMergers,
             connected_three_input_mergers = threeInputMergers,
             unused_merger_connectors = 0,
@@ -118,6 +110,7 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
         return report;
     }
 }
+
 
 
 

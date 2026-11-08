@@ -11,7 +11,9 @@ using Newtonsoft.Json.Linq;
 /// Validate synthesized primitive networks with every merger socket connected.
 public sealed class QuarterWeaveExperiment : IBlueprintExperiment
 {
-    public void Configure(JObject args) { }
+    public void Configure(JObject args)
+    {
+    }
     public bool KeepBuilding(GlobalTileCoordinate position) => true;
     public object Run(LabWorld world, JObject args, string root)
     {
@@ -29,47 +31,66 @@ public sealed class QuarterWeaveExperiment : IBlueprintExperiment
                 mergers++;
             }
         }
-        IItemSimulation Find(JToken p) => (IItemSimulation)(simulations.OfType<ILocalizedTileSimulation>().SingleOrDefault(s => {
-            for (int i = 0; i < s.NumOccupiedTiles; i++) {
+        IItemSimulation Find(JToken p) => (IItemSimulation)(simulations.OfType<ILocalizedTileSimulation>().SingleOrDefault(s =>
+        {
+            for (int i = 0; i < s.NumOccupiedTiles; i++)
+            {
                 var t = s.GetOccupiedTile(i);
-                if (t.x == (int)p[0]! && t.y == (int)p[1]! && t.z == (int)p[2]!) return true;
+                if (t.x == (int)p[0]! && t.y == (int)p[1]! && t.z == (int)p[2]!)
+                    return true;
             }
             return false;
         }) ?? throw new InvalidOperationException("Missing test port " + p)).Simulation;
         var sources = args["inputs"]!.Select(p => new BeltSource(Find(p).GetItemReceiver(0), "CuCuCuCu")).ToArray();
-        var meters = args["outputs"]!.Select(p => {
+        var meters = args["outputs"]!.Select(p =>
+        {
             var meter = new BeltMeter();
             Find(p).GetItemProvider(0).NextLane = meter;
             return meter;
         }).ToArray();
         var rates = args["input_rates"]?.Select(p => (double)p).ToArray() ?? sources.Select(_ => 0.5).ToArray();
-        if (rates.Length != sources.Length) throw new InvalidOperationException("Input rate count does not match source count");
-        void Feed(Ticks start, Ticks delta) { for (int i = 0; i < sources.Length; i++) sources[i].Feed(delta.FloatSeconds, rates[i]); }
+        if (rates.Length != sources.Length)
+            throw new InvalidOperationException("Input rate count does not match source count");
+        void Feed(Ticks start, Ticks delta)
+        {
+            for (int i = 0; i < sources.Length; i++)
+                sources[i].Feed(delta.FloatSeconds, rates[i]);
+        }
         var phases = new List<object>();
         var outputFull = args["output_full"]?.Select(p => (bool)p).ToArray() ?? meters.Select(_ => false).ToArray();
         void Check(string expected)
         {
-            for (int i = 0; i < meters.Length; i++) {
+            for (int i = 0; i < meters.Length; i++)
+            {
                 var meter = meters[i];
-                var shape = outputFull[i] ? string.Concat(Enumerable.Repeat(expected.Substring(0,2), 4)) : expected;
+                var shape = outputFull[i] ? string.Concat(Enumerable.Repeat(expected.Substring(0, 2), 4)) : expected;
                 if (meter.Counts.Count != 1 || !meter.Counts.TryGetValue(shape, out var n) || n < 239)
                     throw new InvalidOperationException("Weave output: " + JsonConvert.SerializeObject(meter.Counts));
             }
         }
         foreach (var shape in new[] { "CuCuCuCu", "RrRrRrRr" })
         {
-            foreach (var source in sources) source.Item = GameBindings.Shapes.GetItem(GameBindings.ShapeIds.Resolve(shape));
+            foreach (var source in sources)
+                source.Item = GameBindings.Shapes.GetItem(GameBindings.ShapeIds.Resolve(shape));
             BeltMeasurement.Run(world, 120, 120, meters, Feed);
-            var counts = meters.Select(m => new Dictionary<string,long>(m.Counts)).ToArray();
-            phases.Add(new { shape, counts });
+            var counts = meters.Select(m => new Dictionary<string, long>(m.Counts)).ToArray();
+            phases.Add(new
+            {
+                shape,
+                counts
+            });
             File.WriteAllText(Path.Combine(root, "weave-measurements.json"), JsonConvert.SerializeObject(phases, Formatting.Indented));
-            Check(shape.Substring(0,2) + "------");
+            Check(shape.Substring(0, 2) + "------");
         }
-        foreach (var meter in meters) meter.Blocked = true;
-        world.Advance(20, 120, Feed);
-        foreach (var meter in meters) meter.Blocked = false;
-        BeltMeasurement.Run(world, 120, 120, meters, Feed);
-        Check("Rr------");
-        return new { verified = true, phases, mergers, unused_merger_connectors = 0, blocked_output_recovery = true };
+        var recovery = ProductionAcceptance.Run(world, sources,
+            meters.Select((m, i) => (i.ToString(), "output", m, outputFull[i] ? "RrRrRrRr" : "Rr------")).ToArray(), inputRates: rates);
+        return new
+        {
+            verified = true,
+            phases,
+            mergers,
+            unused_merger_connectors = 0,
+            blocked_output_recovery = recovery
+        };
     }
 }

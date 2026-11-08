@@ -69,27 +69,12 @@ public sealed class PriorityExperiment : IBlueprintExperiment
                 lanes = sinks.OrderBy(p => p.Key).Select(p => new { lane = p.Key, counts = new Dictionary<string, long>(p.Value.Counts), utilization = p.Value.Counts.Values.Sum() / (120 * rate) }).ToArray()
             });
         }
-        // Retain queued goods while the downstream port is blocked, then recover.
-        foreach (var sink in sinks.Values)
-            sink.Blocked = true;
-        world.Advance(15, 120, (_, delta) => { foreach (var s in a.Values.Concat(b.Values)) s.Feed(delta.FloatSeconds, rate); });
-        foreach (var sink in sinks.Values)
-            sink.Blocked = false;
-        world.Advance(30, 120, (_, delta) => { foreach (var s in a.Values.Concat(b.Values)) s.Feed(delta.FloatSeconds, rate); });
-        foreach (var sink in sinks.Values)
-            sink.Counts.Clear();
-        world.Advance(120, 120, (_, delta) => { foreach (var s in a.Values.Concat(b.Values)) s.Feed(delta.FloatSeconds, rate); });
-        foreach (var pair in sinks)
-        {
-            pair.Value.Counts.TryGetValue(Shape(pair.Key, true), out var primary);
-            pair.Value.Counts.TryGetValue(Shape(pair.Key, false), out var secondary);
-            if (primary < 120 * rate * 0.995 || secondary != 0)
-                throw new InvalidOperationException($"Blocked-output recovery failed at lane {pair.Key}");
-        }
+        var recovery = ProductionAcceptance.Run(world, a.OrderBy(p => p.Key).Select(p => p.Value).ToArray(),
+            sinks.OrderBy(p => p.Key).Select(p => (p.Key.ToString(), "output", p.Value, Shape(p.Key, true))).ToArray());
         var report = new
         {
             verified = true,
-            blocked_output_recovery = true,
+            blocked_output_recovery = recovery,
             belt_rate = rate,
             phases = reports
         };
@@ -97,3 +82,4 @@ public sealed class PriorityExperiment : IBlueprintExperiment
         return report;
     }
 }
+
