@@ -7,13 +7,12 @@ using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 /// Exercise real ports, circuitry, belts, and backpressure in a disposable native world.
 public sealed class PriorityExperiment : IBlueprintExperiment
 {
     private BeltPortManifest ports = null!;
-    public void Configure(JObject args) => ports = BeltPortManifest.Parse(args);
+    public void Configure(LabArguments args) => ports = BeltPortManifest.Parse(args);
     public bool KeepBuilding(GlobalTileCoordinate position) => true;
 
     private static string Shape(int lane, bool primary)
@@ -22,7 +21,7 @@ public sealed class PriorityExperiment : IBlueprintExperiment
         return $"{part}{"rgbcmyw"[lane % 7]}{part}{"rgbcmyw"[lane / 7]}{part}u{part}u";
     }
 
-    public object Run(LabWorld world, JObject args, string root)
+    public ExperimentResult Run(LabWorld world, LabArguments args, string root)
     {
         var a = new Dictionary<int, BeltSource>();
         var b = new Dictionary<int, BeltSource>();
@@ -78,8 +77,8 @@ public sealed class PriorityExperiment : IBlueprintExperiment
             belt_rate = rate,
             phases = reports
         };
-        File.WriteAllText(Path.Combine(root, args.Value<string>("name") + "-measurements.json"), JsonConvert.SerializeObject(report, Formatting.Indented));
-        return report;
+        File.WriteAllText(Path.Combine(root, args.Name + "-measurements.json"), JsonConvert.SerializeObject(report, Formatting.Indented));
+        return ExperimentResult.Accepted(report);
     }
 }
 

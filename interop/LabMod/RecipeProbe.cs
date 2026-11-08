@@ -3,15 +3,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Game.Content.Features.Fluids;
-using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
 
 internal static class RecipeProbe
 {
-    internal static object Run(JObject args, string root)
+    internal static object Run(LabArguments args, string root)
     {
-        var input = JsonInput.Object(JsonInput.Required(args, "recipe"), "recipe");
+        var input = ArgumentChecks.Required(args.Recipe, "recipe");
         var recipe = new RecipePlan(input);
-        File.WriteAllText(Path.Combine(root, "recipe.json"), input.ToString());
         var ops = GameBindings.Operations;
         var registry = GameBindings.Shapes;
         var ids = GameBindings.ShapeIds;
@@ -72,7 +71,7 @@ internal static class RecipeProbe
                     failed_node = node.Id,
                     trace
                 };
-                File.WriteAllText(Path.Combine(root, "recipe-verification.json"), JObject.FromObject(failed).ToString());
+                File.WriteAllText(Path.Combine(root, "recipe-verification.json"), JsonConvert.SerializeObject(failed));
                 return failed;
             }
             values.Add(selected);
@@ -84,7 +83,7 @@ internal static class RecipeProbe
             steps = values.Count,
             trace
         };
-        File.WriteAllText(Path.Combine(root, "recipe-verification.json"), JObject.FromObject(result).ToString());
+        File.WriteAllText(Path.Combine(root, "recipe-verification.json"), JsonConvert.SerializeObject(result));
         return result;
     }
 }

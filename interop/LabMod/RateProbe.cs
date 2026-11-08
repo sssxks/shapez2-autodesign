@@ -7,7 +7,6 @@ using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 using Game.Core.Trains;
-using Newtonsoft.Json.Linq;
 
 internal sealed class RateProbe
 {

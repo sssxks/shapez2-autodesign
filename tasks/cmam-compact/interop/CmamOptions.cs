@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using Newtonsoft.Json.Linq;
 
 internal sealed class CmamOptions
 {
@@ -25,20 +24,20 @@ internal sealed class CmamOptions
         get;
     }
 
-    internal CmamOptions(JObject args)
+    internal CmamOptions(LabArguments args)
     {
-        Adapter = JsonInput.Boolean(args, "adapter_probe") ?? false;
-        Seconds = JsonInput.Nonnegative(JsonInput.Integer(args, "seconds") ?? 1, "seconds");
-        Name = JsonInput.CaseName(args, "production");
-        MinimumProduced = JsonInput.Long(args, "min_produced");
+        Adapter = args.AdapterProbe ?? false;
+        Seconds = ArgumentChecks.Nonnegative(args.Seconds ?? 1, "seconds");
+        Name = ArgumentChecks.CaseName(args, "production");
+        MinimumProduced = args.MinProduced;
         if (MinimumProduced < 0)
             throw new ArgumentOutOfRangeException("min_produced");
-        var manifest = args["production_manifest"];
+        var manifest = args.ProductionManifest;
         if (manifest != null)
         {
             if (Adapter)
                 throw new ArgumentException("Production experiment cannot cut adapter buildings");
-            Production = new ProductionOptions(JsonInput.Object(manifest, "production_manifest"), JsonInput.String(args, "target"));
+            Production = new ProductionOptions(manifest, ArgumentChecks.Required(args.Target, "target"));
         }
     }
 }
@@ -66,17 +65,14 @@ internal sealed class ProductionOptions
         get;
     }
 
-    internal ProductionOptions(JObject manifest, string target)
+    internal ProductionOptions(ManifestInput manifest, string target)
     {
         Supply = new SupplyManifest(manifest);
         Target = target;
-        var production = JsonInput.Object(JsonInput.Required(manifest, "production"), "production");
-        var chunk = JsonInput.Array(production, "output_chunk");
-        if (chunk.Count != 3 || chunk.Any(value => value.Type != JTokenType.Integer))
-            throw new ArgumentException("output_chunk must contain three integer coordinates");
-        OutputX = checked((int)chunk[0] * 20);
-        OutputY = checked((int)chunk[1] * 20);
-        SignalReceivers = JsonInput.Nonnegative(JsonInput.Integer(production, "signal_receivers")
-            ?? throw new ArgumentException("signal_receivers is required"), "signal_receivers");
+        var production = ArgumentChecks.Required(manifest.Production, "production");
+        var chunk = production.OutputChunk;
+        OutputX = checked(chunk.X * 20);
+        OutputY = checked(chunk.Y * 20);
+        SignalReceivers = ArgumentChecks.Nonnegative(production.SignalReceivers, "signal_receivers");
     }
 }

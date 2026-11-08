@@ -1,14 +1,13 @@
 using System;
 using System.Reflection;
 using Game.Core.Coordinates;
-using Newtonsoft.Json.Linq;
 
 /// Task assemblies own experimental policy; the host owns the native world.
 public interface IBlueprintExperiment
 {
-    void Configure(JObject args);
+    void Configure(LabArguments args);
     bool KeepBuilding(GlobalTileCoordinate position);
-    object Run(LabWorld world, JObject args, string root);
+    ExperimentResult Run(LabWorld world, LabArguments args, string root);
 }
 
 internal static class BlueprintExperiment

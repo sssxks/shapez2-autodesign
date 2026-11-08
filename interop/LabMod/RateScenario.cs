@@ -1,11 +1,10 @@
 using System;
 using System.IO;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 internal static class RateScenario
 {
-    internal static object Run(LabWorld world, RateOptions options, string root)
+    internal static RateReport Run(LabWorld world, RateOptions options, string root)
     {
         var probe = new RateProbe(world.Simulator, options.Manifest);
         world.Advance(options.WarmupSeconds, 10, probe.BeforeTick, probe.AfterTick);

@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using Game.Core.Map.Simulation;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 internal static class BlueprintRunner
 {
-    internal static object Run(JObject args, string root, bool diagnostic = false, bool placementOnly = false)
+    internal static object Run(LabArguments args, string root, bool diagnostic = false, bool placementOnly = false)
     {
         var options = new BlueprintRunOptions(args);
         var experiment = BlueprintExperiment.Load(options.Experiment);
@@ -25,8 +24,9 @@ internal static class BlueprintRunner
         object? probe = null;
         if (experiment != null)
         {
-            probe = experiment.Run(world, args, root);
-            if (!diagnostic && (probe == null || JObject.FromObject(probe).Value<bool?>("verified") != true))
+            var result = experiment.Run(world, args, root);
+            probe = result;
+            if (!diagnostic && !result.Verified)
                 throw new InvalidOperationException("Experiment did not explicitly verify acceptance");
         }
         else if (options.Rate != null)

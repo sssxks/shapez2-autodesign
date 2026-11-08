@@ -8,18 +8,17 @@ using Game.Content.Features.Signals.Tick;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 using Game.Core.Trains;
-using Newtonsoft.Json.Linq;
 
 internal static class SaveInspection
 {
-    internal static object Read(JObject args)
+    internal static object Read(LabArguments args)
     {
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("SHAPEZ_LAB_SAVE")))
             throw new InvalidOperationException("Set SHAPEZ_LAB_SAVE to inspect a save copy");
         var session = GameBindings.Session;
         var map = GameBindings.Field<MapModel>(session, "MapModel");
         var simulator = map.Simulator;
-        var seconds = JsonInput.Nonnegative(JsonInput.Integer(args, "seconds") ?? 0, "seconds");
+        var seconds = ArgumentChecks.Nonnegative(args.Seconds ?? 0, "seconds");
         if (seconds > 0)
             SimulationStepper.Advance(map, seconds, 10);
         var channels = GameBindings.Field<SignalChannelRegistry>(session, "SignalChannelRegistry");
@@ -70,7 +69,7 @@ internal static class SaveInspection
                 {
                     chunk = new[] { p.x, p.y, (int)p.z },
                     type = "fluid",
-                    packages = GameBindings.FluidCargo(fluids).Select(f => JToken.FromObject(f.Package)).ToArray()
+                    packages = GameBindings.FluidCargo(fluids).Select(f => new { f.Package.Amount, item = f.Package.Item.ToString() }).ToArray()
                 });
         }
         return new

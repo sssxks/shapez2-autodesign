@@ -8,7 +8,7 @@ using Game.Core.Simulation;
 /// Nominal-rate production and bounded recovery through the same continuously running world.
 public static class ProductionAcceptance
 {
-    public static object Run(LabWorld world, IReadOnlyList<BeltSource> sources,
+    public static ExperimentResult Run(LabWorld world, IReadOnlyList<BeltSource> sources,
         IReadOnlyList<(string Name, string Group, BeltMeter Meter, string Shape)> outputs,
         bool independentOverflow = false, IReadOnlyList<double>? inputRates = null)
     {
@@ -126,15 +126,15 @@ public static class ProductionAcceptance
                 output.Meter.Blocked = false;
             Recover("release-" + blocked);
         }
-        return new
+        return ExperimentResult.Accepted(new
         {
-            verified = true,
+
             belt_rate = rate,
             input_lanes = sources.Count,
             output_lanes = outputs.Count,
             recovery_deadline_seconds = 120,
             stable_recovery_windows = 3,
             phases
-        };
+        });
     }
 }

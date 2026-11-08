@@ -20,7 +20,7 @@ internal sealed class LabRequest
     }
 
     internal string Operation => JsonInput.String(payload, "operation");
-    internal JObject Arguments => JsonInput.Object(JsonInput.Required(payload, "args"), "args");
+    internal LabArguments Arguments => new LabArguments(JsonInput.Object(JsonInput.Required(payload, "args"), "args"));
 }
 
 internal sealed class LabResponse

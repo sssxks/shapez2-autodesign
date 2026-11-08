@@ -3,26 +3,24 @@ using System.Collections.Generic;
 using Game.Content.BuildingPath.Simulation;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
-using Newtonsoft.Json.Linq;
 
 /// Task-declared physical ports, parsed once before native execution.
 public sealed class BeltPortManifest
 {
     private readonly (string Role, int Lane, TilePosition Position, bool Output)[] ports;
     private BeltPortManifest((string, int, TilePosition, bool)[] ports) => this.ports = ports;
-    public static BeltPortManifest Parse(JObject args)
+    public static BeltPortManifest Parse(LabArguments args)
     {
         var result = new List<(string, int, TilePosition, bool)>();
         var positions = new HashSet<TilePosition>();
         var identities = new HashSet<(string, int)>();
-        foreach (var token in JsonInput.Array(args, "ports"))
+        foreach (var port in ArgumentChecks.Required(args.Ports, "ports"))
         {
-            var port = JsonInput.Object(token, "port");
-            var role = JsonInput.String(port, "role");
-            int lane = JsonInput.Nonnegative(JsonInput.Integer(port, "lane") ?? throw new ArgumentException("lane required"), "lane");
-            var p = JsonInput.Coordinate(JsonInput.Required(port, "position"), "position");
+            var role = port.Role;
+            int lane = ArgumentChecks.Nonnegative(port.Lane, "lane");
+            var p = port.Position;
             var position = new TilePosition(p.X, p.Y, p.Z);
-            bool output = JsonInput.Boolean(port, "output") ?? throw new ArgumentException("output required");
+            bool output = port.Output;
             if (!positions.Add(position) || !identities.Add((role, lane)))
                 throw new ArgumentException("Duplicate physical port or lane identity");
             result.Add((role, lane, position, output));

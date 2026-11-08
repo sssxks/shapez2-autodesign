@@ -4,7 +4,6 @@ using System.IO;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 internal static class GraphExporter
 {

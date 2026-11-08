@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using Game.Content.BuildingPath.Simulation;
 using Game.Core.Content;
-using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 public sealed class ShapezLabMod : IMod
@@ -118,7 +117,7 @@ public sealed class LabService : MonoBehaviour
         Application.Quit();
     }
 
-    private object Execute(string operation, JObject args)
+    private object Execute(string operation, LabArguments args)
     {
         switch (operation)
         {
@@ -152,7 +151,7 @@ public sealed class LabService : MonoBehaviour
             case "place-blueprint":
                 return BlueprintRunner.Run(args, root, placementOnly: true);
             case "catalog":
-                return ExportCatalog();
+                return BuildingCatalog.Query();
             default:
                 throw new ArgumentException("Unknown operation: " + operation);
         }
@@ -177,28 +176,4 @@ public sealed class LabService : MonoBehaviour
         };
     }
 
-    private object ExportCatalog()
-    {
-        var definitions = new JObject();
-        var skipped = new List<object>();
-        foreach (var obj in Resources.FindObjectsOfTypeAll<ScriptableObject>())
-        {
-            var type = obj.GetType();
-            if (!type.Name.Contains("Metadata") && !type.Name.Contains("BuildingInternalVariant"))
-                continue;
-            try
-            {
-                definitions[obj.name] = JObject.Parse(JsonUtility.ToJson(obj));
-            }
-            catch (Exception error) { skipped.Add(new { name = obj.name, type = type.FullName, error = error.Message }); }
-        }
-        var output = Path.Combine(root, "definitions.json");
-        File.WriteAllText(output, definitions.ToString());
-        return new
-        {
-            path = output,
-            count = definitions.Count,
-            skipped
-        };
-    }
 }

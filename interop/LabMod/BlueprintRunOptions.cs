@@ -1,5 +1,4 @@
 using System;
-using Newtonsoft.Json.Linq;
 
 internal sealed class BlueprintRunOptions
 {
@@ -32,19 +31,18 @@ internal sealed class BlueprintRunOptions
         get;
     }
 
-    internal BlueprintRunOptions(JObject input)
+    internal BlueprintRunOptions(LabArguments input)
     {
-        Path = JsonInput.String(input, "blueprint");
-        Name = JsonInput.CaseName(input, "blueprint");
-        Seconds = JsonInput.Nonnegative(JsonInput.Integer(input, "seconds") ?? 1, "seconds");
-        ExpectedBuildings = JsonInput.Integer(input, "expected_buildings");
+        Path = ArgumentChecks.Required(input.Blueprint, "blueprint");
+        Name = ArgumentChecks.CaseName(input, "blueprint");
+        Seconds = ArgumentChecks.Nonnegative(input.Seconds ?? 1, "seconds");
+        ExpectedBuildings = input.ExpectedBuildings;
         if (ExpectedBuildings is int count)
-            JsonInput.Nonnegative(count, "expected_buildings");
-        ExportGraph = JsonInput.Boolean(input, "export_graph") ?? true;
-        var rate = input["rate_manifest"];
-        Rate = rate == null ? null : new RateOptions(input, JsonInput.Object(rate, "rate_manifest"), Seconds);
-        Experiment = input["experiment"] is JToken definition && definition.Type != JTokenType.Null
-            ? new ExperimentDefinition(JsonInput.Object(definition, "experiment")) : null;
+            ArgumentChecks.Nonnegative(count, "expected_buildings");
+        ExportGraph = input.ExportGraph ?? true;
+        var rate = input.RateManifest;
+        Rate = rate == null ? null : new RateOptions(input, rate, Seconds);
+        Experiment = input.Experiment;
         if (Rate != null && Experiment != null)
             throw new ArgumentException("Choose either rate_manifest or experiment");
     }
@@ -69,32 +67,16 @@ internal sealed class RateOptions
         get;
     }
 
-    internal RateOptions(JObject input, JObject manifest, int seconds)
+    internal RateOptions(LabArguments input, ManifestInput manifest, int seconds)
     {
         if (seconds <= 0)
             throw new ArgumentOutOfRangeException("seconds", "Rate window must be positive");
         Seconds = seconds;
-        WarmupSeconds = JsonInput.Nonnegative(JsonInput.Integer(input, "warmup_seconds") ?? 300, "warmup_seconds");
-        MinimumRatio = JsonInput.Number(input, "minimum_rate_ratio") ?? 0.99;
+        WarmupSeconds = ArgumentChecks.Nonnegative(input.WarmupSeconds ?? 300, "warmup_seconds");
+        MinimumRatio = input.MinimumRateRatio ?? 0.99;
         if (MinimumRatio < 0 || MinimumRatio > 1)
             throw new ArgumentOutOfRangeException("minimum_rate_ratio", "Must be between zero and one");
         Manifest = new RateManifest(manifest);
     }
 }
 
-internal sealed class ExperimentDefinition
-{
-    internal string Assembly
-    {
-        get;
-    }
-    internal string Type
-    {
-        get;
-    }
-    internal ExperimentDefinition(JObject input)
-    {
-        Assembly = JsonInput.String(input, "assembly");
-        Type = JsonInput.String(input, "type");
-    }
-}

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Newtonsoft.Json.Linq;
 
 public sealed class SupplyManifest
 {
@@ -9,14 +8,13 @@ public sealed class SupplyManifest
         get;
     }
 
-    public SupplyManifest(JObject input)
+    public SupplyManifest(ManifestInput input)
     {
         var sources = new Dictionary<ChunkPosition, string>();
-        foreach (var value in JsonInput.Array(input, "sources"))
+        foreach (var source in ArgumentChecks.Required(input.Sources, "sources"))
         {
-            var source = JsonInput.Object(value, "source");
-            var p = JsonInput.Coordinate(JsonInput.Required(source, "chunk"), "chunk");
-            sources.Add(new ChunkPosition(p.X, p.Y, p.Z), JsonInput.String(source, "item"));
+            var p = source.Position;
+            sources.Add(new ChunkPosition(p.X, p.Y, p.Z), source.Item);
         }
         Sources = sources;
     }
@@ -37,23 +35,21 @@ internal sealed class RateManifest
         get;
     }
 
-    internal RateManifest(JObject input)
+    internal RateManifest(ManifestInput input)
     {
         Supply = new SupplyManifest(input);
         var targets = new Dictionary<TilePosition, string>();
-        foreach (var value in JsonInput.Array(input, "targets"))
+        foreach (var target in ArgumentChecks.Required(input.Targets, "targets"))
         {
-            var target = JsonInput.Object(value, "target");
-            var p = JsonInput.Coordinate(JsonInput.Required(target, "tile"), "tile");
-            targets.Add(new TilePosition(p.X, p.Y, p.Z), JsonInput.String(target, "item"));
+            var p = target.Position;
+            targets.Add(new TilePosition(p.X, p.Y, p.Z), target.Item);
         }
         if (targets.Count == 0)
             throw new ArgumentException("Rate measurement requires targets");
         Targets = targets;
         CutIslands = new HashSet<ChunkPosition>();
-        foreach (var value in JsonInput.Array(input, "cut_islands"))
+        foreach (var p in ArgumentChecks.Required(input.CutIslands, "cut_islands"))
         {
-            var p = JsonInput.Coordinate(value, "cut_islands");
             CutIslands.Add(new ChunkPosition(p.X, p.Y, p.Z));
         }
     }

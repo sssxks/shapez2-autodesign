@@ -3,7 +3,6 @@ using System.IO;
 using Game.Core.Coordinates;
 using Game.Core.Simulation;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 public sealed class CmamExperiment : IBlueprintExperiment
 {
@@ -11,7 +10,7 @@ public sealed class CmamExperiment : IBlueprintExperiment
     // Import policy is configured before buildings are created.
     public bool KeepBuilding(GlobalTileCoordinate p) => !Options.Adapter || AdapterProbe.KeepBuilding(p);
     private CmamOptions Options => options ?? throw new InvalidOperationException("Configure the experiment before use");
-    public object Run(LabWorld world, JObject args, string root)
+    public ExperimentResult Run(LabWorld world, LabArguments args, string root)
     {
         var configured = Options;
         if (configured.Production != null)
@@ -22,7 +21,7 @@ public sealed class CmamExperiment : IBlueprintExperiment
             File.WriteAllText(Path.Combine(root, configured.Name + "-production.json"), JsonConvert.SerializeObject(report, Formatting.Indented));
             if (configured.MinimumProduced is long minimum && production.Produced < minimum)
                 throw new InvalidOperationException("Production below required count: " + production.Produced);
-            return report;
+            return ExperimentResult.Observed(report);
         }
         var probe = new AdapterProbe(world.Simulator);
         bool complete = false;
@@ -31,12 +30,12 @@ public sealed class CmamExperiment : IBlueprintExperiment
         File.WriteAllText(Path.Combine(root, "adapter-flow.json"), JsonConvert.SerializeObject(flow));
         if (!complete)
             throw new Exception("Adapter flow did not reach every inlet: " + JsonConvert.SerializeObject(flow));
-        return flow;
+        return ExperimentResult.Observed(flow);
     }
     public CmamExperiment()
     {
     }
-    public void Configure(JObject args)
+    public void Configure(LabArguments args)
     {
         options = new CmamOptions(args);
     }

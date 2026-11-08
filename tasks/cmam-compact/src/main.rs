@@ -58,8 +58,11 @@ fn main() -> Result<()> {
             paths.build("LabMod")?;
             let timeout = Duration::from_secs(timeout);
             let mut host = Host::start(&paths, timeout)?;
-            let response =
-                host.request::<_, Box<serde_json::value::RawValue>>(&operation, shapez_runtime::EmptyArgs {}, timeout)?;
+            let response = host.request::<_, Box<serde_json::value::RawValue>>(
+                &operation,
+                shapez_runtime::EmptyArgs {},
+                timeout,
+            )?;
             println!("{}", serde_json::to_string(&response)?);
             println!("artifacts: {}", host.run.display());
             host.shutdown()?;

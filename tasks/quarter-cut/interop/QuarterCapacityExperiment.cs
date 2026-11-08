@@ -5,15 +5,16 @@ using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 /// Measure saturated rotators independently before sharing them between cutting lanes.
 public sealed class QuarterCapacityExperiment : IBlueprintExperiment
 {
-    public void Configure(JObject args) { }
+    public void Configure(LabArguments args)
+    {
+    }
     public bool KeepBuilding(GlobalTileCoordinate position) => true;
 
-    public object Run(LabWorld world, JObject args, string root)
+    public ExperimentResult Run(LabWorld world, LabArguments args, string root)
     {
         var rotators = ((ISimulator)world.Simulator).Simulations
             .Select(s => s.Simulation).OfType<RotatorSimulation>().ToArray();
@@ -36,8 +37,8 @@ public sealed class QuarterCapacityExperiment : IBlueprintExperiment
         var cutMeters = cutters.SelectMany(_ => new[] { new BeltMeter(), new BeltMeter() }).ToArray();
         for (int i = 0; i < cutters.Length; i++)
         {
-            cutters[i].LeftOutputLane.NextLane = cutMeters[2*i];
-            cutters[i].RightOutputLane.NextLane = cutMeters[2*i+1];
+            cutters[i].LeftOutputLane.NextLane = cutMeters[2 * i];
+            cutters[i].RightOutputLane.NextLane = cutMeters[2 * i + 1];
         }
         var full = GameBindings.Shapes.GetItem(GameBindings.ShapeIds.Resolve("CuCuCuCu"));
         void FeedCutters(Ticks start, Ticks delta)
@@ -47,10 +48,14 @@ public sealed class QuarterCapacityExperiment : IBlueprintExperiment
                     cutter.InputLane.HandOverItem(full, Ticks.Zero);
         }
         BeltMeasurement.Run(world, 30, 120, cutMeters, FeedCutters);
-        var cutterReport = cutMeters.Select(m => new { count=m.Counts.Values.Sum(),rate=m.Counts.Values.Sum()/120.0,shapes=m.Counts }).ToArray();
-        File.WriteAllText(Path.Combine(root,"cutter-capacity.json"),JsonConvert.SerializeObject(cutterReport,Formatting.Indented));
+        var cutterReport = cutMeters.Select(m => new { count = m.Counts.Values.Sum(), rate = m.Counts.Values.Sum() / 120.0, shapes = m.Counts }).ToArray();
+        File.WriteAllText(Path.Combine(root, "cutter-capacity.json"), JsonConvert.SerializeObject(cutterReport, Formatting.Indented));
         if (cutterReport.Any(m => m.count != 60))
             throw new InvalidOperationException("Native full-cutter rate changed; update the capacity model");
-        return new { rotators=report,cutters=cutterReport };
+        return ExperimentResult.Observed(new
+        {
+            rotators = report,
+            cutters = cutterReport
+        });
     }
 }

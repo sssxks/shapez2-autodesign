@@ -4,7 +4,6 @@ using System.Linq;
 using Game.Content.Features.Signals;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
-using Newtonsoft.Json.Linq;
 
 internal sealed class ProductionProbe
 {

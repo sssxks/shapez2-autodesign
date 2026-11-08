@@ -4,11 +4,10 @@ using Game.Content.BuildingPath.Simulation;
 using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
-using Newtonsoft.Json.Linq;
 /// Fault injection exercises failure detection while real native belts remain in the loop.
 public sealed class AcceptanceExperiment : IBlueprintExperiment
 {
-    public void Configure(JObject args)
+    public void Configure(LabArguments args)
     {
     }
     public bool KeepBuilding(GlobalTileCoordinate p) => true;
@@ -27,14 +26,14 @@ public sealed class AcceptanceExperiment : IBlueprintExperiment
         }
         public void HandOverItem(IBeltItem item, Ticks ticks) => meter.HandOverItem(item, ticks);
     }
-    public object Run(LabWorld world, JObject args, string root)
+    public ExperimentResult Run(LabWorld world, LabArguments args, string root)
     {
-        string name = args.Value<string>("name")!;
+        string name = args.Name!;
         if (name == "unverified")
-            return new
+            return ExperimentResult.Observed(new
             {
                 observed = true
-            };
+            });
         var sources = new List<BeltSource>();
         var outputs = new List<(string, string, BeltMeter, string)>();
         foreach (var s in ((ISimulator)world.Simulator).Simulations)

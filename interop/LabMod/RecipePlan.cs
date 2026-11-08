@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using Newtonsoft.Json.Linq;
 
 internal enum RecipeOperation
 {
@@ -34,12 +33,12 @@ internal sealed class RecipeNode
         get;
     }
 
-    internal RecipeNode(JObject input, int index)
+    internal RecipeNode(RecipeNodeInput input, int index)
     {
-        Id = JsonInput.Integer(input, "id") ?? throw new ArgumentException("Recipe node id required");
+        Id = input.Id;
         if (Id != index)
             throw new ArgumentException("Recipe IDs must follow execution order");
-        OperationName = JsonInput.String(input, "op");
+        OperationName = input.Op;
         Operation = OperationName switch
         {
             "source" => RecipeOperation.Source,
@@ -54,16 +53,11 @@ internal sealed class RecipeNode
         };
         var arity = Operation == RecipeOperation.Source ? 0 :
             Operation == RecipeOperation.Swap || Operation == RecipeOperation.Stack ? 2 : 1;
-        Inputs = JsonInput.Array(input, "inputs").Select(value =>
-        {
-            if (value.Type != JTokenType.Integer)
-                throw new ArgumentException("Recipe input must be an integer");
-            return (int)value;
-        }).ToArray();
+        Inputs = input.Inputs;
         if (Inputs.Length != arity || Inputs.Any(value => value < 0 || value >= index))
             throw new ArgumentException($"Invalid inputs for recipe node {Id}");
-        Expected = JsonInput.String(input, "expected");
-        Color = JsonInput.OptionalString(input, "color");
+        Expected = input.Expected;
+        Color = input.Color;
         var colored = Operation == RecipeOperation.Paint || Operation == RecipeOperation.Crystallize;
         if (colored != (Color != null) || Color != null && Color.Length != 1)
             throw new ArgumentException($"Invalid color for recipe node {Id}");
@@ -87,12 +81,11 @@ internal sealed class RecipePlan
     {
         get;
     }
-    internal RecipePlan(JObject input)
+    internal RecipePlan(RecipeInput input)
     {
-        Target = JsonInput.String(input, "target");
-        Root = JsonInput.Integer(input, "root") ?? throw new ArgumentException("Recipe root required");
-        Nodes = JsonInput.Array(input, "nodes")
-            .Select((node, index) => new RecipeNode(JsonInput.Object(node, "node"), index)).ToArray();
+        Target = input.Target;
+        Root = input.Root;
+        Nodes = input.Nodes.Select((node, index) => new RecipeNode(node, index)).ToArray();
         if (Root < 0 || Root >= Nodes.Length)
             throw new ArgumentException("Recipe root is missing");
         if (Nodes[Root].Expected != Target)

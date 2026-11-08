@@ -86,7 +86,11 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
                 break;
             }
         };
-        let outcome: Option<CaseOutcome> = response.result.as_ref().map(|raw| serde_json::from_str(raw.get())).transpose()?;
+        let outcome: Option<CaseOutcome> = response
+            .result
+            .as_ref()
+            .map(|raw| serde_json::from_str(raw.get()))
+            .transpose()?;
         let passed = response.ok == case.expected_ok
             && case.expected_error.as_ref().is_none_or(|expected| {
                 response

@@ -6,16 +6,15 @@ using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 /// Validate synthesized primitive networks with every merger socket connected.
 public sealed class QuarterWeaveExperiment : IBlueprintExperiment
 {
-    public void Configure(JObject args)
+    public void Configure(LabArguments args)
     {
     }
     public bool KeepBuilding(GlobalTileCoordinate position) => true;
-    public object Run(LabWorld world, JObject args, string root)
+    public ExperimentResult Run(LabWorld world, LabArguments args, string root)
     {
         var simulations = ((ISimulator)world.Simulator).Simulations.ToArray();
         int mergers = 0;
@@ -31,24 +30,24 @@ public sealed class QuarterWeaveExperiment : IBlueprintExperiment
                 mergers++;
             }
         }
-        IItemSimulation Find(JToken p) => (IItemSimulation)(simulations.OfType<ILocalizedTileSimulation>().SingleOrDefault(s =>
+        IItemSimulation Find(InputCoordinate p) => (IItemSimulation)(simulations.OfType<ILocalizedTileSimulation>().SingleOrDefault(s =>
         {
             for (int i = 0; i < s.NumOccupiedTiles; i++)
             {
                 var t = s.GetOccupiedTile(i);
-                if (t.x == (int)p[0]! && t.y == (int)p[1]! && t.z == (int)p[2]!)
+                if (t.x == p.X && t.y == p.Y && t.z == p.Z)
                     return true;
             }
             return false;
         }) ?? throw new InvalidOperationException("Missing test port " + p)).Simulation;
-        var sources = args["inputs"]!.Select(p => new BeltSource(Find(p).GetItemReceiver(0), "CuCuCuCu")).ToArray();
-        var meters = args["outputs"]!.Select(p =>
+        var sources = ArgumentChecks.Required(args.Inputs, "inputs").Select(p => new BeltSource(Find(p).GetItemReceiver(0), "CuCuCuCu")).ToArray();
+        var meters = ArgumentChecks.Required(args.Outputs, "outputs").Select(p =>
         {
             var meter = new BeltMeter();
             Find(p).GetItemProvider(0).NextLane = meter;
             return meter;
         }).ToArray();
-        var rates = args["input_rates"]?.Select(p => (double)p).ToArray() ?? sources.Select(_ => 0.5).ToArray();
+        var rates = args.InputRates ?? sources.Select(_ => 0.5).ToArray();
         if (rates.Length != sources.Length)
             throw new InvalidOperationException("Input rate count does not match source count");
         void Feed(Ticks start, Ticks delta)
@@ -57,7 +56,9 @@ public sealed class QuarterWeaveExperiment : IBlueprintExperiment
                 sources[i].Feed(delta.FloatSeconds, rates[i]);
         }
         var phases = new List<object>();
-        var outputFull = args["output_full"]?.Select(p => (bool)p).ToArray() ?? meters.Select(_ => false).ToArray();
+        var outputFull = args.OutputFull ?? meters.Select(_ => false).ToArray();
+        if (outputFull.Length != meters.Length)
+            throw new ArgumentException("Output fullness count does not match output count");
         void Check(string expected)
         {
             for (int i = 0; i < meters.Length; i++)
@@ -84,13 +85,13 @@ public sealed class QuarterWeaveExperiment : IBlueprintExperiment
         }
         var recovery = ProductionAcceptance.Run(world, sources,
             meters.Select((m, i) => (i.ToString(), "output", m, outputFull[i] ? "RrRrRrRr" : "Rr------")).ToArray(), inputRates: rates);
-        return new
+        return ExperimentResult.Accepted(new
         {
-            verified = true,
+
             phases,
             mergers,
             unused_merger_connectors = 0,
             blocked_output_recovery = recovery
-        };
+        });
     }
 }

@@ -36,7 +36,7 @@ CMAM 任务负责接入布局、旧版生成、生产/接入实验插件和套�
 
 公共 `LabWorld` 管理世界与模拟器，`Advance` 显式推进模拟；`BlueprintRunner` 拥有蓝图运行流程，`BlueprintLoader` 负责原生导入和放置；`UnloaderSupply` 供料，`RateScenario` 测量通道，`GraphExporter` 导出连接图，`GameBindings` 集中游戏版本适配。
 
-C# 操作在入口通过 `JsonInput` 校验 JSON，转成 `BlueprintRunOptions`、`RateManifest`、`SupplyManifest`、`RecipePlan` 等类型后执行。缺少字段、错误类型、负数时间、无效测量窗口和配方前向引用均在执行前拒绝。`TilePosition` 与 `ChunkPosition` 区分格子和区块坐标。任务插件在 `Configure` 中解析自己的参数，公共宿主不解释任务参数；`JObject` 仅保留在协议、操作入口和插件边界。协议响应、蓝图运行报告和速率报告通过显式 `JsonProperty` 固定线上的字段名。
+C# 在协议边界通过 `JsonInput` 严格校验 JSON，一次性解码为 `LabArguments` 及配方、端口、供料等类型。操作和插件只接收类型化参数，业务逻辑不使用 `JObject`/`JToken`。`BlueprintRunOptions`、`RateManifest`、`SupplyManifest`、`RecipePlan` 负责语义校验；错误类型、负数时间、无效测量窗口和配方前向引用均在执行前拒绝。`TilePosition` 与 `ChunkPosition` 区分格子和区块坐标。实验返回 `ExperimentResult.Accepted(details)` 或 `Observed(details)`，宿主直接读取类型化的 `Verified`，不再序列化后查找字段。
 
 `LabWorld` 按创建顺序登记独立资源，并按逆序释放；构造中途失败也回收已创建对象。清理会尝试全部资源，并聚合异常。原生 `MapModel` 和 `Simulator` 的 `Dispose` 只解除自己注册的事件，不代替世界释放其余资源。
 
@@ -53,16 +53,18 @@ world.Advance(seconds, 10, production.BeforeTick);
 
 协议分帧测试随 `cargo test -p shapez-runtime` 执行。准备好本地宿主后，可运行 `cargo test -p shapez-runtime live_pipe -- --ignored`，验证错误请求后的继续使用、控制端断连退出、请求超时回收和游戏异常退出。
 
-可识别请求 ID 的信封或参数错误返回本次请求的失败响应；无效 ID、损坏的帧或断连终止连接。只有成功执行并写出确认响应的 shutdown 才结束服务。Unity 主线程使用非阻塞回包入队；后台任务负责全部管道 I/O，关闭时中断 I/O，任务完成后释放队列和取消源。`catalog` 返回被跳过对象的名称、类型与错误信息。
+可识别请求 ID 的信封或参数错误返回本次请求的失败响应；无效 ID、损坏的帧或断连终止连接。只有成功执行并写出确认响应的 shutdown 才结束服务。Unity 主线程使用非阻塞回包入队；后台任务负责全部管道 I/O，关闭时中断 I/O，任务完成后释放队列和取消源。Rust 传输线程只读写字节，协议层直接序列化请求和解码类型化响应；归档结果保留为 `RawValue`，不构建 `Value` 树。
+
+`catalog` 直接返回 `BuildingCapability[]`，只包含建筑 ID、占格、连接器种类与位置、切割器速度与延迟；不再遍历 Unity 对象导出全部字段，也不生成中间定义文件。蓝图文件入口只接受游戏的 `SHAPEZ2-…$` 格式，不接受展开的 JSON；任务也不额外导出完整蓝图 JSON。
 
 `cargo test -p shapez-runtime live_prepare -- --ignored` 验证不完整副本的补丁准备会失败、保持输入 DLL 字节不变并移除旧成功标记。
 
 任务特殊实验实现 `IBlueprintExperiment`：
 
 ```csharp
-void Configure(JObject args);
+void Configure(LabArguments args);
 bool KeepBuilding(GlobalTileCoordinate position);
-object Run(LabWorld world, JObject args, string outputDirectory);
+ExperimentResult Run(LabWorld world, LabArguments args, string outputDirectory);
 ```
 
 宿主根据请求中的程序集路径和类型加载任务插件，不引用任务程序集。套件 `projects` 声明需要构建的扩展工程。

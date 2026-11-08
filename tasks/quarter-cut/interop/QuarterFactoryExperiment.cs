@@ -7,17 +7,16 @@ using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 /// End-to-end twelve-input, forty-eight-output production acceptance.
 public sealed class QuarterFactoryExperiment : IBlueprintExperiment
 {
     private BeltPortManifest ports = null!;
-    public void Configure(JObject args) => ports = BeltPortManifest.Parse(args);
+    public void Configure(LabArguments args) => ports = BeltPortManifest.Parse(args);
     public bool KeepBuilding(GlobalTileCoordinate position) => true;
 
 
-    public object Run(LabWorld world, JObject args, string root)
+    public ExperimentResult Run(LabWorld world, LabArguments args, string root)
     {
         int checkedMergers = 0;
         int twoInputMergers = 0, threeInputMergers = 0;
@@ -39,7 +38,7 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
                 checkedMergers++;
             }
         }
-        if (checkedMergers != args.Value<int>("expected_mergers"))
+        if (checkedMergers != args.ExpectedMergers)
             throw new InvalidOperationException("Merger count: " + checkedMergers);
         var sources = new List<BeltSource>();
         var meters = new Dictionary<string, BeltMeter>();
@@ -107,7 +106,7 @@ public sealed class QuarterFactoryExperiment : IBlueprintExperiment
             phases
         };
         File.WriteAllText(Path.Combine(root, "quarter-cut-measurements.json"), JsonConvert.SerializeObject(report, Formatting.Indented));
-        return report;
+        return ExperimentResult.Accepted(report);
     }
 }
 

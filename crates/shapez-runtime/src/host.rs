@@ -225,15 +225,14 @@ impl Host {
                 thread::sleep(Duration::from_millis(10));
             };
             h.connection = Some(crate::transport::Connection::new(pipe));
-            let ready: crate::protocol::Ready = serde_json::from_slice(&h.receive(deadline.saturating_duration_since(Instant::now()))?)?;
+            let ready: crate::protocol::Ready = serde_json::from_slice(
+                &h.receive(deadline.saturating_duration_since(Instant::now()))?,
+            )?;
             ensure!(
                 ready.kind == "ready" && ready.protocol == 1,
                 "Unsupported host handshake: {ready:?}"
             );
-            ensure!(
-                ready.pid == h.child.id(),
-                "Readiness PID mismatch"
-            );
+            ensure!(ready.pid == h.child.id(), "Readiness PID mismatch");
             ensure!(
                 ready.data_path == data,
                 "Data isolation mismatch: {ready:?}"
@@ -418,13 +417,43 @@ mod tests {
             .unwrap();
         assert!(response.ok);
         assert!(host.run.join("ready.json").is_file());
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "PascalCase", deny_unknown_fields)]
+        struct Capability {
+            id: String,
+            tiles: Vec<String>,
+            connectors: Vec<Connector>,
+            cutter_speed: Option<String>,
+            cutter_delay: Option<String>,
+        }
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "PascalCase", deny_unknown_fields)]
+        struct Connector {
+            kind: String,
+            pivot: String,
+        }
+        let catalog: Response<Vec<Capability>> = host
+            .request("catalog", crate::EmptyArgs {}, timeout)
+            .unwrap();
+        assert!(catalog.ok, "{:?}", catalog.error);
+        let catalog = catalog.result.unwrap();
+        assert!(!catalog.is_empty());
+        assert!(catalog.iter().all(|item| !item.id.is_empty() && !item.tiles.is_empty()));
+        assert!(catalog.iter().flat_map(|item| &item.connectors)
+            .all(|connector| !connector.kind.is_empty() && !connector.pivot.is_empty()));
+        assert!(catalog.iter().any(|item| item.cutter_speed.is_some() && item.cutter_delay.is_some()));
+        assert!(!host.run.join("definitions.json").exists());
         // A rejected shutdown must not make the pipe worker terminate.
         for malformed in [
             serde_json::json!({"id":1000,"operation":"capabilities"}),
             serde_json::json!({"id":1000,"operation":42,"args":{}}),
             serde_json::json!({"id":1000,"operation":"shutdown","args":null}),
         ] {
-            host.connection.as_ref().unwrap().send(serde_json::to_vec(&malformed).unwrap()).unwrap();
+            host.connection
+                .as_ref()
+                .unwrap()
+                .send(serde_json::to_vec(&malformed).unwrap())
+                .unwrap();
             let response: Response =
                 serde_json::from_slice(&host.receive(timeout).unwrap()).unwrap();
             assert_eq!(response.id, 1000);

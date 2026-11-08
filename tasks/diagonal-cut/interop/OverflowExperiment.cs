@@ -3,15 +3,14 @@ using System.Collections.Generic;
 using Game.Content.BuildingPath.Simulation;
 using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
-using Newtonsoft.Json.Linq;
 /// Every physical lane, nominal supply, independent overflow and bounded recovery.
 public sealed class OverflowExperiment : IBlueprintExperiment
 {
-    public void Configure(JObject args)
+    public void Configure(LabArguments args)
     {
     }
     public bool KeepBuilding(GlobalTileCoordinate p) => true;
-    public object Run(LabWorld world, JObject args, string root)
+    public ExperimentResult Run(LabWorld world, LabArguments args, string root)
     {
         var sources = new List<BeltSource>();
         var outputs = new List<(string, string, BeltMeter, string)>();

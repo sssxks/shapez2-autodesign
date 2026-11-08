@@ -10,18 +10,17 @@ using Game.Core.Blueprint.Importer.Disassemble;
 using Game.Core.Blueprint.Serialization;
 using Game.Core.Blueprints;
 using Game.Orchestration;
-using Newtonsoft.Json.Linq;
 
 /// Inspect serialization and library compatibility without placing or saving a world.
 internal static class BlueprintInspection
 {
-    internal static object Read(JObject args, string root)
+    internal static object Read(LabArguments args, string root)
     {
-        var path = JsonInput.String(args, "blueprint");
-        var name = JsonInput.CaseName(args, "blueprint");
-        var expectedFormat = JsonInput.Integer(args, "expected_format_version");
-        var expectedWarning = JsonInput.Boolean(args, "expected_library_warning");
-        var expectedIcon = args["expected_icon"] as JArray;
+        var path = ArgumentChecks.Required(args.Blueprint, "blueprint");
+        var name = ArgumentChecks.CaseName(args, "blueprint");
+        var expectedFormat = args.ExpectedFormatVersion;
+        var expectedWarning = args.ExpectedLibraryWarning;
+        var expectedIcon = args.ExpectedIcon;
         var text = File.ReadAllText(path);
         var logger = GameBindings.Field<ILogger>(GameBindings.Session, "Logger");
         var migrators = new BlueprintMigrators(logger);

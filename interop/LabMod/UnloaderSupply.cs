@@ -4,7 +4,6 @@ using System.Linq;
 using Game.Content.Features.Fluids;
 using Game.Core.Map.Simulation;
 using Game.Core.Trains;
-using Newtonsoft.Json.Linq;
 
 public sealed class UnloaderSupply
 {
@@ -14,7 +13,6 @@ public sealed class UnloaderSupply
         new List<(TrainCargoToBeltFillingContainer<FluidId>, FluidId)>();
     private const int RefillThreshold = 1000;
     private const int PackageAmount = 30000;
-    public UnloaderSupply(ISimulator simulator, JObject manifest) : this(simulator, new SupplyManifest(manifest)) { }
 
     public UnloaderSupply(ISimulator simulator, SupplyManifest manifest)
     {
