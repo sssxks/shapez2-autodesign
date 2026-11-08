@@ -43,6 +43,7 @@ impl<'de> Deserialize<'de> for Configuration {
     }
 }
 
+/// Placed game building with its definition and optional binary configuration.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "wire::Building")]
 pub struct Building {
@@ -84,6 +85,7 @@ impl Building {
     rename = "Building",
     try_from = "wire::BuildingBlueprint"
 )]
+/// Building layout and legacy embedded metadata.
 pub struct BuildingBlueprint {
     #[serde(rename = "Entries")]
     pub entries: Vec<Building>,
@@ -102,6 +104,7 @@ impl BuildingBlueprint {
     }
 }
 
+/// Placed island with optional buildings and game configuration.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "wire::Island")]
 pub struct Island {
@@ -147,6 +150,7 @@ impl Island {
     }
 }
 
+/// Island layout and legacy embedded metadata.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "$type", rename = "Island", try_from = "wire::IslandBlueprint")]
 pub struct IslandBlueprint {
@@ -167,6 +171,7 @@ impl IslandBlueprint {
     }
 }
 
+/// The two layout kinds accepted by the game blueprint format.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(from = "wire::Content", untagged)]
 pub enum BlueprintContent {
@@ -201,6 +206,7 @@ impl From<IconComponent> for String {
         }
     }
 }
+/// Four optional icon quadrants in game ordering.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BlueprintIcon {
@@ -213,6 +219,7 @@ pub struct BlueprintIcon {
 pub(crate) mod wire {
     use super::*;
 
+    /// Tagged wire layout accepting both plain and Newtonsoft-wrapped arrays.
     #[derive(Deserialize)]
     #[serde(tag = "$type", deny_unknown_fields)]
     pub enum Content {
@@ -234,14 +241,17 @@ pub(crate) mod wire {
         },
     }
 
+    /// Input array adapter accepting a sequence or a typed $values wrapper.
     pub struct Array<T>(Vec<T>);
     impl<T> Array<T> {
+        /// Consume the input adapter and transfer ownership of its decoded elements.
         pub fn into_vec(self) -> Vec<T> {
             self.0
         }
     }
     impl<'de, T: Deserialize<'de>> Deserialize<'de> for Array<T> {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            /// Serde visitor for plain sequences and Newtonsoft array objects.
             struct Visitor<T>(std::marker::PhantomData<T>);
             impl<'de, T: Deserialize<'de>> de::Visitor<'de> for Visitor<T> {
                 type Value = Array<T>;
@@ -290,12 +300,14 @@ pub(crate) mod wire {
             deserializer.deserialize_any(Visitor(std::marker::PhantomData))
         }
     }
+    /// Base64 configuration accepted as plain text or a typed Newtonsoft wrapper.
     #[derive(Deserialize)]
     #[serde(untagged)]
     pub enum Bytes {
         Plain(String),
         Typed(TypedBytes),
     }
+    /// Newtonsoft binary wrapper carrying its base64 value.
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     pub struct TypedBytes {
@@ -305,6 +317,7 @@ pub(crate) mod wire {
         value: String,
     }
     impl Bytes {
+        /// Extract the base64 text from either supported wire representation.
         pub fn into_text(self) -> String {
             match self {
                 Self::Plain(v) => v,
@@ -312,6 +325,7 @@ pub(crate) mod wire {
             }
         }
     }
+    /// Placed game building with its definition and optional binary configuration.
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     pub struct Building {
@@ -330,6 +344,7 @@ pub(crate) mod wire {
         #[serde(rename = "C", default)]
         pub configuration: Option<Configuration>,
     }
+    /// Building layout and legacy embedded metadata.
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     pub struct BuildingBlueprint {
@@ -342,6 +357,7 @@ pub(crate) mod wire {
         #[serde(rename = "BinaryVersion", default)]
         pub binary_version: Option<u32>,
     }
+    /// Placed island with optional buildings and game configuration.
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     pub struct Island {
@@ -364,6 +380,7 @@ pub(crate) mod wire {
         #[serde(rename = "B", default)]
         pub buildings: Option<super::BuildingBlueprint>,
     }
+    /// Island layout and legacy embedded metadata.
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     pub struct IslandBlueprint {

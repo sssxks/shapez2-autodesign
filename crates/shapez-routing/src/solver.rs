@@ -8,7 +8,9 @@ use std::{
     cmp::Reverse,
     collections::{BinaryHeap, HashMap, HashSet},
 };
+/// Search state pairing an island position with its arrival heading.
 type State = (ChunkPos, Direction);
+/// Extend one shared net to a sink using weighted shortest-path search. Occupancy includes every layer crossed by a lift.
 fn route(
     netid: usize,
     net: &TransportNet,
@@ -143,6 +145,7 @@ fn route(
     Ok(())
 }
 
+/// Route all transport nets, retaining the smallest successful plan across seeded orderings. Rejects invalid bounds, missing attempts and unreachable sinks.
 pub fn solve_transport(problem: &TransportProblem, options: SearchOptions) -> Result<RoutePlan> {
     ensure!(
         options.attempts > 0,

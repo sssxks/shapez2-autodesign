@@ -12,6 +12,7 @@ use std::{
 /// Envelope version, independent of the game/save version inside the payload.
 pub const BLUEPRINT_FORMAT_VERSION: u32 = 5;
 
+/// Decoded blueprint with game version, layout and optional display icon.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Blueprint {
@@ -21,6 +22,7 @@ pub struct Blueprint {
     pub source_format_version: Option<u32>,
 }
 
+/// Borrowed payload serialized inside the compressed blueprint envelope.
 #[derive(Serialize)]
 struct Payload<'a> {
     #[serde(rename = "V")]
@@ -29,6 +31,7 @@ struct Payload<'a> {
     content: &'a BlueprintContent,
 }
 
+/// Strict input payload; unknown fields are rejected during deserialization.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Document {
@@ -65,9 +68,11 @@ struct MetadataEntry {
     #[serde(rename = "Content")]
     content: String,
 }
+/// Assembly-qualified game type name identifying icon metadata.
 const ICON_TYPE: &str =
     "BlueprintIcon, SPZGameAssembly, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null";
 
+/// Decode a SHAPEZ2 envelope, checking version, metadata lengths and typed payload structure. Returns an error for malformed or unsupported input.
 pub fn decode_blueprint(text: &str) -> Result<Blueprint> {
     let text = text.trim();
     let body = text
@@ -142,6 +147,7 @@ pub fn decode_blueprint(text: &str) -> Result<Blueprint> {
     Ok(blueprint)
 }
 
+/// Serialize the layout and icon into the current compressed SHAPEZ2 envelope.
 pub fn encode_blueprint(blueprint: &Blueprint) -> Result<String> {
     let mut gz = GzEncoder::new(Vec::new(), Compression::default());
     gz.write_all(&serde_json::to_vec(&Payload {
@@ -267,6 +273,7 @@ impl Blueprint {
     }
 }
 
+/// Borrowed layout inventory with counts and decoded labels.
 #[derive(Serialize)]
 pub struct BlueprintSummary<'a> {
     pub version: u32,
@@ -277,6 +284,7 @@ pub struct BlueprintSummary<'a> {
     pub train_interfaces: Vec<TrainInterfaceSummary<'a>>,
 }
 impl<'a> BlueprintSummary<'a> {
+    /// Accumulate building counts and label text, borrowing valid UTF-8 configuration bytes.
     fn add_buildings(&mut self, index: usize, chunk: [i32; 2], entries: &'a [crate::Building]) {
         self.buildings += entries.len();
         for building in entries {
@@ -288,20 +296,22 @@ impl<'a> BlueprintSummary<'a> {
                     decoded: building
                         .configuration
                         .as_ref()
-                        .map(|c| String::from_utf8_lossy(&c.0).into_owned())
+                        .map(|c| String::from_utf8_lossy(&c.0))
                         .unwrap_or_default(),
                 });
             }
         }
     }
 }
+/// Label configuration associated with its containing island and building.
 #[derive(Serialize)]
 pub struct LabelSummary<'a> {
     pub island: usize,
     pub chunk: [i32; 2],
     pub building: &'a crate::Building,
-    pub decoded: String,
+    pub decoded: std::borrow::Cow<'a, str>,
 }
+/// Train interface island and its index in the blueprint.
 #[derive(Serialize)]
 pub struct TrainInterfaceSummary<'a> {
     pub index: usize,
