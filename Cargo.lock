@@ -1122,6 +1122,8 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
+ "shapez-blueprint",
+ "shapez-model",
  "windows-sys 0.61.2",
 ]
 

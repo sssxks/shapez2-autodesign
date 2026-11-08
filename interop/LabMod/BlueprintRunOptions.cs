@@ -41,8 +41,8 @@ internal sealed class BlueprintRunOptions
         if (ExpectedBuildings is int count)
             JsonInput.Nonnegative(count, "expected_buildings");
         ExportGraph = JsonInput.Boolean(input, "export_graph") ?? true;
-        var ratePath = JsonInput.OptionalString(input, "rate_manifest");
-        Rate = ratePath == null ? null : new RateOptions(input, ratePath, Seconds);
+        var rate = input["rate_manifest"];
+        Rate = rate == null ? null : new RateOptions(input, JsonInput.Object(rate, "rate_manifest"), Seconds);
         Experiment = input["experiment"] is JToken definition && definition.Type != JTokenType.Null
             ? new ExperimentDefinition(JsonInput.Object(definition, "experiment")) : null;
         if (Rate != null && Experiment != null)
@@ -69,7 +69,7 @@ internal sealed class RateOptions
         get;
     }
 
-    internal RateOptions(JObject input, string path, int seconds)
+    internal RateOptions(JObject input, JObject manifest, int seconds)
     {
         if (seconds <= 0)
             throw new ArgumentOutOfRangeException("seconds", "Rate window must be positive");
@@ -78,7 +78,7 @@ internal sealed class RateOptions
         MinimumRatio = JsonInput.Number(input, "minimum_rate_ratio") ?? 0.99;
         if (MinimumRatio < 0 || MinimumRatio > 1)
             throw new ArgumentOutOfRangeException("minimum_rate_ratio", "Must be between zero and one");
-        Manifest = new RateManifest(JsonInput.ReadFile(path));
+        Manifest = new RateManifest(manifest);
     }
 }
 

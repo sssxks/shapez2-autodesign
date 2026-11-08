@@ -234,10 +234,7 @@ pub fn plan_recipe(target: &str) -> Result<Recipe> {
 }
 
 /// The symbol set and case enumeration are owned by this construction task.
-pub fn write_check_suite(dir: &std::path::Path) -> Result<std::path::PathBuf> {
-    use serde_json::json;
-    use std::fs;
-    fs::create_dir_all(dir)?;
+pub fn check_suite() -> Result<shapez_runtime::Suite> {
     let mut cases = Vec::new();
     let symbols = ["--", "P-", "Cu", "cw", "cr"];
     for n in 1..625 {
@@ -247,13 +244,12 @@ pub fn write_check_suite(dir: &std::path::Path) -> Result<std::path::PathBuf> {
             target.push_str(symbols[k % 5]);
             k /= 5;
         }
-        let path = dir.join(format!("{n}.json"));
-        fs::write(&path, serde_json::to_vec_pretty(&plan_recipe(&target)?)?)?;
-        cases.push(json!({"name":target,"operation":"recipe","recipe":path}));
+        cases.push(shapez_runtime::case! { name: target.clone(), operation: "recipe", recipe: plan_recipe(&target)? });
     }
-    let path = dir.join("suite.json");
-    fs::write(&path, serde_json::to_vec_pretty(&json!({"cases":cases}))?)?;
-    Ok(path)
+    Ok(shapez_runtime::Suite {
+        projects: vec![],
+        cases,
+    })
 }
 mod commands;
 pub use commands::{run_check, run_recipe};

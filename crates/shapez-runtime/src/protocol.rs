@@ -1,6 +1,6 @@
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 use std::path::PathBuf;
 
 #[derive(Debug, Serialize)]
@@ -11,7 +11,7 @@ pub struct Request<'a, T> {
 }
 
 /// Transport success and operation-specific acceptance remain separate fields.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Response<T = Value> {
     pub id: u64,
     pub ok: bool,
@@ -33,28 +33,105 @@ impl<T> Response<T> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Suite {
     #[serde(default)]
     pub projects: Vec<PathBuf>,
     pub cases: Vec<TestCase>,
 }
-#[derive(Debug, Serialize, Deserialize)]
+/// Native acceptance parameters. JSON is only the transport representation.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct TestCase {
     pub name: String,
-    #[serde(default = "blueprint_operation")]
     pub operation: String,
-    #[serde(default = "yes")]
     pub expected_ok: bool,
-    /// Task-specific parameters belong to their task, not this runner.
-    #[serde(flatten)]
-    pub args: Map<String, Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blueprint: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recipe: Option<shapez_model::Recipe>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub experiment: Option<Experiment>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ports: Option<Vec<shapez_model::FactoryBeltPort>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_buildings: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_mergers: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub export_graph: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_format_version: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_library_warning: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_icon: Option<[Option<shapez_blueprint::IconComponent>; 4]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inputs: Option<Vec<(i32, i32, i16)>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outputs: Option<Vec<(i32, i32, i16)>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_rates: Option<Vec<f64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_full: Option<Vec<bool>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mirrored: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jump_input: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_row: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_manifest: Option<shapez_model::RateManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warmup_seconds: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minimum_rate_ratio: Option<f64>,
 }
-fn blueprint_operation() -> String {
-    "blueprint".into()
+impl Default for TestCase {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            operation: "blueprint".into(),
+            expected_ok: true,
+            blueprint: None,
+            recipe: None,
+            experiment: None,
+            ports: None,
+            expected_buildings: None,
+            expected_mergers: None,
+            export_graph: None,
+            expected_format_version: None,
+            expected_library_warning: None,
+            expected_icon: None,
+            inputs: None,
+            outputs: None,
+            input_rates: None,
+            output_full: None,
+            mirrored: None,
+            jump_input: None,
+            output_row: None,
+            seconds: None,
+            rate_manifest: None,
+            warmup_seconds: None,
+            minimum_rate_ratio: None,
+        }
+    }
 }
-fn yes() -> bool {
-    true
+/// Native plugin entry point.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Experiment {
+    pub assembly: PathBuf,
+    #[serde(rename = "type")]
+    pub type_name: String,
+}
+/// Construct a typed acceptance case, checking field names and types at compile time.
+#[macro_export]
+macro_rules! case {
+    ($($field:ident : $value:expr),* $(,)?) => {
+        $crate::TestCase { $($field: ($value).into(),)* ..Default::default() }
+    };
 }
 impl Suite {
     pub fn validate(&self) -> Result<()> {

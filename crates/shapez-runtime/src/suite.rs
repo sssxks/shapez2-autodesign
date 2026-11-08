@@ -18,50 +18,52 @@ pub struct CaseResult {
     pub host_error: Option<String>,
 }
 
-/// Variables affect path/configuration strings; task schemas remain task-owned.
-pub fn expand_paths(value: &mut Value, p: &LabPaths) -> Result<()> {
-    match value {
-        Value::String(s) => {
-            let library =
-                std::path::PathBuf::from(std::env::var_os("USERPROFILE").unwrap_or_default())
-                    .join("AppData/LocalLow/tobspr Games/shapez 2/blueprints");
-            *s = s
-                .replace("${REPO}", &p.repo.to_string_lossy())
-                .replace("${LAB}", &p.root.to_string_lossy())
-                .replace("${LIBRARY}", &library.to_string_lossy());
-            while let Some(start) = s.find("${TASK:") {
-                let end = s[start..]
-                    .find('}')
-                    .context("Unclosed task artifact variable")?
-                    + start;
-                let task = &s[start + 7..end];
-                let run = RunDirectory::latest(&p.root, task)
-                    .with_context(|| format!("No published artifacts for task {task}"))?;
-                s.replace_range(start..=end, &run.path.to_string_lossy());
-            }
+/// Resolve only path fields; descriptions and arbitrary payload strings are never rewritten.
+pub fn expand_paths(suite: &mut Suite, p: &LabPaths) -> Result<()> {
+    fn resolve(path: &mut std::path::PathBuf, p: &LabPaths) -> Result<()> {
+        let library = std::path::PathBuf::from(std::env::var_os("USERPROFILE").unwrap_or_default())
+            .join("AppData/LocalLow/tobspr Games/shapez 2/blueprints");
+        let mut text = path
+            .to_string_lossy()
+            .replace("${REPO}", &p.repo.to_string_lossy())
+            .replace("${LAB}", &p.root.to_string_lossy())
+            .replace("${LIBRARY}", &library.to_string_lossy());
+        while let Some(start) = text.find("${TASK:") {
+            let end = text[start..]
+                .find('}')
+                .context("Unclosed task artifact variable")?
+                + start;
+            let task = &text[start + 7..end];
+            let run = RunDirectory::latest(&p.root, task)?;
+            text.replace_range(start..=end, &run.path.to_string_lossy());
         }
-        Value::Array(a) => {
-            for v in a {
-                expand_paths(v, p)?;
-            }
+        *path = text.into();
+        Ok(())
+    }
+    for path in &mut suite.projects {
+        resolve(path, p)?;
+    }
+    for case in &mut suite.cases {
+        if let Some(path) = &mut case.blueprint {
+            resolve(path, p)?;
         }
-        Value::Object(m) => {
-            for v in m.values_mut() {
-                expand_paths(v, p)?;
-            }
+        if let Some(experiment) = &mut case.experiment {
+            resolve(&mut experiment.assembly, p)?;
         }
-        _ => {}
     }
     Ok(())
 }
+pub fn run_suite_file(p: &LabPaths, path: &Path, timeout: Duration) -> Result<()> {
+    let suite: Suite = serde_json::from_slice(&fs::read(path)?)?;
+    run_suite(p, &suite, timeout)
+}
 
-pub fn run_suite(p: &LabPaths, path: &Path, timeout: Duration) -> Result<()> {
-    let run = RunDirectory::create(&p.root, "suite")?;
-    let snapshot = run.snapshot(path, "suite.json")?;
-    let mut raw: Value = serde_json::from_slice(&fs::read(snapshot)?)?;
-    expand_paths(&mut raw, p)?;
-    let suite: Suite = serde_json::from_value(raw)?;
+/// Execute a suite directly; saved reports are outputs, never execution inputs.
+pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
+    let mut suite = suite.clone();
+    expand_paths(&mut suite, p)?;
     suite.validate()?;
+    let run = RunDirectory::create(&p.root, "suite")?;
     fs::write(
         run.path.join("resolved-suite.json"),
         serde_json::to_vec_pretty(&suite)?,

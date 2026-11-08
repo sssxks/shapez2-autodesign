@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use shapez_blueprint::{Blueprint, encode_blueprint};
-use shapez_runtime::{Host, LabPaths, RunDirectory, prepare_host, run_suite};
+use shapez_runtime::{Host, LabPaths, RunDirectory, prepare_host, run_suite_file};
 use std::{fs, path::PathBuf, time::Duration};
 
 #[derive(Parser)]
@@ -68,7 +68,7 @@ fn main() -> Result<()> {
             let suite = suite.unwrap_or_else(|| {
                 PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/compact.json")
             });
-            run_suite(&paths, &suite, Duration::from_secs(timeout))
+            run_suite_file(&paths, &suite, Duration::from_secs(timeout))
         }
         Command::Inspect { blueprint } => {
             println!(

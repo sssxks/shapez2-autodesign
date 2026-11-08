@@ -53,14 +53,16 @@ fn main() -> Result<()> {
     }
     let test = run.path.join("harness.spz2bp");
     fs::write(&test, encode_blueprint(&harness)?)?;
-    let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[
-        {"name":"factory","blueprint":test,"ports":geometry.ports(&sockets),"expected_buildings":count,
-        "expected_mergers":mergers,"export_graph":true,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":"QuarterFactoryExperiment"}},
-        {"name":"library-icon","operation":"inspect-blueprint","blueprint":output,"expected_format_version":5,"expected_library_warning":false,"expected_icon":bp.icon.as_ref().unwrap().components}]});
-    let suite_path = run.path.join("suite.json");
-    fs::write(&suite_path, serde_json::to_vec_pretty(&suite)?)?;
+    let suite = shapez_runtime::Suite {
+        projects: vec!["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj".into()],
+        cases: vec![
+            shapez_runtime::case! {name:"factory",blueprint:test,ports:geometry.ports(&sockets),expected_buildings:count,
+            expected_mergers:mergers,export_graph:true,experiment: shapez_runtime::Experiment { assembly: "${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll".into(), type_name: ("QuarterFactoryExperiment").into() }},
+            shapez_runtime::case! {name:"library-icon",operation:"inspect-blueprint",blueprint:output.clone(),expected_format_version:5,expected_library_warning:false,expected_icon:bp.icon.as_ref().unwrap().components.clone()},
+        ],
+    };
     println!("Factory: {}", output.display());
-    run_suite(&paths, &suite_path, Duration::from_secs(180))?;
+    run_suite(&paths, &suite, Duration::from_secs(180))?;
     run.publish(&paths.root)?;
     Ok(())
 }

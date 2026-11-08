@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use shapez_runtime::{Host, LabPaths, RunDirectory, prepare_host, run_suite};
+use shapez_runtime::{Host, LabPaths, prepare_host, run_suite_file};
 use std::{path::PathBuf, time::Duration};
 
 #[derive(Parser)]
@@ -43,15 +43,14 @@ fn main() -> Result<()> {
             response.into_result()?;
             Ok(())
         }
-        Command::Test { suite, timeout } => {
-            let suite = match suite {
-                Some(path) => path,
-                None => RunDirectory::latest(&paths.root, "scaffold-recipe-check")?
-                    .path
-                    .join("suite.json"),
-            };
-            run_suite(&paths, &suite, Duration::from_secs(timeout))
-        }
+        Command::Test { suite, timeout } => match suite {
+            Some(path) => run_suite_file(&paths, &path, Duration::from_secs(timeout)),
+            None => shapez_runtime::run_suite(
+                &paths,
+                &scaffold_recipe::check_suite()?,
+                Duration::from_secs(timeout),
+            ),
+        },
         Command::Plan { target } => scaffold_recipe::run_recipe(&paths, &target),
         Command::Check => scaffold_recipe::run_check(&paths),
     }

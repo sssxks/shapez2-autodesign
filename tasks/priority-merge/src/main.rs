@@ -131,15 +131,15 @@ fn main() -> Result<()> {
         }
         let test_blueprint = run.path.join(format!("{}-harness.spz2bp", design.id));
         fs::write(&test_blueprint, encode_blueprint(&harness)?)?;
-        cases.push(serde_json::json!({
-        "name":design.id,"blueprint":test_blueprint,"expected_buildings":count,"export_graph":true,
-        "ports":shapez_model::FoundationGeometry::strip(1,3).ports(&design.sockets()),
-        "experiment":{"assembly":"${LAB}/bin/PriorityTask/Release/netstandard2.1/ShapezLab.Priority.dll","type":"PriorityExperiment"}
-    }));
-        cases.push(serde_json::json!({
-        "name":format!("{}-icon",design.id),"operation":"inspect-blueprint","blueprint":output,
-        "expected_format_version":5,"expected_library_warning":false,"expected_icon":design.icon().components
-    }));
+        cases.push(shapez_runtime::case!{
+        name:design.id,blueprint:test_blueprint,expected_buildings:count,export_graph:true,
+        ports:shapez_model::FoundationGeometry::strip(1,3).ports(&design.sockets()),
+        experiment: shapez_runtime::Experiment { assembly: "${LAB}/bin/PriorityTask/Release/netstandard2.1/ShapezLab.Priority.dll".into(), type_name: ("PriorityExperiment").into() }
+    });
+        cases.push(shapez_runtime::case!{
+        name:format!("{}-icon",design.id),operation:"inspect-blueprint",blueprint:output.clone(),
+        expected_format_version:5,expected_library_warning:false,expected_icon:design.icon().components
+    });
         println!("Blueprint: {} ({count} buildings)", output.display());
         if design.id == "inline" {
             // A minimal reproducer must fail in the shared loader, without a task plugin.
@@ -155,15 +155,16 @@ fn main() -> Result<()> {
             }
             let invalid_floor = run.path.join("invalid-floor.spz2bp");
             fs::write(&invalid_floor, encode_blueprint(&invalid)?)?;
-            cases.push(serde_json::json!({
-        "name":"reject-off-floor-without-plugin","blueprint":invalid_floor,"expected_ok":false
-    }));
+            cases.push(shapez_runtime::case! {
+                name:"reject-off-floor-without-plugin",blueprint:invalid_floor,expected_ok:false
+            });
         }
     }
-    let suite = serde_json::json!({"projects":["${REPO}/tasks/priority-merge/interop/PriorityTask.csproj"],"cases":cases});
-    let suite_path = run.path.join("suite.json");
-    fs::write(&suite_path, serde_json::to_vec_pretty(&suite)?)?;
-    run_suite(&paths, &suite_path, Duration::from_secs(180))?;
+    let suite = shapez_runtime::Suite {
+        projects: vec!["${REPO}/tasks/priority-merge/interop/PriorityTask.csproj".into()],
+        cases,
+    };
+    run_suite(&paths, &suite, Duration::from_secs(180))?;
     run.publish(&paths.root)?;
     Ok(())
 }

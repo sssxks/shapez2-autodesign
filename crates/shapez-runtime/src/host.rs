@@ -450,11 +450,11 @@ mod tests {
                 "case name",
             ),
             (
-                serde_json::json!({"blueprint":"unused","rate_manifest":"unused","seconds":0}),
+                serde_json::json!({"blueprint":"unused","rate_manifest":{},"seconds":0}),
                 "positive",
             ),
             (
-                serde_json::json!({"blueprint":"unused","rate_manifest":"unused","minimum_rate_ratio":2}),
+                serde_json::json!({"blueprint":"unused","rate_manifest":{},"minimum_rate_ratio":2}),
                 "minimum_rate_ratio",
             ),
         ] {
@@ -462,12 +462,10 @@ mod tests {
             assert!(!response.ok);
             assert!(response.error.unwrap().contains(expected));
         }
-        let invalid_recipe = host.run.join("invalid-recipe.json");
-        fs::write(&invalid_recipe, br#"{"target":"CuCuCuCu","root":0,"nodes":[{"id":0,"op":"cut","inputs":[0],"expected":"CuCuCuCu"}]}"#).unwrap();
         let response: Response = host
             .request(
                 "recipe",
-                serde_json::json!({"recipe":invalid_recipe}),
+                serde_json::json!({"recipe":{"target":"CuCuCuCu","root":0,"nodes":[{"id":0,"op":"cut","inputs":[0],"expected":"CuCuCuCu"}]}}),
                 timeout,
             )
             .unwrap();

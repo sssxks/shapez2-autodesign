@@ -647,9 +647,12 @@ fn native(
     fs::write(&blueprint, encode_blueprint(&bp)?)?;
     let inputs: Vec<_> = inputs.into_iter().map(|(p, _)| p).collect();
     let outputs: Vec<_> = outputs.into_iter().map(|(p, _)| p).collect();
-    let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[{"name":"weave","blueprint":blueprint,"expected_buildings":count,"inputs":inputs,"outputs":outputs,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":"QuarterWeaveExperiment"}}]});
-    let suite_path = run.path.join("suite.json");
-    fs::write(&suite_path, serde_json::to_vec_pretty(&suite)?)?;
+    let suite = shapez_runtime::Suite {
+        projects: vec!["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj".into()],
+        cases: vec![
+            shapez_runtime::case! {name:"weave",blueprint:blueprint.clone(),expected_buildings:count,inputs:inputs,outputs:outputs,experiment: shapez_runtime::Experiment { assembly: "${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll".into(), type_name: ("QuarterWeaveExperiment").into() }},
+        ],
+    };
     eprintln!("Native weave: {}", run.path.display());
-    run_suite(&paths, &suite_path, std::time::Duration::from_secs(180))
+    run_suite(&paths, &suite, std::time::Duration::from_secs(180))
 }

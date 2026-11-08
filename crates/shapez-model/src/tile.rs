@@ -98,9 +98,9 @@ pub struct FoundationSocket {
     pub role: &'static str,
 }
 /// Serialized physical lane used by native experiment bindings.
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FactoryBeltPort {
-    pub role: &'static str,
+    pub role: String,
     pub lane: usize,
     pub position: TilePoint,
     pub output: bool,
@@ -146,7 +146,7 @@ impl FoundationGeometry {
             .flat_map(|&socket| {
                 (0..self.layers).flat_map(move |z| {
                     (0..4).map(move |lane| FactoryBeltPort {
-                        role: socket.role,
+                        role: socket.role.into(),
                         lane: z as usize * 4 + lane as usize,
                         position: self.socket_tile(socket, lane, z),
                         output: socket.output,

@@ -1,14 +1,13 @@
 use anyhow::Result;
-use serde_json::json;
+#[derive(serde::Serialize)]
+struct RecipeRequest<'a> {
+    recipe: &'a shapez_model::Recipe,
+}
 use shapez_model::RecipeReport;
 use shapez_runtime::{Host, LabPaths, RunDirectory};
 use std::{fs, time::Duration};
 pub fn run_check(p: &LabPaths) -> Result<()> {
-    let run = RunDirectory::create(&p.root, "scaffold-recipe-check")?;
-    let path = crate::write_check_suite(&run.path)?;
-    run.publish(&p.root)?;
-    println!("{}", path.display());
-    Ok(())
+    shapez_runtime::run_suite(p, &crate::check_suite()?, Duration::from_secs(300))
 }
 pub fn run_recipe(p: &LabPaths, target: &str) -> Result<()> {
     let recipe = crate::plan_recipe(target)?;
@@ -19,7 +18,7 @@ pub fn run_recipe(p: &LabPaths, target: &str) -> Result<()> {
     let t = Duration::from_secs(180);
     let mut host = Host::start_in(p, &run.path, t)?;
     let report = host
-        .request::<_, RecipeReport>("recipe", json!({"recipe":path}), t)?
+        .request::<_, RecipeReport>("recipe", RecipeRequest { recipe: &recipe }, t)?
         .into_result()?;
     host.shutdown()?;
     let verified = recipe.verified(&report)?;

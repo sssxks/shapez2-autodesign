@@ -151,10 +151,14 @@ fn main() -> Result<()> {
     }
     let test = run.path.join("harness.spz2bp");
     fs::write(&test, encode_blueprint(&harness)?)?;
-    let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[{"name":"factory","blueprint":test,"ports":shapez_model::FoundationGeometry::strip(chunks,3).ports(&sockets),"expected_buildings":count,"expected_mergers":merger_count,"export_graph":true,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":"QuarterFactoryExperiment"}},{"name":"library-icon","operation":"inspect-blueprint","blueprint":output,"expected_format_version":5,"expected_library_warning":false,"expected_icon":bp.icon.as_ref().unwrap().components}]});
-    let suite_path = run.path.join("suite.json");
-    fs::write(&suite_path, serde_json::to_vec_pretty(&suite)?)?;
-    run_suite(&paths, &suite_path, Duration::from_secs(180))?;
+    let suite = shapez_runtime::Suite {
+        projects: vec!["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj".into()],
+        cases: vec![
+            shapez_runtime::case! {name:"factory",blueprint:test,ports:shapez_model::FoundationGeometry::strip(chunks,3).ports(&sockets),expected_buildings:count,expected_mergers:merger_count,export_graph:true,experiment: shapez_runtime::Experiment { assembly: "${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll".into(), type_name: ("QuarterFactoryExperiment").into() }},
+            shapez_runtime::case! {name:"library-icon",operation:"inspect-blueprint",blueprint:output.clone(),expected_format_version:5,expected_library_warning:false,expected_icon:bp.icon.as_ref().unwrap().components.clone()},
+        ],
+    };
+    run_suite(&paths, &suite, Duration::from_secs(180))?;
     run.publish(&paths.root)?;
     Ok(())
 }
@@ -208,8 +212,11 @@ fn probe(paths: &LabPaths, run: &RunDirectory, mode: &str) -> Result<()> {
         }
         _ => "QuarterCutDefinitions",
     };
-    let suite = serde_json::json!({"projects":["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj"],"cases":[{"name":mode.trim_start_matches('-'),"mirrored":mode=="--mirror-cell","jump_input":mode=="--jump-cell","output_row":if mode=="--middle-cell-2" {2}else if mode=="--middle-cell" {1}else if mode=="--mirror-cell" {0}else{3},"blueprint":blueprint,"expected_buildings":count,"experiment":{"assembly":"${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll","type":experiment}}]});
-    let suite_path = run.path.join("suite.json");
-    fs::write(&suite_path, serde_json::to_vec_pretty(&suite)?)?;
-    run_suite(paths, &suite_path, Duration::from_secs(180))
+    let suite = shapez_runtime::Suite {
+        projects: vec!["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj".into()],
+        cases: vec![
+            shapez_runtime::case! {name:mode.trim_start_matches('-'),mirrored:mode=="--mirror-cell",jump_input:mode=="--jump-cell",output_row:if mode=="--middle-cell-2" {2}else if mode=="--middle-cell" {1}else if mode=="--mirror-cell" {0}else{3},blueprint:blueprint.clone(),expected_buildings:count,experiment: shapez_runtime::Experiment { assembly: "${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll".into(), type_name: (experiment).into() }},
+        ],
+    };
+    run_suite(paths, &suite, Duration::from_secs(180))
 }

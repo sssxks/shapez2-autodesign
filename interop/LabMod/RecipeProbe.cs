@@ -9,7 +9,7 @@ internal static class RecipeProbe
 {
     internal static object Run(JObject args, string root)
     {
-        var input = JsonInput.ReadFile(JsonInput.String(args, "recipe"));
+        var input = JsonInput.Object(JsonInput.Required(args, "recipe"), "recipe");
         var recipe = new RecipePlan(input);
         File.WriteAllText(Path.Combine(root, "recipe.json"), input.ToString());
         var ops = GameBindings.Operations;

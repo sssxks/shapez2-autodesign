@@ -10,13 +10,18 @@ fn task_artifacts_publish_atomically_and_resolve_in_suites() {
     first.publish(&paths.root).unwrap();
     let second = RunDirectory::create(&paths.root, "example").unwrap();
     second.publish(&paths.root).unwrap();
-    let mut suite = serde_json::json!({"cases":[{"name":"example","blueprint":"${TASK:example}/factory.spz2bp"}]});
+    let mut suite = Suite {
+        projects: vec![],
+        cases: vec![
+            shapez_runtime::case! { name: "example", blueprint: std::path::PathBuf::from("${TASK:example}/factory.spz2bp") },
+        ],
+    };
     expand_paths(&mut suite, &paths).unwrap();
-    let suite: Suite = serde_json::from_value(suite).unwrap();
+
     suite.validate().unwrap();
     assert_eq!(
-        std::path::Path::new(suite.cases[0].args["blueprint"].as_str().unwrap()),
-        second.path.join("factory.spz2bp")
+        suite.cases[0].blueprint.as_ref().unwrap(),
+        &second.path.join("factory.spz2bp")
     );
     for run in [first, second] {
         fs::remove_file(run.path.join("run.json")).unwrap();
