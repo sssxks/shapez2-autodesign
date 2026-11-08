@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Linq;
 using Core.Logging;
 using Cysharp.Threading.Tasks;
 using Game.Blueprints;
@@ -29,6 +30,20 @@ public static class LabBootstrap
             var saveLogger = GameBindings.Field<ILogger>(session, "Logger");
             var reader = new SaveFileAccessor(saveLogger).Read(copy, new Dictionary<Type, Game.Core.Serialization.IDataSerializer>());
             options = new GameStartOptionsContinueExisting(reader, false, "lab-inspection");
+        }
+        else
+        {
+            // The editor's default is onboarding, which has no signal-building research.
+            // Acceptance uses the real classic scenario and its complete native research tree.
+            var data = (IGameData)gameData;
+            var preset = data.ScenarioParameterPresets.Single(p => p.UniqueId == "default-scenario-parameter-preset");
+            var modeId = data.GetScenario(preset.Parameters.ScenarioId).SupportedGameModes.First();
+            var config = GameParameters.DefaultForMode(data.GetGameModeDefinition(modeId));
+            config.Seed = 0;
+            config.SavegameName = "Shapez Lab acceptance";
+            config.DifficultyParameters.AssignFrom(data.DifficultyPresets.Single(p => p.UniqueId == "difficulty-preset.regular").Parameters);
+            config.ScenarioParameters.AssignFrom(preset.Parameters);
+            options = new GameStartOptionsStartNew(config, false, "lab-acceptance");
         }
         GameBindings.InitializeSession(session, options, globals, gameData, platform, content);
         var logger = GameBindings.Field<ILogger>(session, "Logger");
