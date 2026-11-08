@@ -21,7 +21,7 @@ static PIPE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Locations of the repository, installed game, lab artifacts and .NET executable.
 pub struct LabPaths {
-    /// Output producing the requested final shape.
+    /// Root directory for isolated host builds, tools and run artifacts.
     pub root: PathBuf,
     /// Repository root.
     pub repo: PathBuf,
@@ -34,12 +34,7 @@ impl LabPaths {
     /// Discover lab paths from the repository location and supported environment overrides.
     pub fn discover() -> Self {
         let root = std::env::temp_dir().join("shapez-lab");
-        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .to_owned();
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let dotnet = std::env::var_os("SHAPEZ_LAB_DOTNET")
             .map(PathBuf::from)
             .unwrap_or_else(|| root.join("tools/dotnet/dotnet.exe"));
@@ -394,10 +389,16 @@ impl Job {
     fn attach(child: &Child) -> Result<Self> {
         use std::os::windows::io::AsRawHandle;
         use windows_sys::Win32::System::JobObjects::*;
+        // SAFETY: Null security/name pointers request default attributes and an unnamed job.
+        // `job` uniquely owns the non-null handle returned by CreateJobObjectW and closes it
+        // on every error path. The initialized information structure stays alive for the
+        // synchronous call and its byte size matches its class. `child` keeps its process
+        // handle alive through AssignProcessToJobObject; no user callbacks run here.
         unsafe {
             let h = CreateJobObjectW(std::ptr::null(), std::ptr::null());
             ensure!(!h.is_null(), "CreateJobObject failed");
             let job = Self(h);
+            debug_assert!(!job.0.is_null());
             let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
             info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
             ensure!(
@@ -420,6 +421,10 @@ impl Job {
 #[cfg(windows)]
 impl Drop for Job {
     fn drop(&mut self) {
+        debug_assert!(!self.0.is_null());
+        // SAFETY: Only Job::attach constructs this private, non-Clone owner from a
+        // successful CreateJobObjectW call. No method closes or transfers the handle;
+        // this destructor therefore closes a live owned handle exactly once.
         unsafe {
             windows_sys::Win32::Foundation::CloseHandle(self.0);
         }
