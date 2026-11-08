@@ -169,3 +169,49 @@ impl PackedCell {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    /// Preserve the search's layer-major lane order and both physical factory interfaces.
+    #[test]
+    fn factory_ports_keep_coordinates_directions_and_order() {
+        for west in [false, true] {
+            let (inputs, outputs) = ports(west);
+            assert_eq!((inputs.len(), outputs.len()), (12, 48));
+            for (i, input) in inputs.iter().enumerate() {
+                let (lane, z) = ((i % 4) as i32, (i / 4) as i16);
+                assert_eq!(
+                    (input.p, input.d),
+                    if west {
+                        ((2, 8 + lane, z), 0)
+                    } else {
+                        ((8 + lane, 2, z), 1)
+                    }
+                );
+            }
+            let banks = if west {
+                [(8, 2, 3), (28, 2, 3), (8, 17, 1), (28, 17, 1)]
+            } else {
+                [(2, 8, 2), (37, 8, 0), (8, 17, 1), (28, 17, 1)]
+            };
+            for (bank, &(x, y, d)) in banks.iter().enumerate() {
+                for i in 0..12 {
+                    let p = &outputs[bank * 12 + i];
+                    let lane = (i % 4) as i32;
+                    assert_eq!(
+                        (p.p, p.d),
+                        (
+                            (
+                                x + if d % 2 == 1 { lane } else { 0 },
+                                y + if d % 2 == 0 { lane } else { 0 },
+                                (i / 4) as i16
+                            ),
+                            d
+                        )
+                    );
+                }
+            }
+        }
+    }
+}

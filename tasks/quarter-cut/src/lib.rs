@@ -2,6 +2,7 @@
 mod assembly;
 mod checkpoint;
 pub mod design;
+mod experiment;
 pub mod grid;
 pub mod search;
 mod visualization;

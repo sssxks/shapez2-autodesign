@@ -47,3 +47,8 @@ cargo run -p quarter-cut -- grid artifacts/quarter-cut/cell-resumed.spz2bp --cel
 搜索工具始终编译，无 `search` feature gate。需要 OR-Tools 9.15、`protoc` 和 SCIP 后端；设置 `ORTOOLS_PREFIX`、`PROTOC`，将 OR-Tools 的 `bin` 加入 `PATH`。原生验收另外需要本地游戏、.NET SDK 和已准备的隔离宿主。
 
 验收以 typed suite 直接调用 runtime，JSON 仅用于原生通信及最终诊断报告。不会先写 suite 文件再读回执行。
+## 求解边界
+
+`grid` 在入口把命令行解析为互斥的区域类型（完整平台、单元、原图半区或输出 bank）、搜索设置和执行选项。`factory` 直接构造内存中的区域，不再构造带输出路径的 CLI 参数。建模函数只读取区域几何与核心布局。
+
+`search` 只支持 1×2 平台，端口来自与装配、原生验收相同的 socket 定义；旧的 `--chunks` 选项已删除。`grid` 与 `weave` 共用区域验收入口，用带位置和速率的输入、带位置和形状类别的输出生成原生请求。三种算法仍保留各自的模型和 checkpoint 格式。

@@ -27,10 +27,6 @@ enum OriginalHalf {
 #[derive(Clone, Parser)]
 pub struct Args {
     pub output: PathBuf,
-    #[arg(long, default_value_t = 120.)]
-    seconds: f64,
-    #[arg(long, default_value_t = 8)]
-    workers: i32,
     #[arg(long)]
     cell: bool,
     /// Solve one 17x14 half of the original five-port layout.
@@ -54,9 +50,6 @@ pub struct Args {
     /// Pack anonymous cutting cores anywhere; their layer counts may differ.
     #[arg(long, requires = "original_half", conflicts_with_all = ["cores", "flex_cores"])]
     free_core_pack: bool,
-    /// Optional disjoint pose domains, one selected core per domain and layer.
-    #[arg(long, requires = "free_core_pack")]
-    core_domains: Option<PathBuf>,
     /// Pack cores in the left half of a full platform while allowing transport anywhere.
     #[arg(long, conflicts_with_all = ["original_half", "cores", "flex_cores", "free_core_pack"])]
     pack_left: bool,
@@ -74,11 +67,99 @@ pub struct Args {
     bank_through: bool,
     #[arg(long, requires = "bank")]
     bank_input_row: Option<i32>,
+    /// Fix only cutting/half-rotation cores; synthesize the entire shared quarter network.
+    #[arg(long)]
+    cores: bool,
+    #[arg(long, default_value_t = 1)]
+    layers: i16,
+    #[command(flatten)]
+    search: SearchSettings,
+    #[command(flatten)]
+    execution: Execution,
+}
+/// Mutually exclusive physical domains accepted by the grid builder.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Domain {
+    Platform,
+    Cell,
+    Half(OriginalHalf),
+    Bank,
+}
+
+/// In-memory region geometry and core placement rules, independent of CLI and files.
+struct Region {
+    domain: Domain,
+    through_rows: [i32; 2],
+    inward_top: bool,
+    mirror_cores: bool,
+    corner_cores: bool,
+    flex_cores: bool,
+    free_core_pack: bool,
+    pack_left: bool,
+    bank_width: i32,
+    bank_height: i32,
+    bank_output: i32,
+    bank_through: bool,
+    bank_input_row: Option<i32>,
+    cores: bool,
+    layers: i16,
+}
+impl Region {
+    /// Standard geometry shared by CLI regions and the factory pipeline.
+    fn new(domain: Domain) -> Self {
+        Self {
+            domain,
+            through_rows: [5, 8],
+            inward_top: false,
+            mirror_cores: false,
+            corner_cores: false,
+            flex_cores: false,
+            free_core_pack: false,
+            pack_left: false,
+            bank_width: 17,
+            bank_height: 6,
+            bank_output: 5,
+            bank_through: false,
+            bank_input_row: None,
+            cores: false,
+            layers: 1,
+        }
+    }
+    /// Half identity exists only for original-interface regions.
+    fn half(&self) -> Option<OriginalHalf> {
+        match self.domain {
+            Domain::Half(half) => Some(half),
+            _ => None,
+        }
+    }
+    /// Regional experiments use a surrounding test platform instead of factory sockets.
+    fn regional(&self) -> bool {
+        self.domain != Domain::Platform
+    }
+}
+
+/// Optimization controls; shared by direct region solves and factory assembly.
+#[derive(Clone, clap::Args)]
+struct SearchSettings {
+    #[arg(long, default_value_t = 120.)]
+    seconds: f64,
+    #[arg(long, default_value_t = 8)]
+    workers: i32,
     #[arg(long)]
     quiet: bool,
     /// Stop at the first complete feasible layout instead of minimizing occupied tiles.
     #[arg(long)]
     feasibility: bool,
+    #[arg(long, default_value_t = 0)]
+    minimum: i64,
+}
+
+/// Optional CLI file operations and native inspection around an in-memory solve.
+#[derive(Clone, Default, clap::Args)]
+struct Execution {
+    /// Optional disjoint pose domains, one selected core per domain and layer.
+    #[arg(long, requires = "free_core_pack")]
+    core_domains: Option<PathBuf>,
     #[arg(long)]
     native: bool,
     #[arg(long)]
@@ -89,17 +170,10 @@ pub struct Args {
     /// Embed a verified 5x4 unit at the west output bank as a feasible seed.
     #[arg(long)]
     unit_hint: Option<PathBuf>,
-    /// Fix only cutting/half-rotation cores; synthesize the entire shared quarter network.
-    #[arg(long)]
-    cores: bool,
-    #[arg(long, default_value_t = 1)]
-    layers: i16,
     #[arg(long)]
     infer_hint: bool,
     #[arg(long, num_args = 4, requires = "resume")]
     window: Vec<i32>,
-    #[arg(long, default_value_t = 0)]
-    minimum: i64,
     #[arg(long)]
     buildings_hint: Option<PathBuf>,
     #[arg(long, requires = "buildings_hint")]
@@ -653,12 +727,13 @@ fn pack_cores(
     }
 }
 
-fn build(args: &Args, domains: &[CoreDomain]) -> Grid {
-    let (width, height) = if args.cell {
+/// Construct constraints from region geometry; file and CLI concerns stay outside.
+fn build(args: &Region, domains: &[CoreDomain]) -> Grid {
+    let (width, height) = if args.domain == Domain::Cell {
         (5, 4)
-    } else if args.original_half.is_some() {
+    } else if args.half().is_some() {
         (17, 14)
-    } else if args.bank {
+    } else if args.domain == Domain::Bank {
         (args.bank_width, args.bank_height)
     } else {
         (34, 14)
@@ -769,19 +844,19 @@ fn build(args: &Args, domains: &[CoreDomain]) -> Grid {
     );
     let mut cores = BTreeMap::<Point, (Vec<i64>, i64)>::new();
     if args.cores {
-        for i in 0..if args.original_half.is_some() {
+        for i in 0..if args.half().is_some() {
             8
-        } else if args.bank {
+        } else if args.domain == Domain::Bank {
             4
         } else {
             16
         } {
-            let reflected = args.original_half.is_some() && (i >= 4 || args.inward_top);
+            let reflected = args.half().is_some() && (i >= 4 || args.inward_top);
             let r = if args.corner_cores && i < 4 {
                 2
-            } else if args.original_half.is_some() {
+            } else if args.half().is_some() {
                 if reflected { 1 } else { 3 }
-            } else if args.bank || i < 8 {
+            } else if args.domain == Domain::Bank || i < 8 {
                 3
             } else {
                 1
@@ -797,7 +872,7 @@ fn build(args: &Args, domains: &[CoreDomain]) -> Grid {
                     (12, 9),
                     (16, 9),
                 ][i as usize]
-            } else if args.original_half.is_some() {
+            } else if args.half().is_some() {
                 (
                     4 * (i % 4) + if reflected { 3 } else { 0 },
                     if i >= 4 {
@@ -808,7 +883,7 @@ fn build(args: &Args, domains: &[CoreDomain]) -> Grid {
                         5
                     },
                 )
-            } else if args.bank {
+            } else if args.domain == Domain::Bank {
                 (4 * i, height - 2)
             } else if i < 8 {
                 (1 + 4 * (i % 8), 5)
@@ -1059,9 +1134,9 @@ fn build(args: &Args, domains: &[CoreDomain]) -> Grid {
             }
         }
     }
-    let source_ports = if args.cell {
+    let source_ports = if args.domain == Domain::Cell {
         vec![((-1, 2, layers - 1), 0)]
-    } else if let Some(half) = args.original_half {
+    } else if let Some(half) = args.half() {
         (0..layers)
             .flat_map(|z| {
                 if half == OriginalHalf::Left {
@@ -1071,7 +1146,7 @@ fn build(args: &Args, domains: &[CoreDomain]) -> Grid {
                 }
             })
             .collect()
-    } else if args.bank {
+    } else if args.domain == Domain::Bank {
         (0..layers)
             .flat_map(|z| {
                 let mut ports = vec![((-1, args.bank_input_row.unwrap_or(height - 1), z), 0)];
@@ -1086,9 +1161,9 @@ fn build(args: &Args, domains: &[CoreDomain]) -> Grid {
             .flat_map(|z| (5..9).map(move |x| ((x, -1, z), 1)))
             .collect()
     };
-    let target_ports = if args.cell {
+    let target_ports = if args.domain == Domain::Cell {
         vec![((4, 3, 0), 0)]
-    } else if let Some(half) = args.original_half {
+    } else if let Some(half) = args.half() {
         (0..layers)
             .flat_map(|z| {
                 let (x, d, bottom) = if half == OriginalHalf::Left {
@@ -1101,7 +1176,7 @@ fn build(args: &Args, domains: &[CoreDomain]) -> Grid {
                     .chain((bottom..bottom + 4).map(move |x| ((x, 13, z), 1)))
             })
             .collect()
-    } else if args.bank {
+    } else if args.domain == Domain::Bank {
         (0..layers)
             .flat_map(|z| (args.bank_output..args.bank_output + 4).map(move |x| ((x, 0, z), 3)))
             .collect()
@@ -1131,7 +1206,7 @@ fn build(args: &Args, domains: &[CoreDomain]) -> Grid {
             },
             0,
         );
-        if args.cell {
+        if args.domain == Domain::Cell {
             model.bounded(e.rate.into(), 0, 1);
         }
         source_flow.term(e.rate, 1);
@@ -1163,12 +1238,12 @@ fn build(args: &Args, domains: &[CoreDomain]) -> Grid {
         served.push(yes);
         targets.push((p, d, e));
     }
-    if args.bank_through || args.original_half == Some(OriginalHalf::Left) {
+    if args.bank_through || args.half() == Some(OriginalHalf::Left) {
         for z in 0..layers {
             for y in if args.bank_through {
                 vec![height - 2]
             } else {
-                args.through_rows.clone()
+                args.through_rows.to_vec()
             } {
                 let p = (width - 1, y, z);
                 let e = edges[&(p, 0)];
@@ -1293,12 +1368,17 @@ fn apply_hint(grid: &mut Grid, p: Point, ports: [i64; 12], kind: Option<usize>) 
     }
     Ok(found.0 as usize)
 }
-pub fn solve(args: &Args) -> Result<crate::RegionSolution> {
+/// Apply optional hints, solve the region and retain its physical buildings and flow.
+fn solve(
+    args: &Region,
+    search: &SearchSettings,
+    execution: &Execution,
+) -> Result<crate::RegionSolution> {
     ensure!(
         (1..=3).contains(&args.layers),
         "One to three native layers are supported"
     );
-    if args.bank {
+    if args.domain == Domain::Bank {
         ensure!(
             args.bank_width >= 4
                 && args.bank_height >= 3
@@ -1318,7 +1398,7 @@ pub fn solve(args: &Args) -> Result<crate::RegionSolution> {
             "Fixed bank cores need at least 16x6"
         );
     }
-    let domains: Vec<CoreDomain> = args
+    let domains: Vec<CoreDomain> = execution
         .core_domains
         .as_ref()
         .map(|p| -> Result<_> {
@@ -1351,17 +1431,17 @@ pub fn solve(args: &Args) -> Result<crate::RegionSolution> {
     let mut grid = build(args, &domains);
     grid.model.bounded(
         Expr::sum(grid.served.iter().copied()),
-        args.minimum,
+        search.minimum,
         grid.served.len() as i64,
     );
-    if args.feasibility {
+    if search.feasibility {
         ensure!(
-            args.minimum == grid.served.len() as i64,
+            search.minimum == grid.served.len() as i64,
             "Feasibility search requires all outputs"
         );
         grid.model.minimize(Expr::default());
     }
-    if let Some(path) = &args.buildings_hint {
+    if let Some(path) = &execution.buildings_hint {
         let blueprint = shapez_blueprint::Blueprint::read(path)?;
         let buildings = match &blueprint.content {
             shapez_blueprint::BlueprintContent::Buildings(b) => &b.entries,
@@ -1449,13 +1529,16 @@ pub fn solve(args: &Args) -> Result<crate::RegionSolution> {
         for (&p, t) in &grid.tiles {
             let kind = known.get(&p).copied().unwrap_or(0) as i64;
             grid.model.hint(t.kind, kind);
-            if args.lock_layout || args.fix_known_layout && known.contains_key(&p) {
+            if execution.lock_layout || execution.fix_known_layout && known.contains_key(&p) {
                 grid.model.equal(t.kind, kind);
             }
         }
     }
-    if let Some(path) = &args.unit_hint {
-        ensure!(!args.cell, "Unit placement hint is for the platform");
+    if let Some(path) = &execution.unit_hint {
+        ensure!(
+            !(args.domain == Domain::Cell),
+            "Unit placement hint is for the platform"
+        );
         let checkpoint: GridCheckpoint = crate::checkpoint::load(path, "grid")?;
         ensure!(
             checkpoint.kinds == grid.grammar.kinds,
@@ -1489,7 +1572,7 @@ pub fn solve(args: &Args) -> Result<crate::RegionSolution> {
             apply_hint(&mut grid, p, ports, None)?;
         }
     }
-    if let Some(path) = &args.resume {
+    if let Some(path) = &execution.resume {
         let checkpoint: GridCheckpoint = crate::checkpoint::load(path, "grid")?;
         ensure!(
             checkpoint.kinds == grid.grammar.kinds,
@@ -1498,7 +1581,7 @@ pub fn solve(args: &Args) -> Result<crate::RegionSolution> {
         let states = checkpoint.states;
         let mut known = BTreeMap::new();
         for s in &states {
-            let kind = if args.infer_hint {
+            let kind = if execution.infer_hint {
                 let direction = s.ports[..4].iter().position(|&v| v > 0 && v < 80);
                 let receiver = s.ports[6..10].iter().position(|&v| v > 0 && v < 80);
                 let jump = if let Some(input) =
@@ -1534,7 +1617,7 @@ pub fn solve(args: &Args) -> Result<crate::RegionSolution> {
             let kind = apply_hint(&mut grid, s.position, s.ports, kind)?;
             known.insert(s.position, kind);
         }
-        if let [x0, y0, x1, y1] = args.window[..] {
+        if let [x0, y0, x1, y1] = execution.window[..] {
             for (&p, t) in &grid.tiles {
                 if p.0 < x0 || p.0 >= x1 || p.1 < y0 || p.1 >= y1 {
                     grid.model
@@ -1549,9 +1632,9 @@ pub fn solve(args: &Args) -> Result<crate::RegionSolution> {
         grid.grammar.rows.len()
     );
     let solution = grid.model.solve_cp_sat(&Limits {
-        seconds: args.seconds,
-        workers: args.workers,
-        log: !args.quiet,
+        seconds: search.seconds,
+        workers: search.workers,
+        log: !search.quiet,
     })?;
     let complete = if solution.feasible() {
         grid.served.iter().map(|&v| solution.value(v)).sum::<i64>()
@@ -1570,7 +1653,7 @@ pub fn solve(args: &Args) -> Result<crate::RegionSolution> {
         solution.status
     );
     let state = selected(&grid, &solution);
-    if let Some(path) = &args.checkpoint {
+    if let Some(path) = &execution.checkpoint {
         crate::checkpoint::save(
             path,
             "grid",
@@ -1600,7 +1683,7 @@ pub fn solve(args: &Args) -> Result<crate::RegionSolution> {
             })
         })
         .collect::<Vec<_>>();
-    if args.native {
+    if execution.native {
         native(args, &grid, &solution, buildings.clone())?;
     }
     Ok(crate::RegionSolution {
@@ -1632,59 +1715,34 @@ pub struct FactoryArgs {
 }
 /// Solve both regions, retaining the actual buildings and flow in a single result.
 pub fn factory(options: &FactoryArgs) -> Result<crate::FactorySolution> {
-    let mut args = Args {
-        output: options.output.clone(),
+    let search = SearchSettings {
         seconds: options.seconds,
         workers: options.workers,
-        cell: false,
-        original_half: Some(OriginalHalf::Left),
-        through_rows: vec![5, 8],
-        inward_top: false,
-        mirror_cores: false,
-        corner_cores: false,
-        flex_cores: true,
-        free_core_pack: false,
-        core_domains: None,
-        pack_left: false,
-        bank: false,
-        bank_width: 17,
-        bank_height: 7,
-        bank_output: 5,
-        bank_through: false,
-        bank_input_row: None,
         quiet: options.quiet,
         feasibility: false,
-        native: false,
-        resume: None,
-        checkpoint: None,
-        unit_hint: None,
-        cores: false,
-        layers: 1,
-        infer_hint: false,
-        window: vec![],
         minimum: 0,
-        buildings_hint: None,
-        lock_layout: false,
-        fix_known_layout: false,
     };
-    if options.west {
-        args.original_half = None;
-        args.flex_cores = false;
-        args.bank = true;
-        args.bank_through = true;
-        args.cores = true;
-        args.layers = 3;
-    }
-    let left = solve(&args)?;
-    if options.west {
-        args.bank_through = false;
-        args.layers = 1;
-        args.bank_input_row = Some(5);
-        args.bank_output = 8;
+    let execution = Execution::default();
+    let mut region = Region::new(if options.west {
+        Domain::Bank
     } else {
-        args.original_half = Some(OriginalHalf::Right);
+        Domain::Half(OriginalHalf::Left)
+    });
+    region.bank_height = 7;
+    region.flex_cores = !options.west;
+    region.cores = options.west;
+    region.bank_through = options.west;
+    region.layers = if options.west { 3 } else { 1 };
+    let left = solve(&region, &search, &execution)?;
+    if options.west {
+        region.bank_through = false;
+        region.layers = 1;
+        region.bank_input_row = Some(5);
+        region.bank_output = 8;
+    } else {
+        region.domain = Domain::Half(OriginalHalf::Right);
     }
-    let right = solve(&args)?;
+    let right = solve(&region, &search, &execution)?;
     Ok(crate::FactorySolution {
         layout: if options.west {
             crate::Layout::WestInput
@@ -1697,22 +1755,42 @@ pub fn factory(options: &FactoryArgs) -> Result<crate::FactorySolution> {
 }
 /// Export the final regional blueprint; no intermediate result is required by another command.
 pub fn run(args: Args) -> Result<()> {
-    let result = solve(&args)?;
+    let domain = if args.cell {
+        Domain::Cell
+    } else if let Some(half) = args.original_half {
+        Domain::Half(half)
+    } else if args.bank {
+        Domain::Bank
+    } else {
+        Domain::Platform
+    };
+    let region = Region {
+        domain,
+        through_rows: args
+            .through_rows
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Expected two through rows"))?,
+        inward_top: args.inward_top,
+        mirror_cores: args.mirror_cores,
+        corner_cores: args.corner_cores,
+        flex_cores: args.flex_cores,
+        free_core_pack: args.free_core_pack,
+        pack_left: args.pack_left,
+        bank_width: args.bank_width,
+        bank_height: args.bank_height,
+        bank_output: args.bank_output,
+        bank_through: args.bank_through,
+        bank_input_row: args.bank_input_row,
+        cores: args.cores,
+        layers: args.layers,
+    };
+    let result = solve(&region, &args.search, &args.execution)?;
     crate::export_buildings(&result.buildings, &args.output)
 }
-fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) -> Result<()> {
+fn native(args: &Region, grid: &Grid, solution: &Solution, base: Vec<Building>) -> Result<()> {
     use shapez_blueprint::{Blueprint, BuildingBlueprint, Island};
     use shapez_runtime::{LabPaths, RunDirectory, run_suite};
-    let paths = LabPaths::discover();
-    let run = RunDirectory::create(
-        &paths.root,
-        if args.cell || args.bank || args.original_half.is_some() {
-            "quarter-grid"
-        } else {
-            "quarter-cut"
-        },
-    )?;
-    let (offset, layers) = if args.cell || args.bank || args.original_half.is_some() {
+    let (offset, layers) = if args.regional() {
         ((8, 4), 1)
     } else {
         ((3, 3), if grid.layers == 1 { 3 } else { 1 })
@@ -1728,17 +1806,17 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         }
     }
     let mut inputs = Vec::new();
-    let mut input_rates = Vec::new();
     let mut outputs = Vec::new();
-    let mut output_full = Vec::new();
     for z in 0..layers {
         for &(p, d, v) in &grid.sources {
             ensure!(solution.value(v.rate) > 0, "Unused required source");
             let p = (p.0 + offset.0, p.1 + offset.1, p.2 + z);
-            inputs.push(p);
-            input_rates.push(solution.value(v.rate) as f64 * 0.5);
+            inputs.push(crate::experiment::Input {
+                position: p,
+                rate: solution.value(v.rate) as f64 * 0.5,
+            });
             buildings.push(Building::new(
-                if args.cell || args.bank || args.original_half.is_some() {
+                if args.regional() {
                     "BeltDefaultForwardInternalVariant"
                 } else {
                     "BeltPortReceiverInternalVariant"
@@ -1752,10 +1830,12 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         for &(p, d, e) in &grid.targets {
             let p = step(p, d, 1);
             let p = (p.0 + offset.0, p.1 + offset.1, p.2 + z);
-            outputs.push(p);
-            output_full.push(solution.value(e.shape) == 15);
+            outputs.push(crate::experiment::Output {
+                position: p,
+                full: solution.value(e.shape) == 15,
+            });
             buildings.push(Building::new(
-                if args.cell || args.bank || args.original_half.is_some() {
+                if args.regional() {
                     "BeltDefaultForwardInternalVariant"
                 } else {
                     "BeltPortSenderInternalVariant"
@@ -1767,31 +1847,26 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
             ));
         }
     }
+    if args.regional() {
+        return crate::experiment::validate(
+            "grid",
+            buildings,
+            Some(crate::design::icon()),
+            &inputs,
+            &outputs,
+        );
+    }
+    let paths = LabPaths::discover();
+    let run = RunDirectory::create(&paths.root, "quarter-cut")?;
     let count = buildings.len();
     let mergers = buildings
         .iter()
         .filter(|b| b.definition.starts_with("Merger"))
         .count();
-    let mut island = Island::new(
-        if args.cell || args.bank || args.original_half.is_some() {
-            "Foundation_2x2"
-        } else {
-            "Foundation_1x2"
-        },
-        0,
-        0,
-        0,
-        Rotation::new(0),
-    );
+    let mut island = Island::new("Foundation_1x2", 0, 0, 0, Rotation::new(0));
     island.buildings = Some(BuildingBlueprint::new(buildings));
     let bp = Blueprint::platform(island, Some(crate::design::icon()));
-    let blueprint = run
-        .path
-        .join(if args.cell || args.bank || args.original_half.is_some() {
-            "grid.spz2bp"
-        } else {
-            "quarter-cut-1x2.spz2bp"
-        });
+    let blueprint = run.path.join("quarter-cut-1x2.spz2bp");
     bp.write(&blueprint)?;
     eprintln!(
         "Blueprint {} ({}x{})",
@@ -1799,34 +1874,14 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         grid.width,
         grid.height
     );
-    if args.cell || args.bank || args.original_half.is_some() {
-        let suite = shapez_runtime::Suite {
-            projects: vec!["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj".into()],
-            cases: vec![
-                shapez_runtime::case! {name:"grid",blueprint:blueprint.clone(),expected_buildings:count,inputs:inputs,input_rates:input_rates,outputs:outputs,output_full:output_full,experiment: shapez_runtime::Experiment { assembly: "${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll".into(), type_name: ("QuarterWeaveExperiment").into() }},
-            ],
-        };
-        run_suite(&paths, &suite, std::time::Duration::from_secs(180))?;
-    } else {
-        use shapez_model::{Direction, FoundationGeometry, FoundationSocket};
+    {
+        use shapez_model::FoundationGeometry;
         ensure!(
             grid.layers == 1 || grid.layers == 3,
             "Factory acceptance requires three resulting layers"
         );
         let geometry = FoundationGeometry::strip(2, 3);
-        let sockets = [
-            (Direction::North, 0, false, "input"),
-            (Direction::West, 0, true, "west"),
-            (Direction::East, 0, true, "east"),
-            (Direction::South, 0, true, "sw"),
-            (Direction::South, 1, true, "se"),
-        ]
-        .map(|(side, segment, output, role)| FoundationSocket {
-            side,
-            segment,
-            output,
-            role,
-        });
+        let sockets = crate::original_sockets();
         let harness = bp.with_harness(&geometry, &sockets)?;
         let test = run.path.join("harness.spz2bp");
         harness.write(&test)?;
@@ -1854,4 +1909,33 @@ struct GridCheckpoint {
 #[derive(Deserialize)]
 struct CoreDomains {
     domains: Vec<CoreDomain>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    /// Flattening execution/search options must preserve cross-group CLI requirements.
+    #[test]
+    fn cli_keeps_mode_conflicts_and_hint_dependencies() {
+        assert!(Args::try_parse_from(["grid", "out.spz2bp", "--cell", "--bank"]).is_err());
+        assert!(
+            Args::try_parse_from(["grid", "out.spz2bp", "--window", "0", "0", "4", "4"]).is_err()
+        );
+        let args = Args::try_parse_from([
+            "grid",
+            "out.spz2bp",
+            "--cell",
+            "--seconds",
+            "5",
+            "--checkpoint",
+            "state.bin",
+        ])
+        .unwrap();
+        assert!(args.cell);
+        assert_eq!(args.search.seconds, 5.);
+        assert_eq!(
+            args.execution.checkpoint.as_deref(),
+            Some(std::path::Path::new("state.bin"))
+        );
+    }
 }

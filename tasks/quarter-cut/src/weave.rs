@@ -550,10 +550,6 @@ fn native(
     model: &Synthesis,
     solution: &Solution,
 ) -> Result<()> {
-    use shapez_blueprint::{Blueprint, BuildingBlueprint, Island};
-    use shapez_runtime::{LabPaths, RunDirectory, run_suite};
-    let paths = LabPaths::discover();
-    let run = RunDirectory::create(&paths.root, "quarter-weave")?;
     let mut buildings: Vec<_> = selected
         .iter()
         .map(|building| {
@@ -610,22 +606,21 @@ fn native(
             Rotation::new(direction),
         ));
     }
-    let count = buildings.len();
-    let mut island = Island::new("Foundation_2x2", 0, 0, 0, Rotation::new(0));
-    island.buildings = Some(BuildingBlueprint::new(buildings));
-    let bp = Blueprint::platform(island, None);
-    let blueprint = run.path.join("weave.spz2bp");
-    bp.write(&blueprint)?;
-    let inputs: Vec<_> = inputs.into_iter().map(|(p, _)| p).collect();
-    let outputs: Vec<_> = outputs.into_iter().map(|(p, _)| p).collect();
-    let suite = shapez_runtime::Suite {
-        projects: vec!["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj".into()],
-        cases: vec![
-            shapez_runtime::case! {name:"weave",blueprint:blueprint.clone(),expected_buildings:count,inputs:inputs,outputs:outputs,experiment: shapez_runtime::Experiment { assembly: "${LAB}/bin/QuarterCutTask/Release/netstandard2.1/ShapezLab.QuarterCut.dll".into(), type_name: ("QuarterWeaveExperiment").into() }},
-        ],
-    };
-    eprintln!("Native weave: {}", run.path.display());
-    run_suite(&paths, &suite, std::time::Duration::from_secs(180))
+    let inputs = inputs
+        .into_iter()
+        .map(|(position, _)| crate::experiment::Input {
+            position,
+            rate: 0.5,
+        })
+        .collect::<Vec<_>>();
+    let outputs = outputs
+        .into_iter()
+        .map(|(position, _)| crate::experiment::Output {
+            position,
+            full: false,
+        })
+        .collect::<Vec<_>>();
+    crate::experiment::validate("weave", buildings, None, &inputs, &outputs)
 }
 
 #[derive(Serialize, Deserialize)]
