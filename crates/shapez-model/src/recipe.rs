@@ -48,7 +48,7 @@ impl Operation {
 }
 /// One operation with references to earlier recipe nodes.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RecipeNode {
+pub struct RecipeNodeDto {
     /// Sequence or execution-order identifier.
     pub id: Node,
     /// Native operation to execute.
@@ -62,13 +62,38 @@ pub struct RecipeNode {
 }
 /// Topologically ordered shape-production recipe.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Recipe {
+pub struct RecipeDto {
     /// Requested final shape.
     pub target: Shape,
     /// Output producing the requested final shape.
     pub root: Node,
     /// Operations in execution order.
-    pub nodes: Vec<RecipeNode>,
+    pub nodes: Vec<RecipeNodeDto>,
+}
+/// One operation with references to earlier recipe nodes.
+#[derive(Clone, Debug, Serialize)]
+pub struct RecipeNode {
+    /// Sequence or execution-order identifier.
+    id: Node,
+    /// Native operation to execute.
+    op: Operation,
+    /// Ordered input references or coordinates.
+    inputs: Box<[Node]>,
+    /// Shape expected after this operation.
+    expected: Shape,
+    /// Paint or crystal color argument when required.
+    color: Option<Color>,
+}
+/// Topologically ordered shape-production recipe.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(try_from = "RecipeDto")]
+pub struct Recipe {
+    /// Requested final shape.
+    target: Shape,
+    /// Output producing the requested final shape.
+    root: Node,
+    /// Operations in execution order.
+    nodes: Box<[RecipeNode]>,
 }
 /// A concrete output port on a native recipe node.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -79,28 +104,32 @@ pub struct OutputRef {
     pub port: usize,
 }
 /// Operation with logical inputs resolved to native output ports.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct VerifiedNode {
     /// Native operation to execute.
-    pub op: Operation,
+    op: Operation,
     /// Ordered input references or coordinates.
-    pub inputs: Vec<OutputRef>,
+    inputs: Box<[OutputRef]>,
     /// Selected output or external-output status.
-    pub output: OutputRef,
+    output: OutputRef,
     /// Verified shape on the selected output.
-    pub shape: Shape,
+    shape: Shape,
     /// Paint or crystal color argument when required.
-    pub color: Option<Color>,
+    color: Option<Color>,
 }
 /// Recipe whose port choices have been resolved from a native execution trace.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Only `Recipe::verified` creates this state; wire data cannot restore the trust marker.
+/// ```compile_fail
+/// let forged: shapez_model::VerifiedRecipe = serde_json::from_str("{}").unwrap();
+/// ```
+#[derive(Clone, Debug, Serialize)]
 pub struct VerifiedRecipe {
     /// Requested final shape.
-    pub target: Shape,
+    target: Shape,
     /// Output producing the requested final shape.
-    pub root: OutputRef,
+    root: OutputRef,
     /// Operations in execution order.
-    pub nodes: Vec<VerifiedNode>,
+    nodes: Box<[VerifiedNode]>,
 }
 /// Native outputs and selected port for one recipe operation.
 #[derive(Debug, Serialize, Deserialize)]
@@ -163,7 +192,9 @@ impl Recipe {
         ensure!(
             report.verified
                 && report.target == self.target
-                && report.trace.len() == self.nodes.len(),
+                && report.trace.len() == self.nodes.len()
+                && report.failed_node.is_none()
+                && report.steps.is_none_or(|steps| steps == self.nodes.len()),
             "Native recipe verification failed"
         );
         let mut nodes: Vec<VerifiedNode> = Vec::new();
@@ -173,7 +204,8 @@ impl Recipe {
                 "Native trace does not match recipe"
             );
             ensure!(
-                t.selected_port < n.op.output_count()
+                t.outputs.len() == n.op.output_count()
+                    && t.selected_port < n.op.output_count()
                     && t.outputs.get(t.selected_port).and_then(Option::as_deref)
                         == Some(n.expected.as_str()),
                 "Invalid native output selection"
@@ -196,7 +228,102 @@ impl Recipe {
         Ok(VerifiedRecipe {
             target: self.target.clone(),
             root: nodes[self.root.0 as usize].output,
-            nodes,
+            nodes: nodes.into_boxed_slice(),
         })
+    }
+}
+
+impl TryFrom<RecipeDto> for Recipe {
+    type Error = anyhow::Error;
+    fn try_from(dto: RecipeDto) -> Result<Self> {
+        let recipe = Self {
+            target: dto.target,
+            root: dto.root,
+            nodes: dto
+                .nodes
+                .into_iter()
+                .map(|n| RecipeNode {
+                    id: n.id,
+                    op: n.op,
+                    inputs: n.inputs.into_boxed_slice(),
+                    expected: n.expected,
+                    color: n.color,
+                })
+                .collect(),
+        };
+        recipe.validate()?;
+        Ok(recipe)
+    }
+}
+impl Recipe {
+    /// Requested shape.
+    pub fn target(&self) -> &Shape {
+        &self.target
+    }
+    /// Selected logical output.
+    pub fn root(&self) -> Node {
+        self.root
+    }
+    /// Frozen execution order.
+    pub fn nodes(&self) -> &[RecipeNode] {
+        &self.nodes
+    }
+}
+impl RecipeNode {
+    /// Execution index.
+    pub fn id(&self) -> Node {
+        self.id
+    }
+    /// Native operation.
+    pub fn op(&self) -> Operation {
+        self.op
+    }
+    /// Earlier logical inputs.
+    pub fn inputs(&self) -> &[Node] {
+        &self.inputs
+    }
+    /// Declared result.
+    pub fn expected(&self) -> &Shape {
+        &self.expected
+    }
+    /// Operation color.
+    pub fn color(&self) -> Option<Color> {
+        self.color
+    }
+}
+impl VerifiedRecipe {
+    /// Requested shape.
+    pub fn target(&self) -> &Shape {
+        &self.target
+    }
+    /// Selected native output.
+    pub fn root(&self) -> OutputRef {
+        self.root
+    }
+    /// Frozen resolved operations.
+    pub fn nodes(&self) -> &[VerifiedNode] {
+        &self.nodes
+    }
+}
+impl VerifiedNode {
+    /// Native operation.
+    pub fn op(&self) -> Operation {
+        self.op
+    }
+    /// Resolved native inputs.
+    pub fn inputs(&self) -> &[OutputRef] {
+        &self.inputs
+    }
+    /// Selected native output.
+    pub fn output(&self) -> OutputRef {
+        self.output
+    }
+    /// Verified shape.
+    pub fn shape(&self) -> &Shape {
+        &self.shape
+    }
+    /// Operation color.
+    pub fn color(&self) -> Option<Color> {
+        self.color
     }
 }

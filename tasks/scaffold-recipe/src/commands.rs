@@ -26,17 +26,21 @@ pub fn run_recipe(p: &LabPaths, target: &str) -> Result<()> {
         serde_json::to_vec_pretty(&verified)?,
     )?;
     let mut readable = format!("Target: {target}\nVerified: true\n");
-    for (node, trace) in recipe.nodes.iter().zip(&report.trace) {
+    for (node, trace) in recipe.nodes().iter().zip(&report.trace) {
         readable.push_str(&format!(
             "{} {:?} inputs={:?} output={} port={}\n",
-            node.id.0, node.op, node.inputs, node.expected, trace.selected_port
+            node.id().0,
+            node.op(),
+            node.inputs(),
+            node.expected(),
+            trace.selected_port
         ));
     }
     fs::write(run.path.join("recipe.txt"), readable)?;
     run.publish(&p.root)?;
     println!(
         "verified=true steps={}\nartifacts: {}",
-        verified.nodes.len(),
+        verified.nodes().len(),
         run.path.display()
     );
     Ok(())

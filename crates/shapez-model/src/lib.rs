@@ -12,8 +12,8 @@ mod transport;
 pub use geometry::{ChunkPos, Direction, GridBounds, TilePos};
 pub use interface::{DemandPort, FactoryInterface, Payload, RateManifest, SupplyPort};
 pub use recipe::{
-    Node, Operation, OutputRef, Recipe, RecipeNode, RecipeReport, RecipeTrace, VerifiedNode,
-    VerifiedRecipe,
+    Node, Operation, OutputRef, Recipe, RecipeDto, RecipeNode, RecipeNodeDto, RecipeReport,
+    RecipeTrace, VerifiedNode, VerifiedRecipe,
 };
 pub use shape::{Color, Layer, Material, Part, Shape};
 pub use transport::{

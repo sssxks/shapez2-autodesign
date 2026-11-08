@@ -86,6 +86,36 @@ pub struct Layer(pub [Part; 4]);
 #[serde(try_from = "String", into = "String")]
 pub struct Shape(Box<str>);
 impl Shape {
+    /// Construct a nonempty shape from typed quadrants, rejecting uncolored crystals.
+    pub fn from_layers(first: Layer, rest: impl IntoIterator<Item = Layer>) -> Result<Self> {
+        let mut wire = String::new();
+        for layer in std::iter::once(first).chain(rest) {
+            if !wire.is_empty() {
+                wire.push(':');
+            }
+            for part in layer.0 {
+                match part {
+                    Part::Empty => wire.push_str("--"),
+                    Part::Pin => wire.push_str("P-"),
+                    Part::Solid(material, color) => {
+                        ensure!(
+                            material != Material::Crystal || color != Color::Uncolored,
+                            "Crystal needs a color"
+                        );
+                        wire.push(match material {
+                            Material::Circle => 'C',
+                            Material::Rectangle => 'R',
+                            Material::Star => 'S',
+                            Material::Windmill => 'W',
+                            Material::Crystal => 'c',
+                        });
+                        wire.push(color.code());
+                    }
+                }
+            }
+        }
+        Ok(Self(wire.into_boxed_str()))
+    }
     /// Borrow the validated game wire code without allocating.
     pub fn as_str(&self) -> &str {
         &self.0

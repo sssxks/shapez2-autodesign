@@ -1,28 +1,30 @@
-use shapez_model::{Node, Operation, Recipe, RecipeNode, RecipeReport, RecipeTrace, Shape};
+use shapez_model::{
+    Node, Operation, Recipe, RecipeDto, RecipeNodeDto, RecipeReport, RecipeTrace, Shape,
+};
 
 #[test]
 fn resolves_second_native_output_into_downstream_connection() {
     let shape: Shape = "CuCuCuCu".parse().unwrap();
     let half: Shape = "CuCu----".parse().unwrap();
-    let recipe = Recipe {
+    let recipe: Recipe = RecipeDto {
         target: half.clone(),
         root: Node(2),
         nodes: vec![
-            RecipeNode {
+            RecipeNodeDto {
                 id: Node(0),
                 op: Operation::Source,
                 inputs: vec![],
                 expected: shape.clone(),
                 color: None,
             },
-            RecipeNode {
+            RecipeNodeDto {
                 id: Node(1),
                 op: Operation::Cut,
                 inputs: vec![Node(0)],
                 expected: half.clone(),
                 color: None,
             },
-            RecipeNode {
+            RecipeNodeDto {
                 id: Node(2),
                 op: Operation::RotateCw,
                 inputs: vec![Node(1)],
@@ -30,7 +32,9 @@ fn resolves_second_native_output_into_downstream_connection() {
                 color: None,
             },
         ],
-    };
+    }
+    .try_into()
+    .unwrap();
     let mut report = RecipeReport {
         verified: true,
         target: half.clone(),
@@ -61,8 +65,17 @@ fn resolves_second_native_output_into_downstream_connection() {
         ],
     };
     let verified = recipe.verified(&report).unwrap();
-    assert_eq!(verified.nodes[2].inputs[0].port, 1);
-    assert_eq!(verified.nodes[2].inputs[0].node, Node(1));
+    assert_eq!(verified.nodes()[2].inputs()[0].port, 1);
+    assert_eq!(verified.nodes()[2].inputs()[0].node, Node(1));
+    report.failed_node = Some(Node(1));
+    assert!(recipe.verified(&report).is_err());
+    report.failed_node = None;
+    report.steps = Some(2);
+    assert!(recipe.verified(&report).is_err());
+    report.steps = Some(3);
+    report.trace[1].outputs.push(None);
+    assert!(recipe.verified(&report).is_err());
+    report.trace[1].outputs.pop();
     report.trace[1].selected_port = 0;
     assert!(recipe.verified(&report).is_err());
 }
@@ -97,4 +110,43 @@ fn layers_preserve_wire_order_and_node_indices_are_bounded() {
         serde_json::from_str::<Node>("4294967295").unwrap(),
         Node(u32::MAX)
     );
+}
+
+#[test]
+fn decode_rejects_invalid_graphs_and_preserves_wire_shape() {
+    let valid = serde_json::json!({"target":"CuCuCuCu","root":0,"nodes":[{"id":0,"op":"source","inputs":[],"expected":"CuCuCuCu","color":null}]});
+    let recipe: Recipe = serde_json::from_value(valid.clone()).unwrap();
+    assert_eq!(serde_json::to_value(recipe).unwrap(), valid);
+    let mut cases = Vec::new();
+    let mut bad = valid.clone();
+    bad["root"] = 1.into();
+    cases.push(bad);
+    let mut bad = valid.clone();
+    bad["nodes"][0]["id"] = 1.into();
+    cases.push(bad);
+    let mut bad = valid.clone();
+    bad["nodes"][0]["inputs"] = serde_json::json!([0]);
+    cases.push(bad);
+    let mut bad = valid.clone();
+    bad["nodes"][0]["color"] = "r".into();
+    cases.push(bad);
+    let mut bad = valid.clone();
+    bad["nodes"][0]["op"] = "paint".into();
+    cases.push(bad);
+    let mut bad = valid.clone();
+    bad["target"] = "RuRuRuRu".into();
+    cases.push(bad);
+    let mut bad = valid.clone();
+    bad["nodes"] = serde_json::json!([]);
+    cases.push(bad);
+    let mut bad = valid;
+    bad["nodes"][0]["op"] = "rotate-cw".into();
+    bad["nodes"][0]["inputs"] = serde_json::json!([0]);
+    cases.push(bad);
+    for bad in cases {
+        assert!(
+            serde_json::from_value::<Recipe>(bad.clone()).is_err(),
+            "{bad}"
+        );
+    }
 }

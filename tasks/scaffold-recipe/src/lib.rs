@@ -1,240 +1,287 @@
+//! Scaffold construction using typed quadrants and logical recipe references.
 use anyhow::{Result, ensure};
-use shapez_model::{Color, Node, Operation, Recipe, RecipeNode, Shape};
+use shapez_model::{
+    Color, Layer, Material, Node, Operation, Part, Recipe, RecipeDto, RecipeNodeDto, Shape,
+};
 use std::collections::HashMap;
 
+/// A nonempty stack of layers under construction.
+#[derive(Clone)]
+struct Stack {
+    first: Layer,
+    rest: Vec<Layer>,
+}
+impl Stack {
+    fn shape(&self) -> Result<Shape> {
+        Shape::from_layers(self.first.clone(), self.rest.clone())
+    }
+    fn layers_mut(&mut self) -> impl Iterator<Item = &mut Layer> {
+        std::iter::once(&mut self.first).chain(&mut self.rest)
+    }
+    fn layers(&self) -> impl Iterator<Item = &Layer> {
+        std::iter::once(&self.first).chain(&self.rest)
+    }
+}
+/// A produced logical node together with its nonempty shape.
+#[derive(Clone)]
+struct Built {
+    node: Node,
+    stack: Stack,
+}
+/// Mutable planning phase; the completed DTO is validated and frozen once.
 #[derive(Default)]
 struct Planner {
-    nodes: Vec<RecipeNode>,
-    cache: HashMap<String, usize>,
+    nodes: Vec<RecipeNodeDto>,
+    cache: HashMap<Shape, Node>,
 }
 impl Planner {
     fn node(
         &mut self,
         op: Operation,
-        inputs: &[usize],
-        expected: String,
-        color: Option<char>,
-    ) -> usize {
-        if let Some(&id) = self.cache.get(&expected) {
-            return id;
+        inputs: &[Node],
+        stack: Stack,
+        color: Option<Color>,
+    ) -> Result<Built> {
+        let expected = stack.shape()?;
+        if let Some(&node) = self.cache.get(&expected) {
+            return Ok(Built { node, stack });
         }
-        let id = self.nodes.len();
-        self.nodes.push(RecipeNode {
-            id: Node(u32::try_from(id).expect("recipe exceeds u32 nodes")),
+        let node = Node(u32::try_from(self.nodes.len())?);
+        self.nodes.push(RecipeNodeDto {
+            id: node,
             op,
-            inputs: inputs
-                .iter()
-                .copied()
-                .map(|id| Node(u32::try_from(id).expect("recipe exceeds u32 nodes")))
-                .collect(),
-            expected: expected.parse().expect("planner generated invalid shape"),
-            color: color.map(|c| Color::try_from(c).expect("planner generated invalid color")),
+            inputs: inputs.to_vec(),
+            expected: expected.clone(),
+            color,
         });
-        self.cache.insert(expected, id);
-        id
+        self.cache.insert(expected, node);
+        Ok(Built { node, stack })
     }
-    fn shape(&self, id: usize) -> String {
-        self.nodes[id].expected.to_string()
-    }
-    fn rotate(&mut self, id: usize, clockwise: bool) -> usize {
-        let s = self.shape(id);
-        let n = if clockwise { 6 } else { 2 };
-        let result = s
-            .split(':')
-            .map(|s| format!("{}{}", &s[n..], &s[..n]))
-            .collect::<Vec<_>>()
-            .join(":");
+    fn rotate(&mut self, input: Built, clockwise: bool) -> Result<Built> {
+        let mut stack = input.stack;
+        for layer in stack.layers_mut() {
+            layer.0.rotate_right(if clockwise { 1 } else { 3 });
+        }
         self.node(
             if clockwise {
                 Operation::RotateCw
             } else {
                 Operation::RotateCcw
             },
-            &[id],
-            result,
+            &[input.node],
+            stack,
             None,
         )
     }
-    fn half(&mut self, id: usize) -> usize {
-        let s = self.shape(id);
-        let result = s
-            .split(':')
-            .map(|s| format!("{}----", &s[..4]))
-            .collect::<Vec<_>>()
-            .join(":");
-        self.node(Operation::Cut, &[id], result, None)
+    fn half(&mut self, input: Built) -> Result<Built> {
+        let mut stack = input.stack;
+        for layer in stack.layers_mut() {
+            layer.0[2..].fill(Part::Empty);
+        }
+        self.node(Operation::Cut, &[input.node], stack, None)
     }
-    fn isolate(&mut self, id: usize) -> usize {
-        let id = self.half(id);
-        let id = self.rotate(id, true);
-        let id = self.half(id);
-        self.rotate(id, false)
+    fn isolate(&mut self, input: Built) -> Result<Built> {
+        let half = self.half(input)?;
+        let turned = self.rotate(half, true)?;
+        let quarter = self.half(turned)?;
+        self.rotate(quarter, false)
     }
-    fn merge(&mut self, a: Option<usize>, b: Option<usize>, rotated: bool) -> Option<usize> {
-        let (a, b) = match (a, b) {
-            (Some(a), Some(b)) => (a, b),
-            (a, b) => return a.or(b),
-        };
+    fn merge(&mut self, a: Built, b: Built, rotated: bool) -> Result<Built> {
         let (a, b) = if rotated {
-            (self.rotate(a, true), self.rotate(b, true))
+            (self.rotate(a, true)?, self.rotate(b, true)?)
         } else {
             (a, b)
         };
-        let sa = self.shape(a);
-        let sb = self.shape(b);
-        let la: Vec<_> = sa.split(':').collect();
-        let lb: Vec<_> = sb.split(':').collect();
-        let result = (0..la.len().max(lb.len()))
-            .map(|l| {
-                let sa = la.get(l).copied().unwrap_or("--------");
-                let sb = lb.get(l).copied().unwrap_or("--------");
-                (0..4)
-                    .map(|i| {
-                        if &sa[i * 2..i * 2 + 2] == "--" {
-                            &sb[i * 2..i * 2 + 2]
-                        } else {
-                            &sa[i * 2..i * 2 + 2]
-                        }
-                    })
-                    .collect::<String>()
-            })
-            .collect::<Vec<_>>()
-            .join(":");
-        let id = self.node(Operation::Swap, &[a, b], result, None);
-        Some(if rotated { self.rotate(id, false) } else { id })
-    }
-    fn quarter(&mut self, part: &str, position: usize) -> usize {
-        let chars = part.as_bytes();
-        let full = if chars[0] == b'c' {
-            let mask = self.layer("--CuCuCu").unwrap();
-            self.node(
-                Operation::Crystallize,
-                &[mask],
-                format!("{part}CuCuCu"),
-                Some(chars[1] as char),
-            )
-        } else {
-            let raw = if chars[0] == b'P' {
-                "P-".to_owned()
-            } else {
-                format!("{}u", chars[0] as char)
-            };
-            let source = self.node(Operation::Source, &[], raw.repeat(4), None);
-            if chars[0] == b'P' || chars[1] == b'u' {
-                source
-            } else {
-                self.node(
-                    Operation::Paint,
-                    &[source],
-                    part.repeat(4),
-                    Some(chars[1] as char),
-                )
-            }
-        };
-        let mut id = self.isolate(full);
-        for _ in 0..position {
-            id = self.rotate(id, true);
+        let mut stack = a.stack;
+        while stack.rest.len() < b.stack.rest.len() {
+            stack.rest.push(Layer([Part::Empty; 4]));
         }
-        id
-    }
-    fn layer(&mut self, s: &str) -> Option<usize> {
-        let q: Vec<_> = (0..4)
-            .map(|i| {
-                let p = &s[i * 2..i * 2 + 2];
-                if p == "--" {
-                    None
-                } else {
-                    Some(self.quarter(p, i))
+        for (left, right) in stack.layers_mut().zip(b.stack.layers()) {
+            for (l, r) in left.0.iter_mut().zip(right.0) {
+                if *l == Part::Empty {
+                    *l = r;
                 }
-            })
-            .collect();
-        let a = self.merge(q[0], q[1], true);
-        let b = self.merge(q[2], q[3], true);
-        self.merge(a, b, false)
+            }
+        }
+        let merged = self.node(Operation::Swap, &[a.node, b.node], stack, None)?;
+        if rotated {
+            self.rotate(merged, false)
+        } else {
+            Ok(merged)
+        }
     }
-    fn column(&mut self, parts: &[&str], position: usize) -> Result<Option<usize>> {
-        let Some(last) = parts.iter().rposition(|p| *p != "--") else {
-            return Ok(None);
-        };
-        let mut result = None;
-        let mut built = Vec::<String>::new();
-        for part in &parts[..=last] {
-            ensure!(
-                *part != "--",
-                "Unsupported column gap: candidate strategy needs solid columns"
-            );
-            let crystal = part.starts_with('c');
-            ensure!(
-                !crystal || !built.iter().any(|s| s.starts_with("P-")),
-                "Pin below a later crystal requires another strategy"
-            );
-            let row = format!("{}CuCuCu", if crystal { "P-" } else { part });
-            let upper = self.layer(&row).unwrap();
-            built.push(row);
-            let id = match result {
-                None => upper,
-                Some(lower) => self.node(Operation::Stack, &[lower, upper], built.join(":"), None),
-            };
-            result = Some(if crystal {
-                *built.last_mut().unwrap() = format!("{part}CuCuCu");
+    fn optional_merge(
+        &mut self,
+        a: Option<Built>,
+        b: Option<Built>,
+        rotated: bool,
+    ) -> Result<Option<Built>> {
+        match (a, b) {
+            (Some(a), Some(b)) => self.merge(a, b, rotated).map(Some),
+            (a, b) => Ok(a.or(b)),
+        }
+    }
+    fn quarter(&mut self, part: Part, position: usize) -> Result<Built> {
+        let full = match part {
+            Part::Solid(Material::Crystal, color) => {
+                let mask = self.supported_layer(Part::Empty)?;
                 self.node(
                     Operation::Crystallize,
-                    &[id],
-                    built.join(":"),
-                    Some(part.as_bytes()[1] as char),
-                )
-            } else {
-                id
-            });
-        }
-        let mut id = self.isolate(result.unwrap());
+                    &[mask.node],
+                    Stack {
+                        first: Layer([part, SUPPORT, SUPPORT, SUPPORT]),
+                        rest: vec![],
+                    },
+                    Some(color),
+                )?
+            }
+            _ => {
+                let raw = match part {
+                    Part::Solid(m, _) => Part::Solid(m, Color::Uncolored),
+                    p => p,
+                };
+                let source = self.node(
+                    Operation::Source,
+                    &[],
+                    Stack {
+                        first: Layer([raw; 4]),
+                        rest: vec![],
+                    },
+                    None,
+                )?;
+                match part {
+                    Part::Solid(_, color) if color != Color::Uncolored => self.node(
+                        Operation::Paint,
+                        &[source.node],
+                        Stack {
+                            first: Layer([part; 4]),
+                            rest: vec![],
+                        },
+                        Some(color),
+                    )?,
+                    _ => source,
+                }
+            }
+        };
+        let mut result = self.isolate(full)?;
         for _ in 0..position {
-            id = self.rotate(id, true);
+            result = self.rotate(result, true)?;
         }
-        Ok(Some(id))
+        Ok(result)
+    }
+    /// Support quadrants guarantee a result even when the first quadrant is empty.
+    fn supported_layer(&mut self, part: Part) -> Result<Built> {
+        let q1 = self.quarter(SUPPORT, 1)?;
+        let left = if part == Part::Empty {
+            q1
+        } else {
+            let q0 = self.quarter(part, 0)?;
+            self.merge(q0, q1, true)?
+        };
+        let q2 = self.quarter(SUPPORT, 2)?;
+        let q3 = self.quarter(SUPPORT, 3)?;
+        let right = self.merge(q2, q3, true)?;
+        self.merge(left, right, false)
+    }
+    fn layer(&mut self, layer: Layer) -> Result<Option<Built>> {
+        let mut q = [None, None, None, None];
+        for (i, part) in layer.0.into_iter().enumerate() {
+            if part != Part::Empty {
+                q[i] = Some(self.quarter(part, i)?);
+            }
+        }
+        let [q0, q1, q2, q3] = q;
+        let a = self.optional_merge(q0, q1, true)?;
+        let b = self.optional_merge(q2, q3, true)?;
+        self.optional_merge(a, b, false)
+    }
+    fn column(&mut self, parts: &[Part], position: usize) -> Result<Option<Built>> {
+        let Some(last) = parts.iter().rposition(|p| *p != Part::Empty) else {
+            return Ok(None);
+        };
+        let column = &parts[..=last];
+        ensure!(
+            column.iter().all(|p| *p != Part::Empty),
+            "Unsupported column gap: candidate strategy needs solid columns"
+        );
+        let Some((&first, rest)) = column.split_first() else {
+            return Ok(None);
+        };
+        let mut result = self.column_step(None, first)?;
+        let mut has_pin = false;
+        has_pin |= first == Part::Pin;
+        for &part in rest {
+            let crystal = matches!(part, Part::Solid(Material::Crystal, _));
+            ensure!(
+                !crystal || !has_pin,
+                "Pin below a later crystal requires another strategy"
+            );
+            has_pin |= part == Part::Pin;
+            result = self.column_step(Some(result), part)?;
+        }
+        let mut result = self.isolate(result)?;
+        for _ in 0..position {
+            result = self.rotate(result, true)?;
+        }
+        Ok(Some(result))
+    }
+    /// Extend a nonempty scaffold, resolving a crystal before returning it.
+    fn column_step(&mut self, result: Option<Built>, part: Part) -> Result<Built> {
+        let crystal = matches!(part, Part::Solid(Material::Crystal, _));
+        let upper = self.supported_layer(if crystal { Part::Pin } else { part })?;
+        let mut built = match result {
+            None => upper,
+            Some(lower) => {
+                let mut stack = lower.stack;
+                stack.rest.push(upper.stack.first);
+                self.node(Operation::Stack, &[lower.node, upper.node], stack, None)?
+            }
+        };
+        if let Part::Solid(Material::Crystal, color) = part {
+            let mut stack = built.stack;
+            let top = match stack.rest.last_mut() {
+                Some(top) => top,
+                None => &mut stack.first,
+            };
+            top.0[0] = part;
+            built = self.node(Operation::Crystallize, &[built.node], stack, Some(color))?;
+        }
+        Ok(built)
     }
 }
+/// Uncolored circular scaffold quadrant.
+const SUPPORT: Part = Part::Solid(Material::Circle, Color::Uncolored);
+/// Plan a supported target and freeze its validated execution graph.
 pub fn plan_recipe(target: &str) -> Result<Recipe> {
-    let shape: Shape = target.parse()?;
-    let layers: Vec<_> = target.split(':').collect();
+    let target: Shape = target.parse()?;
+    let layers: Vec<_> = target.layers().collect();
+    ensure!(layers.len() <= 4, "Prototype supports 1..4 layers");
     ensure!(
-        !layers.is_empty() && layers.len() <= 4,
-        "Prototype supports 1..4 layers"
+        layers.iter().all(|l| l.0.iter().any(|p| *p != Part::Empty)),
+        "Empty layers require a different construction strategy"
     );
-    for layer in &layers {
-        ensure!(
-            *layer != "--------",
-            "Empty layers require a different construction strategy"
-        );
-    }
-
     let mut p = Planner::default();
     let result = if layers.len() == 1 {
-        p.layer(target)
+        p.layer(layers[0].clone())?
     } else {
-        let mut columns = Vec::new();
-        for i in 0..4 {
-            columns.push(
-                p.column(
-                    &layers
-                        .iter()
-                        .map(|l| &l[i * 2..i * 2 + 2])
-                        .collect::<Vec<_>>(),
-                    i,
-                )?,
-            );
+        let mut columns = [None, None, None, None];
+        for (i, column) in columns.iter_mut().enumerate() {
+            *column = p.column(&layers.iter().map(|l| l.0[i]).collect::<Vec<_>>(), i)?;
         }
-        let a = p.merge(columns[0], columns[1], true);
-        let b = p.merge(columns[2], columns[3], true);
-        p.merge(a, b, false)
+        let [c0, c1, c2, c3] = columns;
+        let a = p.optional_merge(c0, c1, true)?;
+        let b = p.optional_merge(c2, c3, true)?;
+        p.optional_merge(a, b, false)?
     };
-    let recipe = Recipe {
-        target: shape,
-        root: Node(u32::try_from(result.unwrap()).expect("recipe exceeds u32 nodes")),
+    let Some(result) = result else {
+        anyhow::bail!("Target has no occupied quadrants");
+    };
+    RecipeDto {
+        target,
+        root: result.node,
         nodes: p.nodes,
-    };
-    recipe.validate()?;
-    Ok(recipe)
+    }
+    .try_into()
 }
 
 /// The symbol set and case enumeration are owned by this construction task.

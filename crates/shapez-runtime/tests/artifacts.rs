@@ -44,20 +44,22 @@ fn native_cases_keep_payloads_typed_and_toml_rejects_misspelled_fields() {
     ))
     .unwrap();
     legacy.validate().unwrap();
-    let recipe = shapez_model::Recipe {
+    let recipe: shapez_model::Recipe = shapez_model::RecipeDto {
         target: "CuCuCuCu".parse().unwrap(),
         root: shapez_model::Node(0),
-        nodes: vec![shapez_model::RecipeNode {
+        nodes: vec![shapez_model::RecipeNodeDto {
             id: shapez_model::Node(0),
             op: shapez_model::Operation::Source,
             inputs: vec![],
             expected: "CuCuCuCu".parse().unwrap(),
             color: None,
         }],
-    };
+    }
+    .try_into()
+    .unwrap();
     recipe.validate().unwrap();
     let case = shapez_runtime::case! { name: "recipe", operation: "recipe", recipe: recipe };
     let wire = serde_json::to_string(&case).unwrap();
     let decoded: shapez_runtime::TestCase = serde_json::from_str(&wire).unwrap();
-    assert_eq!(decoded.recipe.unwrap().target.to_string(), "CuCuCuCu");
+    assert_eq!(decoded.recipe.unwrap().target().to_string(), "CuCuCuCu");
 }
