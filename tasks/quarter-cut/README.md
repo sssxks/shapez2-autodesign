@@ -8,7 +8,7 @@
 
 原图接口版共 1,134 个建筑，左右两个 17×14 区域分别求出单层设计后复制到三层，没有升降机。输入 `CuCuCuCu` 和 `RrRrRrRr` 时，48 条输出每条在 120 秒内产出 240 个正确四分之一片；出口堵塞恢复通过，138 台合流器没有闲置入口。
 
-`cargo run --locked --release -p quarter-cut` 同时重建原图接口版与此前西侧输入版的蓝图和交互 HTML，输出到 `artifacts/quarter-cut`。默认 `--native` 验收原图接口版；传入旧模板路径可验收西侧输入版。
+`cargo run --locked --release -p quarter-cut -- --input <求解结果目录>` 从运行时读取的结果同时重建原图接口版与此前西侧输入版的蓝图和交互 HTML，输出到 `artifacts/quarter-cut`。默认 `--native` 验收原图接口版；传入旧模板路径可验收西侧输入版。
 
 ## 此前西侧输入版
 
@@ -40,15 +40,32 @@
 
 ## 运行和重建
 
-```powershell
-cargo run --locked --release -p quarter-cut  # 从已提交分区解重建蓝图和交互可视化
-cargo run --release -p quarter-cut -- --native  # 本地游戏原生整机验收
-cargo run --release -p quarter-cut --bin quarter-assemble -- `
-  tasks/quarter-cut/search/bank-left.buildings.json `
-  tasks/quarter-cut/search/bank-right.buildings.json
+求解结果在运行时读取，不嵌入可执行文件，也不要求存在于编译机器上。输入目录结构如下：
+
+```text
+<输入目录>/
+  bank-left.buildings.json
+  bank-right.buildings.json
+  bank-left.witness.json
+  bank-right.witness.json
+  original/
+    left.buildings.json
+    right.buildings.json
+    left.witness.json
+    right.witness.json
 ```
 
-默认命令只需要 Rust，在当前目录的 `artifacts/quarter-cut` 下生成蓝图和交互 HTML。进入 `tasks/quarter-cut` 后直接 `cargo run --release` 也可以。`quarter-assemble` 从指定分区文件重建并执行原生验收；验收需要本地游戏、.NET 和准备过的隔离宿主，并且串行运行。
+建筑文件用于蓝图装配，witness 用于物料流可视化。缺失或无法解析的文件会报告具体路径。
+
+```powershell
+cargo run --locked --release -p quarter-cut -- --input artifacts/quarter-cut/solutions --output artifacts/quarter-cut
+cargo run --release -p quarter-cut -- --native  # 本地游戏原生整机验收
+cargo run --release -p quarter-cut --bin quarter-assemble -- `
+  artifacts/quarter-cut/solutions/bank-left.buildings.json `
+  artifacts/quarter-cut/solutions/bank-right.buildings.json
+```
+
+重建需要 Rust 和已生成的求解结果；不需要求解器或游戏。输入默认是当前目录下的 `artifacts/quarter-cut/solutions`，可用 `--input` 指定；输出可用 `--output` 指定，默认在当前目录的 `artifacts/quarter-cut` 下生成蓝图和交互 HTML。进入 `tasks/quarter-cut` 后直接 `cargo run --release` 也可以。`quarter-assemble` 从指定分区文件重建并执行原生验收；验收需要本地游戏、.NET 和准备过的隔离宿主，并且串行运行。
 
 [fresh-clone 复现、完整依赖与三种运行方式](search/REPRODUCIBILITY.md)。
 

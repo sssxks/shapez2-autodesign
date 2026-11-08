@@ -14,17 +14,30 @@ use std::{fs, time::Duration};
 fn main() -> Result<()> {
     let mut arguments = std::env::args().skip(1);
     let argument = arguments.next();
-    match argument.as_deref() {
-        None | Some("--rebuild") => {
-            return quarter_cut::rebuild(std::path::Path::new("artifacts/quarter-cut"));
+    if matches!(
+        argument.as_deref(),
+        None | Some("--rebuild" | "--input" | "--output")
+    ) {
+        let mut input = std::path::PathBuf::from("artifacts/quarter-cut/solutions");
+        let mut output = std::path::PathBuf::from("artifacts/quarter-cut");
+        let mut options = argument.into_iter().chain(arguments);
+        while let Some(option) = options.next() {
+            match option.as_str() {
+                "--rebuild" => {}
+                "--input" | "--output" => {
+                    let value = options
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("{option} requires a directory"))?;
+                    if option == "--input" {
+                        input = value.into();
+                    } else {
+                        output = value.into();
+                    }
+                }
+                _ => anyhow::bail!("Unknown reconstruction option {option}"),
+            }
         }
-        Some("--output") => {
-            let output = arguments
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("--output requires a directory"))?;
-            return quarter_cut::rebuild(std::path::Path::new(&output));
-        }
-        _ => {}
+        return quarter_cut::rebuild(&input, &output);
     }
     let paths = LabPaths::discover();
     let run = RunDirectory::create(&paths.root, "quarter-cut")?;

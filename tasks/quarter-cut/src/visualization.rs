@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 use shapez_blueprint::{Blueprint, Building};
 use shapez_viz::{Category, Connection, Point, Port, Region, Scene, Tile};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::Path};
 
 /// Saved solver ports: six incoming faces followed by six outgoing faces.
 #[derive(Clone, Deserialize)]
@@ -57,21 +57,21 @@ fn connection(from: Point, to: Point, mask: i64, rate: f64, jump: bool) -> Conne
 }
 
 /// Reflect and replicate the exact same bank coordinates used by assembly.
-fn states(layout: Layout) -> Result<BTreeMap<Point, State>> {
+fn states(layout: Layout, input: &Path) -> Result<BTreeMap<Point, State>> {
     let mut result = BTreeMap::new();
     let banks = if layout == Layout::Original {
         [
-            (include_str!("../search/original/left.witness.json"), 0, 3),
-            (include_str!("../search/original/right.witness.json"), 17, 3),
+            ("original/left.witness.json", 0, 3),
+            ("original/right.witness.json", 17, 3),
         ]
     } else {
         [
-            (include_str!("../search/bank-left.witness.json"), 0, 1),
-            (include_str!("../search/bank-right.witness.json"), 17, 3),
+            ("bank-left.witness.json", 0, 1),
+            ("bank-right.witness.json", 17, 3),
         ]
     };
-    for (text, x_offset, repeat) in banks {
-        let bank: Vec<State> = serde_json::from_str(text)?;
+    for (file, x_offset, repeat) in banks {
+        let bank: Vec<State> = crate::read_solution(&input.join(file))?;
         for z in 0..repeat {
             for state in &bank {
                 for reflected in [false, true] {
@@ -124,13 +124,13 @@ fn footprint(b: &Building) -> Vec<Point> {
 }
 
 /// Build an inspectable view from actual buildings, including every occupied auxiliary tile.
-pub(crate) fn scene(blueprint: &Blueprint, layout: Layout) -> Result<Scene> {
+pub(crate) fn scene(blueprint: &Blueprint, layout: Layout, input: &Path) -> Result<Scene> {
     let buildings = blueprint
         .islands()
         .first()
         .context("Missing factory island")?
         .buildings();
-    let states = states(layout)?;
+    let states = states(layout, input)?;
     let mut occupied = BTreeMap::new();
     let mut tiles = Vec::new();
     let mut origins = BTreeMap::new();
