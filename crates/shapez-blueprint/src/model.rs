@@ -41,7 +41,10 @@ impl Serialize for Configuration {
 impl<'de> Deserialize<'de> for Configuration {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let text = wire::Bytes::deserialize(deserializer)?.into_text();
-        STANDARD.decode(text).map(Self).map_err(de::Error::custom)
+        STANDARD
+            .decode(text.as_bytes())
+            .map(Self)
+            .map_err(de::Error::custom)
     }
 }
 
