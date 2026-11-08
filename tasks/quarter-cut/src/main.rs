@@ -1,6 +1,6 @@
 //! Rebuild the delivered design, or explicitly run native game acceptance.
 mod compact;
-mod design;
+use quarter_cut::design;
 mod distribution;
 mod layout;
 use anyhow::Result;
