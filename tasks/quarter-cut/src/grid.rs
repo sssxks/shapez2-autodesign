@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use shapez_blueprint::{Building, Rotation};
 use shapez_solver::{Expr, FeasibleSolution, Limits, Model, Solution, Var};
 use std::{collections::BTreeMap, fs, path::PathBuf};
+/// Local tile coordinates (x, y, layer), with zero-based layers and x east/y south.
 type Point = (i32, i32, i16);
+/// Direction offsets indexed east, south, west, north, up, down (0 through 5).
 const D: [Point; 6] = [
     (1, 0, 0),
     (0, 1, 0),
@@ -14,19 +16,26 @@ const D: [Point; 6] = [
     (0, 0, 1),
     (0, 0, -1),
 ];
+/// Return the reverse of a valid D direction index (0 through 5).
 fn opposite(d: usize) -> usize {
     if d < 4 { (d + 2) % 4 } else { 9 - d }
 }
+/// Allowed quadrant occupancy masks: single quarters, adjacent halves, and full shapes.
 const SHAPES: [i64; 9] = [1, 2, 4, 8, 3, 6, 9, 12, 15];
 /// Two vertical regions matching the original north-input interface layout.
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum OriginalHalf {
+    /// Western 17 by 14 region receiving the north inputs and forwarding two full-shape lanes.
     Left,
+    /// Eastern 17 by 14 region receiving the two forwarded full-shape lanes.
     Right,
 }
+/// CLI options for synthesizing and exporting a regional or full-platform grid.
 #[derive(Clone, Parser)]
 pub struct Args {
+    /// Destination blueprint path supplied as a positional CLI argument.
     pub output: PathBuf,
+    /// Solve the 5 by 4 tile unit with one input and one quarter output.
     #[arg(long)]
     cell: bool,
     /// Solve one 17x14 half of the original five-port layout.
@@ -56,52 +65,78 @@ pub struct Args {
     /// Synthesize a four-output bank with one full input per layer.
     #[arg(long, conflicts_with = "cell")]
     bank: bool,
+    /// Bank width in tiles; at least 4, or 16 with fixed cores.
     #[arg(long, default_value_t = 17)]
     bank_width: i32,
+    /// Bank height in tiles; at least 3, or 6 with fixed cores.
     #[arg(long, default_value_t = 6)]
     bank_height: i32,
+    /// Zero-based x coordinate of the first of four consecutive north-edge outputs.
     #[arg(long, default_value_t = 5)]
     bank_output: i32,
     /// Carry an additional full input through the bank to the east edge.
     #[arg(long, requires = "bank")]
     bank_through: bool,
+    /// West input y coordinate; defaults to height minus 1 and must differ from the through lane.
     #[arg(long, requires = "bank")]
     bank_input_row: Option<i32>,
     /// Fix only cutting/half-rotation cores; synthesize the entire shared quarter network.
     #[arg(long)]
     cores: bool,
+    /// Number of modeled layers, restricted to 1 through 3; layer indices start at zero.
     #[arg(long, default_value_t = 1)]
     layers: i16,
+    /// Flattened CP-SAT budget, logging, and objective controls.
     #[command(flatten)]
     search: SearchSettings,
+    /// Flattened checkpoint, hint, and native-validation options.
     #[command(flatten)]
     execution: Execution,
 }
 /// Mutually exclusive physical domains accepted by the grid builder.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Domain {
+    /// Complete 34 by 14 platform interior.
     Platform,
+    /// Compact 5 by 4 production unit.
     Cell,
+    /// One 17 by 14 half with original-interface boundary ports.
     Half(OriginalHalf),
+    /// Configurable rectangular four-output bank.
     Bank,
 }
 
 /// In-memory region geometry and core placement rules, independent of CLI and files.
 struct Region {
+    /// Physical boundary layout determining dimensions and required ports.
     domain: Domain,
+    /// Two local y coordinates for full-shape lanes from the left half into the right half.
     through_rows: [i32; 2],
+    /// Orient the upper fixed cores toward the northern input lanes.
     inward_top: bool,
+    /// Reflect fixed core positions horizontally across the region while preserving shape transformations.
     mirror_cores: bool,
+    /// Use the staggered left-region arrangement of four west-facing and four south-facing cores.
     corner_cores: bool,
+    /// Choose core poses from small per-core domains jointly with transport routing.
     flex_cores: bool,
+    /// Choose anonymous nonoverlapping core poses without per-layer production quotas.
     free_core_pack: bool,
+    /// Restrict packed cores to x below 17 while allowing transport throughout the platform.
     pack_left: bool,
+    /// Bank width in tiles; at least 4, or 16 with fixed cores.
     bank_width: i32,
+    /// Bank height in tiles; at least 3, or 6 with fixed cores.
     bank_height: i32,
+    /// Zero-based x coordinate of the first of four consecutive north-edge outputs.
     bank_output: i32,
+    /// Require a full-rate complete-shape lane across the bank at y = height minus 2.
     bank_through: bool,
+    /// West input y coordinate; defaults to height minus 1 and must differ from the through lane.
     bank_input_row: Option<i32>,
+    /// Restrict production to fixed cutting and rotation footprints while solving shared transport.
     cores: bool,
+    /// Number of modeled layers, restricted to 1 through 3; layer indices start at zero.
     layers: i16,
 }
 impl Region {
@@ -141,15 +176,19 @@ impl Region {
 /// Optimization controls; shared by direct region solves and factory assembly.
 #[derive(Clone, clap::Args)]
 struct SearchSettings {
+    /// CP-SAT time budget in seconds for each regional solve; defaults to 120.
     #[arg(long, default_value_t = 120.)]
     seconds: f64,
+    /// Number of parallel CP-SAT search workers; defaults to 8.
     #[arg(long, default_value_t = 8)]
     workers: i32,
+    /// Suppress CP-SAT progress logging; summary diagnostics remain enabled.
     #[arg(long)]
     quiet: bool,
     /// Stop at the first complete feasible layout instead of minimizing occupied tiles.
     #[arg(long)]
     feasibility: bool,
+    /// Lower bound on served quarter outputs; zero leaves the default objective in control.
     #[arg(long, default_value_t = 0)]
     minimum: i64,
 }
@@ -160,8 +199,10 @@ struct Execution {
     /// Optional disjoint pose domains, one selected core per domain and layer.
     #[arg(long, requires = "free_core_pack")]
     core_domains: Option<PathBuf>,
+    /// Request native game validation of the resulting blueprint.
     #[arg(long)]
     native: bool,
+    /// Load a grid checkpoint with a matching building grammar as solver hints.
     #[arg(long)]
     resume: Option<PathBuf>,
     /// Save an explicit restart checkpoint.
@@ -170,44 +211,62 @@ struct Execution {
     /// Embed a verified 5x4 unit at the west output bank as a feasible seed.
     #[arg(long)]
     unit_hint: Option<PathBuf>,
+    /// Infer jump kinds from checkpoint port pairs instead of trusting saved kind IDs.
     #[arg(long)]
     infer_hint: bool,
+    /// Four resume coordinates x0 y0 x1 y1; freeze tile kinds outside this half-open rectangle on every layer.
     #[arg(long, num_args = 4, requires = "resume")]
     window: Vec<i32>,
+    /// Blueprint supplying building-kind hints; island buildings have the three-tile border offset removed.
     #[arg(long)]
     buildings_hint: Option<PathBuf>,
+    /// Fix every hinted tile kind, including empty cells absent from the supplied blueprint.
     #[arg(long, requires = "buildings_hint")]
     lock_layout: bool,
     /// Fix supplied buildings while leaving all other tiles available.
     #[arg(long, requires = "buildings_hint")]
     fix_known_layout: bool,
 }
+/// Physical building pose or reserved footprint cell; its index is the solver kind ID.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Kind {
+    /// Native building definition; absent for empty tiles and auxiliary footprint cells.
     definition: Option<String>,
+    /// Physical planar direction index: east 0, south 1, west 2, north 3.
     rotation: usize,
+    /// Marks a reserved cutter or lift footprint cell that exports no separate building.
     auxiliary: bool,
+    /// Optional jump code: direction * 4 + distance - 2 for senders, plus 16 for receivers; distance is 2 through 5 tiles.
     jump: Option<usize>,
+    /// Distinguishes lift footprints from cutter footprints, including auxiliary cells.
     #[serde(default)]
     lift: bool,
 }
 /// Inclusive origin bounds and physical direction for one interchangeable pose group.
 #[derive(Deserialize)]
 struct CoreDomain {
+    /// Inclusive local origin bounds [xmin, ymin, xmax, ymax] in tiles.
     bounds: [i32; 4],
+    /// Physical planar direction index: east 0, south 1, west 2, north 3.
     rotation: usize,
 }
+/// Legal building states, initially encoded as flow tokens and reduced to wire classes during grid construction.
 struct Grammar {
+    /// Building descriptors indexed by solver kind ID; index zero represents an empty tile.
     kinds: Vec<Kind>,
+    /// Allowed rows: kind ID, six input ports, six output ports in D order; build converts flow tokens to wire classes.
     rows: Vec<Vec<i64>>,
 }
+/// Move n tile or layer units along direction d; d must index D and layer arithmetic must fit i16.
 fn step(p: Point, d: usize, n: i32) -> Point {
     (p.0 + D[d].0 * n, p.1 + D[d].1 * n, p.2 + D[d].2 * n as i16)
 }
+/// Encode an ordinary flow as 4 * shape + q, where shape is a quadrant mask and q is 1 through 4 half-items per second.
 fn token(shape: i64, q: i64) -> i64 {
     4 * shape + q
 }
 impl Grammar {
+    /// Append a physical pose and return its stable index; infer main-lift status from the native definition.
     fn kind(
         &mut self,
         definition: Option<&str>,
@@ -225,6 +284,7 @@ impl Grammar {
         });
         id
     }
+    /// Append a 13-column state with zero for unspecified ports; port indices must be in 0 through 5.
     fn row(&mut self, kind: usize, inputs: &[(usize, i64)], outputs: &[(usize, i64)]) {
         let mut row = vec![0; 13];
         row[0] = kind as i64;
@@ -236,6 +296,7 @@ impl Grammar {
         }
         self.rows.push(row);
     }
+    /// Construct legal production and transport states, including cutter transfers, paired jumps, and one/two-layer lifts.
     fn build() -> Self {
         let mut g = Self {
             kinds: Vec::new(),
@@ -415,34 +476,58 @@ impl Grammar {
         g
     }
 }
+/// Directed connection split into wire class, quadrant mask, half-item-per-second rate, and class predicates.
 #[derive(Clone, Copy)]
 struct Edge {
+    /// Wire class: 0 absent, 1 ordinary, 2 through 9 cutter transfer, 10 and above lift transfer.
     wire: Var,
+    /// Quadrant occupancy mask, or zero for an inactive connection.
     shape: Var,
+    /// Flow in units of 0.5 items per second, from zero through four.
     rate: Var,
+    /// Boolean equivalent to a nonzero wire class.
     active: Var,
+    /// Boolean selecting ordinary belt flow (wire class 1).
     normal: Var,
+    /// Boolean selecting cutter or lift transfers (wire class at least 2).
     internal: Var,
 }
+/// Solver variables for one occupied or empty tile, including reserved multi-tile footprints.
 #[derive(Clone)]
 struct Tile {
+    /// Index into the associated grammar kind table; zero denotes an empty tile.
     kind: Var,
+    /// Boolean identifying a main cutter cell, excluding its auxiliary footprint.
     cut: Var,
+    /// Six inputs followed by six outputs, each ordered east, south, west, north, up, down.
     ports: [Edge; 12],
+    /// One-hot jump predicates: 16 senders then 16 receivers, indexed by direction * 4 + distance - 2.
     jumps: [Var; 32],
+    /// Quadrant masks for input, ordinary output, and internal-transfer output, respectively.
     shapes: [Var; 3],
 }
+/// Finite regional model with boundary flows and an objective favoring served outputs then fewer occupied tiles.
 struct Grid {
+    /// CP-SAT variables, constraints, hints, and occupied-tile/output objective.
     model: Model,
+    /// Deduplicated building kinds and allowed wire-class tuples used by this model.
     grammar: Grammar,
+    /// Tile variables keyed by local x, y, and zero-based layer coordinates.
     tiles: BTreeMap<Point, Tile>,
+    /// Boolean flags for full-rate quarter outputs; mandatory full-shape through lanes are excluded.
     served: Vec<Var>,
+    /// Boundary source triples: exterior tile position, inward direction index, and directed flow variables.
     sources: Vec<(Point, usize, Edge)>,
+    /// Boundary target triples: interior tile position, outward direction index, and directed flow variables.
     targets: Vec<(Point, usize, Edge)>,
+    /// Extent along x in tiles, with local coordinates 0 through width minus 1.
     width: i32,
+    /// Extent along y in tiles, with local coordinates 0 through height minus 1.
     height: i32,
+    /// Number of modeled layers, restricted to 1 through 3; layer indices start at zero.
     layers: i16,
 }
+/// Map native definitions to transform codes: 0 transport, 1 clockwise, 2 counterclockwise, 3 half-turn, 4 cutter.
 fn operation(k: &Kind) -> i64 {
     match k.definition.as_deref() {
         Some("RotatorOneQuadInternalVariant") => 1,
@@ -452,6 +537,7 @@ fn operation(k: &Kind) -> i64 {
         _ => 0,
     }
 }
+/// Return allowed [operation, input, ordinary output, internal output] quadrant-mask tuples, including the empty state.
 fn shape_relations() -> Vec<Vec<i64>> {
     let mut rows = vec![vec![0, 0, 0, 0]];
     rows.extend(SHAPES.into_iter().map(|s| vec![0, s, s, s]));
@@ -471,6 +557,7 @@ fn shape_relations() -> Vec<Vec<i64>> {
     }
     rows
 }
+/// Enforce a == b when Boolean on is set; limit must bound the absolute difference when on is unset.
 fn equal_if(model: &mut Model, on: Var, a: Var, b: Var, limit: i64) {
     model.bounded(
         Expr {
@@ -489,6 +576,7 @@ fn equal_if(model: &mut Model, on: Var, a: Var, b: Var, limit: i64) {
         i64::MAX,
     );
 }
+/// Encode solved flow for checkpoints: zero absent, ordinary token below 80, cutter transfer from 80, lift transfer from 1000.
 fn edge_value(e: Edge, s: &FeasibleSolution) -> i64 {
     let wire = s.value(e.wire);
     let shape = s.value(e.shape);
@@ -1283,12 +1371,17 @@ fn build(args: &Region, domains: &[CoreDomain]) -> Grid {
         layers,
     }
 }
+/// Checkpoint representation of an occupied tile and its twelve encoded flow ports.
 #[derive(Clone, Serialize, Deserialize)]
 struct CellState {
+    /// Local tile x, y, and zero-based layer of this occupied checkpoint cell.
     position: Point,
+    /// Index into the associated grammar kind table; zero denotes an empty tile.
     kind: usize,
+    /// Encoded flow tokens: six inputs then six outputs in D order; zero means no flow.
     ports: [i64; 12],
 }
+/// Extract occupied cells in coordinate order, retaining auxiliary footprints and encoded ports for restart.
 fn selected(grid: &Grid, solution: &FeasibleSolution) -> Vec<CellState> {
     grid.tiles
         .iter()
@@ -1302,6 +1395,7 @@ fn selected(grid: &Grid, solution: &FeasibleSolution) -> Vec<CellState> {
         })
         .collect()
 }
+/// Decode twelve port tokens, match a legal kind and shape transform, and hint an existing tile; fail if no grammar state matches.
 fn apply_hint(grid: &mut Grid, p: Point, ports: [i64; 12], kind: Option<usize>) -> Result<usize> {
     let decoded = ports.map(|value| {
         if value == 0 {
@@ -1701,15 +1795,21 @@ fn solve(
 /// End-to-end factory search options, independent of regional debug switches.
 #[derive(clap::Args)]
 pub struct FactoryArgs {
+    /// Destination blueprint path supplied as a positional CLI argument.
     pub output: PathBuf,
+    /// CP-SAT time budget in seconds for each regional solve; defaults to 120.
     #[arg(long, default_value_t = 120.)]
     pub seconds: f64,
+    /// Number of parallel CP-SAT search workers; defaults to 8.
     #[arg(long, default_value_t = 8)]
     pub workers: i32,
+    /// Solve the west-input bank layout instead of the original northern-input halves.
     #[arg(long)]
     pub west: bool,
+    /// Request native game validation of the resulting blueprint.
     #[arg(long)]
     pub native: bool,
+    /// Suppress CP-SAT progress logging; summary diagnostics remain enabled.
     #[arg(long)]
     pub quiet: bool,
 }
@@ -1787,6 +1887,7 @@ pub fn run(args: Args) -> Result<()> {
     let result = solve(&region, &args.search, &args.execution)?;
     crate::export_buildings(&result.buildings, &args.output)
 }
+/// Place solved buildings and boundary ports in a native test platform and run throughput/icon acceptance; replicate single-layer full grids three times.
 fn native(
     args: &Region,
     grid: &Grid,
@@ -1906,16 +2007,20 @@ fn native(
 /// A restart checkpoint keeps solver kind IDs paired with their exact grammar.
 #[derive(Serialize, Deserialize)]
 struct GridCheckpoint {
+    /// Building descriptors indexed by solver kind ID; index zero represents an empty tile.
     kinds: Vec<Kind>,
+    /// Occupied tile states whose kind indices refer to the checkpoint grammar.
     states: Vec<CellState>,
 }
 
 /// Human-authored search constraints, separate from solver output.
 #[derive(Deserialize)]
 struct CoreDomains {
+    /// Pose groups selecting one core per group and layer; an empty list allows unrestricted packing.
     domains: Vec<CoreDomain>,
 }
 
+/// CLI parsing regression checks for mode conflicts and flattened option dependencies.
 #[cfg(test)]
 mod tests {
     use super::*;
