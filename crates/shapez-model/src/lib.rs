@@ -9,7 +9,7 @@ mod recipe;
 mod shape;
 /// Island-grid transport problems and route plans.
 mod transport;
-pub use geometry::{ChunkPos, Direction, GridBounds, TilePos};
+pub use geometry::{ChunkPos, Direction, GridBounds, TilePos, numeric_direction};
 pub use interface::{DemandPort, FactoryInterface, Payload, RateManifest, SupplyPort};
 pub use recipe::{
     Node, Operation, OutputRef, Recipe, RecipeDto, RecipeNode, RecipeNodeDto, RecipeReport,
@@ -23,8 +23,8 @@ pub use transport::{
 /// Physical foundation tiles, ports and route constraints.
 mod tile;
 pub use tile::{
-    ExchangeGroup, FoundationGeometry, TILE_DIRECTIONS, TileNet, TilePoint, TileResource,
-    TileRoute, TileRouteStep, TileRoutingProblem, tile_resources,
+    ExchangeGroup, FoundationGeometry, TileNet, TilePoint, TileResource, TileRoute, TileRouteStep,
+    TileRoutingProblem, tile_resources,
 };
 
 pub use tile::{FactoryBeltPort, FoundationSocket};

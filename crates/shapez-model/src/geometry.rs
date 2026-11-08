@@ -35,6 +35,20 @@ pub enum Direction {
 }
 
 impl Direction {
+    /// Parse a native clockwise heading index without wrapping invalid input.
+    pub fn from_index(index: usize) -> Option<Self> {
+        Self::ALL.get(index).copied()
+    }
+
+    /// Rotate clockwise by a number of quarter turns.
+    pub fn rotated(self, turns: usize) -> Self {
+        Self::ALL[(self.index() + turns % 4) % 4]
+    }
+
+    /// Clockwise quarter turns from `incoming` to this heading.
+    pub fn turns_from(self, incoming: Self) -> usize {
+        (self.index() + 4 - incoming.index()) % 4
+    }
     /// All cardinal headings in clockwise order.
     pub const ALL: [Self; 4] = [Self::East, Self::South, Self::West, Self::North];
     /// Return the clockwise zero-based heading index.
@@ -48,6 +62,29 @@ impl Direction {
     /// Return the unit tile displacement for this heading.
     pub fn delta(self) -> (i32, i32) {
         [(1, 0), (0, 1), (-1, 0), (0, -1)][self.index()]
+    }
+}
+
+/// Serde adapter for legacy numeric direction fields (east=0 through north=3).
+/// The ordinary `Direction` representation remains its kebab-case name.
+pub mod numeric_direction {
+    use super::Direction;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    /// Write the native clockwise direction index.
+    pub fn serialize<S: Serializer>(
+        direction: &Direction,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u64(direction.index() as u64)
+    }
+
+    /// Reject negative, fractional, and out-of-range native headings at the boundary.
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Direction, D::Error> {
+        let index = usize::deserialize(deserializer)?;
+        Direction::from_index(index).ok_or_else(|| {
+            serde::de::Error::custom("direction must be an integer from 0 through 3")
+        })
     }
 }
 
