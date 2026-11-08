@@ -40,8 +40,8 @@ pub struct TileNet {
 pub struct TileRoute {
     /// Connection realized by this route.
     pub net: TileNet,
-    /// Number of native execution steps, when reported.
-    pub steps: Vec<TileRouteStep>,
+    /// Ordered solved path, frozen after route reconstruction.
+    pub steps: Box<[TileRouteStep]>,
 }
 /// Occupancy and launcher interference are separate physical resources.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

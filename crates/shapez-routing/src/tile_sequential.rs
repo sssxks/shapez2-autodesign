@@ -58,7 +58,7 @@ pub fn solve_tiles_sequential(
             occupied.extend(path.iter().map(|s| s.p));
             result.push(TileRoute {
                 net: net.clone(),
-                steps: path,
+                steps: path.into_boxed_slice(),
             });
         }
         if result.len() == nets.len() {

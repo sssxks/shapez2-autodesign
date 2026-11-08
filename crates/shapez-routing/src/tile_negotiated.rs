@@ -417,7 +417,7 @@ pub fn solve_tiles_negotiated(
             return Ok(nets
                 .into_iter()
                 .zip(paths)
-                .map(|(net, steps)| TileRoute { net, steps })
+                .map(|(net, steps)| TileRoute { net, steps: steps.into_boxed_slice() })
                 .collect());
         }
         for (&p, &v) in &usage {

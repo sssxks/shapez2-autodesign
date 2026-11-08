@@ -327,7 +327,7 @@ impl Joint {
                         output: commodity == 1,
                         exchange: None,
                     },
-                    steps,
+                    steps: steps.into_boxed_slice(),
                 },
                 &mut buildings,
             );
