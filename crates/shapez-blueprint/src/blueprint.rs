@@ -169,22 +169,7 @@ impl Blueprint {
         let path = path.as_ref();
         let text =
             std::fs::read_to_string(path).with_context(|| format!("Reading {}", path.display()))?;
-        if text.trim_start().starts_with('{') {
-            #[derive(Deserialize)]
-            #[serde(untagged)]
-            enum JsonInput {
-                Model(Blueprint),
-                Game(Document),
-            }
-            match serde_json::from_str(&text)
-                .with_context(|| format!("Parsing {}", path.display()))?
-            {
-                JsonInput::Model(model) => Ok(model),
-                JsonInput::Game(document) => Self::try_from(document),
-            }
-        } else {
-            decode_blueprint(&text).with_context(|| format!("Decoding {}", path.display()))
-        }
+        decode_blueprint(&text).with_context(|| format!("Decoding {}", path.display()))
     }
     pub fn islands(&self) -> &[Island] {
         match &self.content {

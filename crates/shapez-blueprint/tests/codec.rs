@@ -6,6 +6,19 @@ use shapez_blueprint::{
 };
 use std::io::Write;
 
+#[test]
+fn file_input_requires_the_game_blueprint_envelope() {
+    let path = std::env::temp_dir().join(format!("shapez-codec-input-{}.spz2bp", std::process::id()));
+    let blueprint = sample();
+    std::fs::write(&path, serde_json::to_vec(&blueprint).unwrap()).unwrap();
+    assert!(Blueprint::read(&path).is_err());
+    std::fs::write(&path, encode_blueprint(&blueprint).unwrap()).unwrap();
+    let decoded = Blueprint::read(&path).unwrap();
+    assert_eq!(decoded.content, blueprint.content);
+    assert_eq!(decoded.icon, blueprint.icon);
+    std::fs::remove_file(path).unwrap();
+}
+
 fn legacy(version: u32, payload: &str) -> String {
     let mut gzip = GzEncoder::new(Vec::new(), Compression::default());
     gzip.write_all(payload.as_bytes()).unwrap();

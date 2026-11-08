@@ -118,10 +118,6 @@ fn main() -> Result<()> {
         let count = bp.islands()[0].buildings().len();
         let output = run.path.join(format!("{}.spz2bp", design.name));
         fs::write(&output, encode_blueprint(&bp)?)?;
-        fs::write(
-            run.path.join(format!("{}-layout.json", design.id)),
-            serde_json::to_vec_pretty(&bp)?,
-        )?;
         let mut harness = bp.clone();
         if let BlueprintContent::Islands(islands) = &mut harness.content {
             islands.entries.extend(shapez_blueprint::foundation_harness(
