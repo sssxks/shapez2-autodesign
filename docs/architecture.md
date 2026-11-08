@@ -2,7 +2,7 @@
 
 ## Crate 边界与依赖方向
 
-公共 Rust 代码全部是库，各自拥有独立职责：
+公共 Rust 库：
 
 - `shapez-model`：形状、颜色、坐标、端口、加工 DAG、验证后配方及运输问题/结果模型、格子级路线、平台 socket 和端口清单。
 - `shapez-routing`：平台间及平台内运输求解算法；依赖 `shapez-model`。
@@ -13,18 +13,7 @@
 
 `shapez-routing` 与 `shapez-blueprint` 相互独立，调用方负责将路由结果交给蓝图编码器。没有汇总所有功能的 core crate，也没有公共可执行入口。
 
-`tasks/<name>` 是设计任务 package，可以提供可执行文件及本任务使用的库。任务依赖所需公共库；公共 crate 不能依赖任务，任务之间也不通过依赖复用设计实现。
-
-## 导出约定
-
-所有 Rust 模块私有，使用 `mod`；公开接口统一在各 crate 的 `lib.rs` 显式 `pub use`。不使用 `pub mod` 或通配重导出。使用者直接导入：
-
-```rust
-use shapez_model::{Shape, ChunkPos, TransportProblem, VerifiedRecipe};
-use shapez_routing::solve_transport;
-use shapez_blueprint::{Blueprint, space_island};
-use shapez_runtime::{Host, RunDirectory, run_suite};
-```
+`tasks/<name>` 是设计任务 package，可以提供可执行文件及本任务使用的库。任务依赖所需公共库。
 
 ## 任务所有权
 

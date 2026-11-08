@@ -1,7 +1,5 @@
 # 四象限切割器
 
-一个 task，一个 `quarter-cut` executable。求解、装配、可视化通过 Rust 类型和函数调用组合，正常流程不生成或读取中间 JSON。
-
 ## 求解与导出
 
 ```powershell
