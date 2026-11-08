@@ -65,7 +65,7 @@ cargo run --release -p quarter-cut --bin quarter-assemble -- `
   artifacts/quarter-cut/solutions/bank-right.buildings.json
 ```
 
-重建需要 Rust 和已生成的求解结果；不需要求解器或游戏。输入默认是当前目录下的 `artifacts/quarter-cut/solutions`，可用 `--input` 指定；输出可用 `--output` 指定，默认在当前目录的 `artifacts/quarter-cut` 下生成蓝图和交互 HTML。进入 `tasks/quarter-cut` 后直接 `cargo run --release` 也可以。`quarter-assemble` 从指定分区文件重建并执行原生验收；验收需要本地游戏、.NET 和准备过的隔离宿主，并且串行运行。
+编译需要 Rust、OR-Tools 9.15（含 `protoc`）以及 SCIP 后端依赖。quarter-cut 始终启用搜索工具，无需 `--features search`。设置 `ORTOOLS_PREFIX` 指向 OR-Tools 安装目录、`PROTOC` 指向其 `bin/protoc.exe`，并将该 `bin` 加入 `PATH`。重建运行时读取已生成的求解结果，不运行求解器，也不需要游戏。输入默认是当前目录下的 `artifacts/quarter-cut/solutions`，可用 `--input` 指定；输出可用 `--output` 指定，默认在当前目录的 `artifacts/quarter-cut` 下生成蓝图和交互 HTML。进入 `tasks/quarter-cut` 后直接 `cargo run --release` 也可以。`quarter-assemble` 从指定分区文件重建并执行原生验收；验收需要本地游戏、.NET 和准备过的隔离宿主，并且串行运行。
 
 [fresh-clone 复现、完整依赖与三种运行方式](search/REPRODUCIBILITY.md)。
 

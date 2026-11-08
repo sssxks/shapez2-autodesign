@@ -1,12 +1,9 @@
 //! Portable reconstruction and visualization of the delivered factory.
 mod assembly;
 pub mod design;
-#[cfg(feature = "search")]
 pub mod grid;
-#[cfg(feature = "search")]
 pub mod search;
 mod visualization;
-#[cfg(feature = "search")]
 pub mod weave;
 use anyhow::{Context, Result};
 pub use assembly::{assemble_banks, assemble_original_halves, factory_sockets, original_sockets};

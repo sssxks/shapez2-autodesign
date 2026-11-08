@@ -4,28 +4,22 @@ version.workspace = true
 edition.workspace = true
 default-run = "quarter-cut"
 
-[features]
-search = ["dep:shapez-solver", "shapez-solver/cp-sat", "shapez-solver/scip"]
-
 [[bin]]
 name = "quarter-search"
 path = "src/bin/quarter-search.rs"
-required-features = ["search"]
 
 [[bin]]
 name = "quarter-weave"
 path = "src/bin/quarter-weave.rs"
-required-features = ["search"]
 
 [[bin]]
 name = "quarter-grid"
 path = "src/bin/quarter-grid.rs"
-required-features = ["search"]
 
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-shapez-solver = { path = "../../crates/shapez-solver", optional = true }
+shapez-solver = { path = "../../crates/shapez-solver", features = ["cp-sat", "scip"] }
 serde.workspace = true
 serde_json.workspace = true
 varisat.workspace = true
