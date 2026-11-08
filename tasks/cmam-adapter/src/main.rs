@@ -1,3 +1,4 @@
+//! Adapter build commands and native-host diagnostics.
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use shapez_blueprint::Blueprint;
@@ -5,51 +6,75 @@ use shapez_runtime::{Host, LabPaths, RunDirectory, prepare_host, run_suite_file}
 use std::{path::PathBuf, time::Duration};
 
 #[derive(Parser)]
+/// Top-level command-line dispatch for adapter construction and native diagnostics.
 struct Cli {
     #[command(subcommand)]
+    /// Requested build or diagnostic operation.
     command: Command,
 }
 #[derive(Subcommand)]
+/// Supported adapter workflows and host inspection commands.
 enum Command {
+    /// Build and prepare the native game host.
     Prepare,
+    /// Run one host operation and print its response and artifact location.
     Probe {
         #[arg(long, default_value = "capabilities")]
+        /// Host protocol operation to invoke with empty arguments.
         operation: String,
         #[arg(long, default_value_t = 180)]
+        /// Maximum wait in seconds for the host operation or suite.
         timeout: u64,
     },
+    /// Execute a native acceptance suite from disk.
     Test {
+        /// Suite specification to execute.
         suite: PathBuf,
         #[arg(long, default_value_t = 300)]
+        /// Maximum wait in seconds for the host operation or suite.
         timeout: u64,
     },
+    /// Print a typed summary of an existing blueprint.
     Inspect {
+        /// Source blueprint read by this operation.
         blueprint: PathBuf,
     },
 
     /// Rewrite an existing blueprint using the current format and typed model.
     Reencode {
+        /// Source blueprint read by this operation.
         blueprint: PathBuf,
     },
+    /// Construct the compact adapter and optionally run native acceptance.
     Build {
+        /// Source blueprint read by this operation.
         blueprint: PathBuf,
         #[arg(long)]
+        /// RGB blueprint used as a construction input.
         rgb: PathBuf,
         #[arg(long)]
+        /// Optional previous adapter blueprint for comparison.
         previous: Option<PathBuf>,
         #[arg(long)]
+        /// Run native validation after constructing the adapter.
         native: bool,
         #[arg(long = "target", requires = "native")]
+        /// Native validation targets selected by the caller.
         targets: Vec<String>,
     },
+    /// Construct the legacy adapter from explicit component blueprints.
     Legacy {
+        /// Source blueprint read by this operation.
         blueprint: PathBuf,
         #[arg(long)]
+        /// Splitter blueprint used by legacy construction.
         splitter: PathBuf,
         #[arg(long)]
+        /// RGB blueprint used as a construction input.
         rgb: PathBuf,
     },
 }
+/// Dispatch the requested operation and propagate filesystem or host failures.
 fn main() -> Result<()> {
     let paths = LabPaths::discover();
     match Cli::parse().command {
