@@ -8,16 +8,21 @@ use std::collections::HashMap;
 /// A nonempty stack of layers under construction.
 #[derive(Clone)]
 struct Stack {
+    /// Bottom layer that makes the stack nonempty.
     first: Layer,
+    /// Additional layers in bottom-to-top construction order.
     rest: Vec<Layer>,
 }
 impl Stack {
+    /// Freeze the current layers into a validated shape value.
     fn shape(&self) -> Result<Shape> {
         Shape::from_layers(self.first.clone(), self.rest.clone())
     }
+    /// Visit all construction layers from bottom to top for in-place operations.
     fn layers_mut(&mut self) -> impl Iterator<Item = &mut Layer> {
         std::iter::once(&mut self.first).chain(&mut self.rest)
     }
+    /// Borrow construction layers in native bottom-to-top order.
     fn layers(&self) -> impl Iterator<Item = &Layer> {
         std::iter::once(&self.first).chain(&self.rest)
     }
@@ -25,16 +30,21 @@ impl Stack {
 /// A produced logical node together with its nonempty shape.
 #[derive(Clone)]
 struct Built {
+    /// Earlier recipe node producing this shape.
     node: Node,
+    /// Nonempty shape carried by the produced node.
     stack: Stack,
 }
 /// Mutable planning phase; the completed DTO is validated and frozen once.
 #[derive(Default)]
 struct Planner {
+    /// Operations appended in execution order before graph validation.
     nodes: Vec<RecipeNodeDto>,
+    /// Reuse an earlier producer for an identical expected shape.
     cache: HashMap<Shape, Node>,
 }
 impl Planner {
+    /// Reuse a matching producer or append an operation with its expected typed shape.
     fn node(
         &mut self,
         op: Operation,
@@ -57,6 +67,7 @@ impl Planner {
         self.cache.insert(expected, node);
         Ok(Built { node, stack })
     }
+    /// Rotate every layer by one quadrant and record the matching native operation.
     fn rotate(&mut self, input: Built, clockwise: bool) -> Result<Built> {
         let mut stack = input.stack;
         for layer in stack.layers_mut() {
@@ -73,6 +84,7 @@ impl Planner {
             None,
         )
     }
+    /// Keep the first two quadrants on every layer through a native cut.
     fn half(&mut self, input: Built) -> Result<Built> {
         let mut stack = input.stack;
         for layer in stack.layers_mut() {
@@ -80,12 +92,14 @@ impl Planner {
         }
         self.node(Operation::Cut, &[input.node], stack, None)
     }
+    /// Use two cuts and rotations to retain only the first quadrant.
     fn isolate(&mut self, input: Built) -> Result<Built> {
         let half = self.half(input)?;
         let turned = self.rotate(half, true)?;
         let quarter = self.half(turned)?;
         self.rotate(quarter, false)
     }
+    /// Combine disjoint occupied quadrants using a swap, optionally around a rotated axis.
     fn merge(&mut self, a: Built, b: Built, rotated: bool) -> Result<Built> {
         let (a, b) = if rotated {
             (self.rotate(a, true)?, self.rotate(b, true)?)
@@ -110,6 +124,7 @@ impl Planner {
             Ok(merged)
         }
     }
+    /// Merge occupied halves while preserving an absent half without adding operations.
     fn optional_merge(
         &mut self,
         a: Option<Built>,
@@ -121,6 +136,7 @@ impl Planner {
             (a, b) => Ok(a.or(b)),
         }
     }
+    /// Construct one occupied quadrant at the requested clockwise position.
     fn quarter(&mut self, part: Part, position: usize) -> Result<Built> {
         let full = match part {
             Part::Solid(Material::Crystal, color) => {
@@ -183,6 +199,7 @@ impl Planner {
         let right = self.merge(q2, q3, true)?;
         self.merge(left, right, false)
     }
+    /// Combine occupied quadrants, returning no producer for an empty layer.
     fn layer(&mut self, layer: Layer) -> Result<Option<Built>> {
         let mut q = [None, None, None, None];
         for (i, part) in layer.0.into_iter().enumerate() {
@@ -195,6 +212,7 @@ impl Planner {
         let b = self.optional_merge(q2, q3, true)?;
         self.optional_merge(a, b, false)
     }
+    /// Build a solid supported column, rejecting gaps and pins below later crystals.
     fn column(&mut self, parts: &[Part], position: usize) -> Result<Option<Built>> {
         let Some(last) = parts.iter().rposition(|p| *p != Part::Empty) else {
             return Ok(None);
@@ -302,5 +320,6 @@ pub fn check_suite() -> Result<shapez_runtime::Suite> {
         cases,
     })
 }
+/// Native execution commands for individual recipes and the construction suite.
 mod commands;
 pub use commands::{run_check, run_recipe};

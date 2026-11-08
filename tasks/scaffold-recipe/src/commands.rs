@@ -1,14 +1,18 @@
 use anyhow::Result;
+/// Borrowed recipe payload sent to the native execution boundary.
 #[derive(serde::Serialize)]
 struct RecipeRequest<'a> {
+    /// Validated execution graph to run in the isolated game host.
     recipe: &'a shapez_model::Recipe,
 }
 use shapez_model::RecipeReport;
 use shapez_runtime::{Host, LabPaths, RunDirectory};
 use std::{fs, time::Duration};
+/// Execute the generated construction suite against the native game implementation.
 pub fn run_check(p: &LabPaths) -> Result<()> {
     shapez_runtime::run_suite(p, &crate::check_suite()?, Duration::from_secs(300))
 }
+/// Plan one target, execute it natively and publish its report and resolved graph.
 pub fn run_recipe(p: &LabPaths, target: &str) -> Result<()> {
     let recipe = crate::plan_recipe(target)?;
     let run = RunDirectory::create(&p.root, "scaffold-recipe")?;
