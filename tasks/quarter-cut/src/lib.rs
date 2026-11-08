@@ -1,102 +1,143 @@
-//! Portable reconstruction and visualization of the delivered factory.
+//! Typed in-memory solver results, factory assembly and visualization.
 mod assembly;
+mod checkpoint;
 pub mod design;
 pub mod grid;
 pub mod search;
 mod visualization;
 pub mod weave;
-use anyhow::{Context, Result};
+use anyhow::Result;
 pub use assembly::{assemble_banks, assemble_original_halves, factory_sockets, original_sockets};
-use shapez_blueprint::{Blueprint, Building, encode_blueprint};
+use shapez_blueprint::{
+    Blueprint, BlueprintContent, Building, BuildingBlueprint, encode_blueprint,
+};
 use std::{fs, path::Path};
 
-/// Physical interface arrangement, shared by reconstruction and the flow viewer.
+/// Physical interface arrangement used by assembly and the viewer.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Layout {
+pub enum Layout {
     WestInput,
     Original,
 }
 
-/// Read a solver output at runtime, retaining its path in error messages.
-fn read_solution<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
-    let file = fs::File::open(path)
-        .with_context(|| format!("Cannot open solver result {}", path.display()))?;
-    serde_json::from_reader(std::io::BufReader::new(file))
-        .with_context(|| format!("Cannot decode solver result {}", path.display()))
+/// One cell's six incoming and six outgoing material-flow tokens.
+#[derive(Clone)]
+pub struct FlowState {
+    pub position: [i32; 3],
+    pub ports: [i64; 12],
 }
 
-/// Reconstruct the west-input design from runtime bank solutions.
-pub fn delivered_blueprint(input: &Path) -> Result<Blueprint> {
-    let left: Vec<Building> = read_solution(&input.join("bank-left.buildings.json"))?;
-    let right: Vec<Building> = read_solution(&input.join("bank-right.buildings.json"))?;
-    assemble_banks(&left, &right)
+/// Buildings and flow belong to the same solver invocation.
+pub struct RegionSolution {
+    pub buildings: Vec<Building>,
+    pub flow: Vec<FlowState>,
 }
 
-/// Reconstruct the north-input design from runtime regional solutions.
-pub fn original_blueprint(input: &Path) -> Result<Blueprint> {
-    let left: Vec<Building> = read_solution(&input.join("original/left.buildings.json"))?;
-    let right: Vec<Building> = read_solution(&input.join("original/right.buildings.json"))?;
-    assemble_original_halves(&left, &right)
+/// The two solved regions consumed together by assembly and visualization.
+pub struct FactorySolution {
+    pub layout: Layout,
+    pub left: RegionSolution,
+    pub right: RegionSolution,
 }
-
-/// Write both verified interface variants and their interactive offline visualizations.
-pub fn rebuild(input: &Path, destination: &Path) -> Result<()> {
-    fs::create_dir_all(destination)?;
-    for (blueprint, layout, name) in [
-        (
-            original_blueprint(input)?,
-            Layout::Original,
-            "quarter-cut-1x2-original",
-        ),
-        (
-            delivered_blueprint(input)?,
-            Layout::WestInput,
-            "quarter-cut-1x2",
-        ),
-    ] {
-        let html = shapez_viz::render_html(&visualization::scene(&blueprint, layout, input)?)?;
+impl FactorySolution {
+    /// Assemble the game blueprint from the same result consumed by the viewer.
+    pub fn blueprint(&self) -> Result<Blueprint> {
+        match self.layout {
+            Layout::Original => {
+                assemble_original_halves(&self.left.buildings, &self.right.buildings)
+            }
+            Layout::WestInput => assemble_banks(&self.left.buildings, &self.right.buildings),
+        }
+    }
+    /// Export final user artifacts directly from the in-memory solution.
+    pub fn export(&self, destination: &Path) -> Result<()> {
+        let blueprint = self.blueprint()?;
+        let scene = visualization::scene(&blueprint, self)?;
+        let html = shapez_viz::render_html(&scene)?;
+        fs::create_dir_all(destination)?;
         fs::write(
-            destination.join(format!("{name}.spz2bp")),
+            destination.join("factory.spz2bp"),
             encode_blueprint(&blueprint)?,
         )?;
-        fs::write(destination.join(format!("{name}.html")), html)?;
-        println!(
-            "Rebuilt {name}: {} buildings from runtime solver results",
-            blueprint.islands()[0].buildings().len()
-        );
+        fs::write(destination.join("factory.html"), html)?;
+        println!("Factory and visualization: {}", destination.display());
+        Ok(())
     }
-    println!(
-        "Blueprint and visualization: {}",
-        destination.canonicalize()?.display()
-    );
+}
+
+/// Export a solved regional layout as an importable building blueprint.
+pub fn export_buildings(buildings: &[Building], destination: &Path) -> Result<()> {
+    let blueprint = Blueprint {
+        game_version: 1138,
+        content: BlueprintContent::Buildings(BuildingBlueprint::new(buildings.to_vec())),
+        icon: None,
+        source_format_version: None,
+    };
+    if let Some(parent) = destination.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(destination, encode_blueprint(&blueprint)?)?;
+    println!("Blueprint: {}", destination.display());
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use shapez_blueprint::Rotation;
+    fn region() -> RegionSolution {
+        let buildings = [1, 2]
+            .map(|x| {
+                Building::new(
+                    "BeltDefaultForwardInternalVariant",
+                    x,
+                    1,
+                    0,
+                    Rotation::new(0),
+                )
+            })
+            .into();
+        let mut ports = [0; 12];
+        ports[6] = 64;
+        RegionSolution {
+            buildings,
+            flow: vec![FlowState {
+                position: [1, 1, 0],
+                ports,
+            }],
+        }
+    }
     #[test]
-    fn solver_results_are_read_at_runtime_with_path_diagnostics() {
-        let directory = std::env::temp_dir().join(format!(
-            "quarter-cut-runtime-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir(&directory).unwrap();
-        let path = directory.join("result.json");
-        let missing = read_solution::<Vec<i64>>(&path).unwrap_err();
-        assert!(missing.to_string().contains(&path.display().to_string()));
-        fs::write(&path, "[1]").unwrap();
-        assert_eq!(read_solution::<Vec<i64>>(&path).unwrap(), [1]);
-        fs::write(&path, "[2,3]").unwrap();
-        assert_eq!(read_solution::<Vec<i64>>(&path).unwrap(), [2, 3]);
-        fs::write(&path, "invalid JSON").unwrap();
-        let malformed = read_solution::<Vec<i64>>(&path).unwrap_err();
-        assert!(malformed.to_string().contains(&path.display().to_string()));
-        fs::remove_dir_all(&directory).unwrap();
+    fn assembly_and_viewer_share_region_offsets_layers_and_reflections() {
+        for layout in [Layout::Original, Layout::WestInput] {
+            let solved = FactorySolution {
+                layout,
+                left: region(),
+                right: region(),
+            };
+            let blueprint = solved.blueprint().unwrap();
+            let scene = visualization::scene(&blueprint, &solved).unwrap();
+            let copies = if layout == Layout::Original { 6 } else { 12 };
+            assert_eq!(scene.tiles.len(), 60 + copies * 2);
+            assert_eq!(
+                scene
+                    .connections
+                    .iter()
+                    .filter(|c| c.from[0] == 1 || c.from[0] == 18)
+                    .count(),
+                copies
+            );
+            assert!(
+                scene
+                    .connections
+                    .iter()
+                    .any(|c| c.from == [18, 1, 2] && c.to == [19, 1, 2])
+            );
+            if layout == Layout::WestInput {
+                assert!(scene.connections.iter().any(|c| c.from == [1, 12, 2]));
+            }
+            let html = shapez_viz::render_html(&scene).unwrap();
+            assert!(!html.contains("__SCENE_JSON__"));
+        }
     }
 }

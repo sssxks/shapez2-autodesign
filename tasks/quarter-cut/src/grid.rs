@@ -24,9 +24,9 @@ enum OriginalHalf {
     Left,
     Right,
 }
-#[derive(Parser)]
-struct Args {
-    output: PathBuf,
+#[derive(Clone, Parser)]
+pub struct Args {
+    pub output: PathBuf,
     #[arg(long, default_value_t = 120.)]
     seconds: f64,
     #[arg(long, default_value_t = 8)]
@@ -82,7 +82,10 @@ struct Args {
     #[arg(long)]
     native: bool,
     #[arg(long)]
-    hint: Option<PathBuf>,
+    resume: Option<PathBuf>,
+    /// Save an explicit restart checkpoint.
+    #[arg(long)]
+    checkpoint: Option<PathBuf>,
     /// Embed a verified 5x4 unit at the west output bank as a feasible seed.
     #[arg(long)]
     unit_hint: Option<PathBuf>,
@@ -93,7 +96,7 @@ struct Args {
     layers: i16,
     #[arg(long)]
     infer_hint: bool,
-    #[arg(long, num_args = 4, requires = "hint")]
+    #[arg(long, num_args = 4, requires = "resume")]
     window: Vec<i32>,
     #[arg(long, default_value_t = 0)]
     minimum: i64,
@@ -105,7 +108,7 @@ struct Args {
     #[arg(long, requires = "buildings_hint")]
     fix_known_layout: bool,
 }
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Kind {
     definition: Option<String>,
     rotation: usize,
@@ -1205,7 +1208,7 @@ fn build(args: &Args, domains: &[CoreDomain]) -> Grid {
         layers,
     }
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct CellState {
     position: Point,
     kind: usize,
@@ -1290,8 +1293,7 @@ fn apply_hint(grid: &mut Grid, p: Point, ports: [i64; 12], kind: Option<usize>) 
     }
     Ok(found.0 as usize)
 }
-pub fn run() -> Result<()> {
-    let args = Args::parse();
+pub fn solve(args: &Args) -> Result<crate::RegionSolution> {
     ensure!(
         (1..=3).contains(&args.layers),
         "One to three native layers are supported"
@@ -1319,7 +1321,9 @@ pub fn run() -> Result<()> {
     let domains: Vec<CoreDomain> = args
         .core_domains
         .as_ref()
-        .map(|p| -> Result<_> { Ok(serde_json::from_slice(&fs::read(p)?)?) })
+        .map(|p| -> Result<_> {
+            Ok(toml::from_str::<CoreDomains>(&fs::read_to_string(p)?)?.domains)
+        })
         .transpose()?
         .unwrap_or_default();
     ensure!(
@@ -1344,7 +1348,7 @@ pub fn run() -> Result<()> {
             );
         }
     }
-    let mut grid = build(&args, &domains);
+    let mut grid = build(args, &domains);
     grid.model.bounded(
         Expr::sum(grid.served.iter().copied()),
         args.minimum,
@@ -1358,10 +1362,26 @@ pub fn run() -> Result<()> {
         grid.model.minimize(Expr::default());
     }
     if let Some(path) = &args.buildings_hint {
-        let buildings: Vec<Building> = serde_json::from_slice(&fs::read(path)?)?;
+        let blueprint = shapez_blueprint::Blueprint::read(path)?;
+        let buildings = match &blueprint.content {
+            shapez_blueprint::BlueprintContent::Buildings(b) => &b.entries,
+            shapez_blueprint::BlueprintContent::Islands(_) => blueprint
+                .islands()
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("Empty hint blueprint"))?
+                .buildings(),
+        };
+        let offset = if matches!(
+            blueprint.content,
+            shapez_blueprint::BlueprintContent::Buildings(_)
+        ) {
+            0
+        } else {
+            3
+        };
         let lookup: BTreeMap<_, _> = buildings
             .iter()
-            .map(|b| ((b.x - 3, b.y - 3, b.layer), b))
+            .map(|b| ((b.x - offset, b.y - offset, b.layer), b))
             .collect();
         let mut known = BTreeMap::new();
         for (&p, b) in &lookup {
@@ -1436,7 +1456,12 @@ pub fn run() -> Result<()> {
     }
     if let Some(path) = &args.unit_hint {
         ensure!(!args.cell, "Unit placement hint is for the platform");
-        let states: Vec<CellState> = serde_json::from_slice(&fs::read(path)?)?;
+        let checkpoint: GridCheckpoint = crate::checkpoint::load(path, "grid")?;
+        ensure!(
+            checkpoint.kinds == grid.grammar.kinds,
+            "Checkpoint uses a different building grammar"
+        );
+        let states = checkpoint.states;
         let mut placed = Vec::new();
         for state in states {
             let mut ports = [0; 12];
@@ -1464,8 +1489,13 @@ pub fn run() -> Result<()> {
             apply_hint(&mut grid, p, ports, None)?;
         }
     }
-    if let Some(path) = &args.hint {
-        let states: Vec<CellState> = serde_json::from_slice(&fs::read(path)?)?;
+    if let Some(path) = &args.resume {
+        let checkpoint: GridCheckpoint = crate::checkpoint::load(path, "grid")?;
+        ensure!(
+            checkpoint.kinds == grid.grammar.kinds,
+            "Checkpoint uses a different building grammar"
+        );
+        let states = checkpoint.states;
         let mut known = BTreeMap::new();
         for s in &states {
             let kind = if args.infer_hint {
@@ -1528,53 +1558,147 @@ pub fn run() -> Result<()> {
     } else {
         0
     };
-    let path = |s: &str| PathBuf::from(format!("{}{s}", args.output.display()));
-    if let Some(parent) = args.output.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(
-        path(".status.json"),
-        serde_json::to_vec_pretty(
-            &serde_json::json!({"status":solution.status,"seconds":solution.seconds,"completed":complete,"required":grid.served.len(),"variables":vars,"constraints":rows}),
-        )?,
-    )?;
     eprintln!(
-        "{:?}: {complete}/{} complete outputs in {:.2}s",
+        "{:?}: {complete}/{} outputs in {:.2}s",
         solution.status,
         grid.served.len(),
         solution.seconds
     );
-    if solution.feasible() {
-        let state = selected(&grid, &solution);
-        fs::write(path(".json"), serde_json::to_vec_pretty(&state)?)?;
-        let buildings: Vec<_> = state
-            .iter()
-            .filter_map(|s| {
-                let k = &grid.grammar.kinds[s.kind];
-                k.definition.as_ref().map(|d| {
-                    Building::new(
-                        d,
-                        s.position.0,
-                        s.position.1,
-                        s.position.2,
-                        Rotation::new(k.rotation),
-                    )
-                })
-            })
-            .collect();
-        fs::write(
-            path(".buildings.json"),
-            serde_json::to_vec_pretty(&buildings)?,
+    ensure!(
+        solution.feasible(),
+        "No complete grid solution: {:?}",
+        solution.status
+    );
+    let state = selected(&grid, &solution);
+    if let Some(path) = &args.checkpoint {
+        crate::checkpoint::save(
+            path,
+            "grid",
+            &GridCheckpoint {
+                kinds: grid.grammar.kinds.clone(),
+                states: state.clone(),
+            },
         )?;
-        if args.native {
-            ensure!(
-                complete == grid.served.len() as i64,
-                "Native acceptance requires complete output flow"
-            );
-            native(&args, &grid, &solution, buildings)?;
-        }
     }
-    Ok(())
+    ensure!(
+        complete == grid.served.len() as i64,
+        "Incomplete grid solution: {complete}/{} outputs; checkpoint retained if requested",
+        grid.served.len()
+    );
+    let buildings = state
+        .iter()
+        .filter_map(|s| {
+            let kind = &grid.grammar.kinds[s.kind];
+            kind.definition.as_ref().map(|d| {
+                Building::new(
+                    d,
+                    s.position.0,
+                    s.position.1,
+                    s.position.2,
+                    Rotation::new(kind.rotation),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    if args.native {
+        native(args, &grid, &solution, buildings.clone())?;
+    }
+    Ok(crate::RegionSolution {
+        buildings,
+        flow: state
+            .into_iter()
+            .map(|s| crate::FlowState {
+                position: [s.position.0, s.position.1, i32::from(s.position.2)],
+                ports: s.ports,
+            })
+            .collect(),
+    })
+}
+
+/// End-to-end factory search options, independent of regional debug switches.
+#[derive(clap::Args)]
+pub struct FactoryArgs {
+    pub output: PathBuf,
+    #[arg(long, default_value_t = 120.)]
+    pub seconds: f64,
+    #[arg(long, default_value_t = 8)]
+    pub workers: i32,
+    #[arg(long)]
+    pub west: bool,
+    #[arg(long)]
+    pub native: bool,
+    #[arg(long)]
+    pub quiet: bool,
+}
+/// Solve both regions, retaining the actual buildings and flow in a single result.
+pub fn factory(options: &FactoryArgs) -> Result<crate::FactorySolution> {
+    let mut args = Args {
+        output: options.output.clone(),
+        seconds: options.seconds,
+        workers: options.workers,
+        cell: false,
+        original_half: Some(OriginalHalf::Left),
+        through_rows: vec![5, 8],
+        inward_top: false,
+        mirror_cores: false,
+        corner_cores: false,
+        flex_cores: true,
+        free_core_pack: false,
+        core_domains: None,
+        pack_left: false,
+        bank: false,
+        bank_width: 17,
+        bank_height: 7,
+        bank_output: 5,
+        bank_through: false,
+        bank_input_row: None,
+        quiet: options.quiet,
+        feasibility: false,
+        native: false,
+        resume: None,
+        checkpoint: None,
+        unit_hint: None,
+        cores: false,
+        layers: 1,
+        infer_hint: false,
+        window: vec![],
+        minimum: 0,
+        buildings_hint: None,
+        lock_layout: false,
+        fix_known_layout: false,
+    };
+    if options.west {
+        args.original_half = None;
+        args.flex_cores = false;
+        args.bank = true;
+        args.bank_through = true;
+        args.cores = true;
+        args.layers = 3;
+    }
+    let left = solve(&args)?;
+    if options.west {
+        args.bank_through = false;
+        args.layers = 1;
+        args.bank_input_row = Some(5);
+        args.bank_output = 8;
+    } else {
+        args.original_half = Some(OriginalHalf::Right);
+    }
+    let right = solve(&args)?;
+    Ok(crate::FactorySolution {
+        layout: if options.west {
+            crate::Layout::WestInput
+        } else {
+            crate::Layout::Original
+        },
+        left,
+        right,
+    })
+}
+/// Export the final regional blueprint; no intermediate result is required by another command.
+pub fn run(args: Args) -> Result<()> {
+    let result = solve(&args)?;
+    crate::export_buildings(&result.buildings, &args.output)
 }
 fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) -> Result<()> {
     use shapez_blueprint::{
@@ -1737,4 +1861,17 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         run.publish(&paths.root)?;
     }
     Ok(())
+}
+
+/// A restart checkpoint keeps solver kind IDs paired with their exact grammar.
+#[derive(Serialize, Deserialize)]
+struct GridCheckpoint {
+    kinds: Vec<Kind>,
+    states: Vec<CellState>,
+}
+
+/// Human-authored search constraints, separate from solver output.
+#[derive(Deserialize)]
+struct CoreDomains {
+    domains: Vec<CoreDomain>,
 }

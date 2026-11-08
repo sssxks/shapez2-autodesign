@@ -1,5 +1,7 @@
 //! Generate and validate both diagonal factories.
 mod design;
+mod overflow;
+mod overflow_design;
 use anyhow::Result;
 use shapez_blueprint::{
     Blueprint, BlueprintContent, BlueprintIcon, BuildingBlueprint, IconComponent, Island,
@@ -8,6 +10,18 @@ use shapez_blueprint::{
 use shapez_runtime::{LabPaths, RunDirectory, run_suite};
 use std::{fs, time::Duration};
 fn main() -> Result<()> {
+    let mut args = std::env::args_os().skip(1);
+    if let Some(command) = args.next() {
+        anyhow::ensure!(
+            command == "overflow",
+            "Usage: diagonal-cut [overflow <blueprint>]"
+        );
+        let source = args
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("overflow requires a blueprint"))?;
+        anyhow::ensure!(args.next().is_none(), "Unexpected argument");
+        return overflow::run(source.into());
+    }
     let paths = LabPaths::discover();
     let run = RunDirectory::create(&paths.root, "diagonal-cut")?;
     let mut cases = Vec::new();

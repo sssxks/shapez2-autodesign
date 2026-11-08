@@ -4,7 +4,6 @@ use super::{
     network::{Network, Witness},
 };
 use anyhow::{Result, ensure};
-use serde::Serialize;
 use shapez_solver::{Expr, Solution, Var};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -238,12 +237,6 @@ pub fn build(
         outputs,
     })
 }
-#[derive(Serialize)]
-pub struct ExportedRoute {
-    pub source: usize,
-    pub destination: Point,
-    pub steps: Vec<State>,
-}
 impl Joint {
     pub fn buildings(&self, solution: &Solution) -> Result<Vec<shapez_blueprint::Building>> {
         use shapez_blueprint::{Building, Placement, Rotation, route_buildings};
@@ -337,78 +330,5 @@ impl Joint {
             );
         }
         Ok(buildings)
-    }
-    pub fn export(
-        &self,
-        solution: &Solution,
-    ) -> Result<(Vec<Vec<PackedCell>>, Vec<ExportedRoute>)> {
-        ensure!(
-            solution.feasible(),
-            "Only feasible solutions can be exported"
-        );
-        let mut selected: Vec<_> = self
-            .choices
-            .iter()
-            .filter(|c| solution.value(c.enabled) == 1)
-            .collect();
-        selected.sort_by_key(|c| (c.layer, c.index));
-        ensure!(selected.len() == 48, "Expected 48 selected cells");
-        let cells: Vec<Vec<_>> = (0..3)
-            .map(|z| {
-                selected
-                    .iter()
-                    .filter(|c| c.layer == z)
-                    .map(|c| c.cell.clone())
-                    .collect()
-            })
-            .collect();
-        let mut sources = self.inputs.clone();
-        sources.extend(
-            selected
-                .iter()
-                .filter_map(|c| c.cell.continuation(c.layer as i16)),
-        );
-        ensure!(
-            sources.len() == 48,
-            "Expected twelve four-cell supply chains"
-        );
-        sources.extend(selected.iter().map(|c| c.cell.output(c.layer as i16)));
-        let chosen: BTreeMap<_, _> = self
-            .network
-            .arcs
-            .iter()
-            .filter(|a| solution.value(a.selected) != 0)
-            .map(|a| ((a.commodity, a.from), a.to))
-            .collect();
-        let mut routes = Vec::new();
-        let mut targets = BTreeSet::new();
-        for (source, port) in sources.into_iter().enumerate() {
-            let commodity = u8::from(source >= 48);
-            let mut state = port.state();
-            let mut steps = vec![state];
-            let mut seen = BTreeSet::new();
-            while let Some(&next) = chosen.get(&(commodity, state)) {
-                ensure!(seen.insert(state), "Cycle in source-connected route");
-                state = next;
-                steps.push(state);
-            }
-            let correct = if commodity == 0 {
-                selected
-                    .iter()
-                    .any(|c| c.cell.input(c.layer as i16).p == state.point())
-            } else {
-                self.outputs.iter().any(|p| p.p == state.point())
-            };
-            ensure!(
-                correct && targets.insert((commodity, state.point())),
-                "Invalid or duplicate solved destination"
-            );
-            routes.push(ExportedRoute {
-                source,
-                destination: state.point(),
-                steps,
-            });
-        }
-        Ok((cells, routes))
     }
 }

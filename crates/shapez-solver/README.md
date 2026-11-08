@@ -9,12 +9,8 @@ Optional backends:
 - `cp-sat`: `cpsat-rs` 0.1.2, OR-Tools 9.15 official serialized C API.
 - `scip`: `russcip` 0.11 with its bundled native SCIP distribution.
 
-No native dependency is enabled by default. On Windows, the quarter-cut task's
-`search/environment.ps1` sets up the pinned official OR-Tools binary package,
-including `protoc`, and sets this shell's DLL search path. Other platforms can
-set `ORTOOLS_PREFIX` and `PROTOC` to their native installations.
+No native dependency is enabled by default in this library. quarter-cut enables both backends. Set `ORTOOLS_PREFIX` to an OR-Tools 9.15 installation and `PROTOC` to its compiler. On Windows, add the installation's `bin` to `PATH` for native DLL loading.
 
 ```powershell
-. tasks/quarter-cut/search/environment.ps1
 cargo test -p shapez-solver --features cp-sat,scip
 ```

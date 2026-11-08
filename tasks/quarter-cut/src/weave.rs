@@ -10,7 +10,7 @@ type Point = (i32, i32, i16);
 type Edge = (Point, usize, u8);
 const DIRECTIONS: [(i32, i32); 4] = [(1, 0), (0, 1), (-1, 0), (0, -1)];
 #[derive(Parser)]
-struct Args {
+pub struct Args {
     output: PathBuf,
     #[arg(long, default_value_t = 2)]
     width: i32,
@@ -34,7 +34,9 @@ struct Args {
     #[arg(long, requires = "whole")]
     free_ports: bool,
     #[arg(long)]
-    hint: Option<PathBuf>,
+    resume: Option<PathBuf>,
+    #[arg(long)]
+    checkpoint: Option<PathBuf>,
     #[arg(long, default_value_t = 2)]
     units: i64,
     #[arg(long, requires = "free_ports")]
@@ -470,8 +472,7 @@ fn export(model: &Synthesis, solution: &Solution) -> Vec<ResolvedBuilding> {
         })
         .collect()
 }
-pub fn run() -> Result<()> {
-    let args = Args::parse();
+pub fn run(args: Args) -> Result<()> {
     ensure!(
         args.width > 0
             && args.height >= 2
@@ -484,24 +485,28 @@ pub fn run() -> Result<()> {
         "Invalid synthesis dimensions or limits"
     );
     let mut model = build(&args);
-    if let Some(path) = &args.hint {
-        let hint: Vec<ResolvedBuilding> = serde_json::from_slice(&fs::read(path)?)?;
-        for candidate in &model.choices {
-            let matched = hint.iter().find(|h| {
-                h.building == candidate.building
-                    && h.companion == candidate.companion
-                    && h.sockets.len() == candidate.sockets.len()
-                    && h.sockets
-                        .iter()
-                        .zip(&candidate.sockets)
-                        .all(|(a, (b, _))| a.socket == *b)
-            });
+    if let Some(path) = &args.resume {
+        let checkpoint: WeaveCheckpoint = crate::checkpoint::load(path, "weave")?;
+        ensure!(
+            checkpoint.spec == specification(&args) && checkpoint.choices == model.choices.len(),
+            "Checkpoint belongs to another weave model"
+        );
+        for (index, candidate) in model.choices.iter().enumerate() {
+            let amounts = checkpoint
+                .selected
+                .iter()
+                .find(|(id, _)| *id == index)
+                .map(|(_, amounts)| amounts);
             model
                 .model
-                .hint(candidate.enabled, i64::from(matched.is_some()));
-            if let Some(h) = matched {
-                for (a, (_, amount)) in h.sockets.iter().zip(&candidate.sockets) {
-                    model.model.hint(*amount, a.half_items_per_second);
+                .hint(candidate.enabled, i64::from(amounts.is_some()));
+            if let Some(amounts) = amounts {
+                ensure!(
+                    amounts.len() == candidate.sockets.len(),
+                    "Checkpoint socket count differs"
+                );
+                for (&value, (_, variable)) in amounts.iter().zip(&candidate.sockets) {
+                    model.model.hint(*variable, value);
                 }
             }
         }
@@ -516,10 +521,6 @@ pub fn run() -> Result<()> {
         workers: args.workers,
         log: false,
     })?;
-    let path = |suffix: &str| PathBuf::from(format!("{}{suffix}", args.output.display()));
-    if let Some(parent) = args.output.parent() {
-        fs::create_dir_all(parent)?;
-    }
     let selected = if solution.feasible() {
         export(&model, &solution)
     } else {
@@ -539,24 +540,43 @@ pub fn run() -> Result<()> {
         .filter(|c| solution.feasible() && solution.value(c.enabled) == 1)
         .map(|c| c.footprint.len())
         .sum();
-    fs::write(
-        path(".status.json"),
-        serde_json::to_vec_pretty(
-            &serde_json::json!({"status":solution.status,"seconds":solution.seconds,"whole":args.whole,"jumps":args.jumps,"free_ports":args.free_ports,"width":args.width,"height":args.height,"layers":args.layers,"rotators":rotators,"rotator_limit":args.rotators,"buildings":building_count,"occupied_tiles":occupied,"variables":variables,"constraints":constraints}),
-        )?,
-    )?;
-    if solution.feasible() {
-        fs::write(path(".json"), serde_json::to_vec_pretty(&selected)?)?;
-        let ports: Vec<_> = model
-            .boundaries
-            .iter()
-            .filter(|b| solution.value(b.enabled) == 1)
-            .map(|b| serde_json::json!({"position":b.position,"supply":b.supply,"direction":b.direction}))
-            .collect();
-        fs::write(path(".ports.json"), serde_json::to_vec_pretty(&ports)?)?;
-        if args.native {
-            native(&args, &selected, &model, &solution)?;
-        }
+    ensure!(
+        solution.feasible(),
+        "No feasible weave solution: {:?}",
+        solution.status
+    );
+    if let Some(path) = &args.checkpoint {
+        crate::checkpoint::save(
+            path,
+            "weave",
+            &WeaveCheckpoint {
+                spec: specification(&args),
+                choices: model.choices.len(),
+                selected: model
+                    .choices
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| solution.value(c.enabled) == 1)
+                    .map(|(index, c)| {
+                        (
+                            index,
+                            c.sockets
+                                .iter()
+                                .map(|(_, amount)| solution.value(*amount))
+                                .collect(),
+                        )
+                    })
+                    .collect(),
+            },
+        )?;
+    }
+    let buildings = selected
+        .iter()
+        .flat_map(|s| std::iter::once(s.building.clone()).chain(s.companion.clone()))
+        .collect::<Vec<_>>();
+    crate::export_buildings(&buildings, &args.output)?;
+    if args.native {
+        native(&args, &selected, &model, &solution)?;
     }
     eprintln!(
         "{:?}: {building_count} buildings, {occupied} occupied tiles, {rotators} rotators, {:.2}s",
@@ -655,4 +675,25 @@ fn native(
     };
     eprintln!("Native weave: {}", run.path.display());
     run_suite(&paths, &suite, std::time::Duration::from_secs(180))
+}
+
+#[derive(Serialize, Deserialize)]
+struct WeaveCheckpoint {
+    spec: [i64; 9],
+    choices: usize,
+    selected: Vec<(usize, Vec<i64>)>,
+}
+/// Parameters that determine candidate ordering and flow constraints.
+fn specification(args: &Args) -> [i64; 9] {
+    [
+        i64::from(args.width),
+        i64::from(args.height),
+        i64::from(args.layers),
+        args.rotators,
+        args.units,
+        i64::from(args.whole),
+        i64::from(args.jumps),
+        i64::from(args.free_ports),
+        i64::from(args.all_edges),
+    ]
 }

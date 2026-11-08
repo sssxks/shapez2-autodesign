@@ -1,17 +1,15 @@
 //! Correct the supplied overflow cutter's output quadrants.
-#[path = "../overflow_design.rs"]
-mod design;
+use crate::overflow_design as design;
 use anyhow::Result;
 use shapez_blueprint::{BlueprintContent, Island, Rotation, decode_blueprint, encode_blueprint};
 use shapez_runtime::{LabPaths, RunDirectory, run_suite};
 use std::{fs, path::PathBuf, time::Duration};
 
-fn main() -> Result<()> {
-    let source = PathBuf::from(std::env::args_os().nth(1).expect("source blueprint"));
+pub fn run(source: PathBuf) -> Result<()> {
     let paths = LabPaths::discover();
     let run = RunDirectory::create(&paths.root, "diagonal-overflow")?;
     // Keep the reference's layer-specific overflow lifts even if the library copy was replaced.
-    let mut bp = decode_blueprint(include_str!("../../templates/overflow-reference.spz2bp"))?;
+    let mut bp = decode_blueprint(include_str!("../templates/overflow-reference.spz2bp"))?;
     let BlueprintContent::Islands(islands) = &mut bp.content else {
         anyhow::bail!("islands required")
     };

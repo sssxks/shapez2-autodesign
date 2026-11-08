@@ -4,19 +4,9 @@ version.workspace = true
 edition.workspace = true
 default-run = "quarter-cut"
 
-[[bin]]
-name = "quarter-search"
-path = "src/bin/quarter-search.rs"
-
-[[bin]]
-name = "quarter-weave"
-path = "src/bin/quarter-weave.rs"
-
-[[bin]]
-name = "quarter-grid"
-path = "src/bin/quarter-grid.rs"
-
 [dependencies]
+postcard = { version = "1.1.3", default-features = false, features = ["alloc", "use-std"] }
+toml = "0.9"
 anyhow.workspace = true
 clap.workspace = true
 shapez-solver = { path = "../../crates/shapez-solver", features = ["cp-sat", "scip"] }
