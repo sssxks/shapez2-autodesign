@@ -47,9 +47,7 @@ fn main() -> Result<()> {
             native::validate(shapez_blueprint::Blueprint::read(blueprint)?)
         }
         Command::Legacy => {
-            use shapez_blueprint::{
-                Blueprint, BlueprintContent, BuildingBlueprint, Island, IslandBlueprint, Rotation,
-            };
+            use shapez_blueprint::{Blueprint, BuildingBlueprint, Island, Rotation};
             let mut island = Island::new("Foundation_1x3", 1, 0, 0, Rotation::new(0));
             island.buildings = Some(BuildingBlueprint::new(
                 layout::build()?
@@ -60,12 +58,7 @@ fn main() -> Result<()> {
                     })
                     .collect(),
             ));
-            native::validate(Blueprint {
-                game_version: 1138,
-                content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
-                icon: None,
-                source_format_version: None,
-            })
+            native::validate(Blueprint::platform(island, None))
         }
         Command::Probe { mode } => {
             let paths = shapez_runtime::LabPaths::discover();

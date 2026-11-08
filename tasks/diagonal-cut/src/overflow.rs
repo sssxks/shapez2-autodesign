@@ -1,7 +1,7 @@
 //! Correct the supplied overflow cutter's output quadrants.
 use crate::overflow_design as design;
 use anyhow::Result;
-use shapez_blueprint::{BlueprintContent, Island, Rotation, decode_blueprint, encode_blueprint};
+use shapez_blueprint::{BlueprintContent, Island, Rotation, decode_blueprint};
 use shapez_runtime::{LabPaths, RunDirectory, run_suite};
 use std::{fs, path::PathBuf, time::Duration};
 
@@ -18,7 +18,7 @@ pub fn run(source: PathBuf) -> Result<()> {
     let buildings = design::layout(island.buildings.as_ref().expect("buildings"))?;
     island.buildings = Some(shapez_blueprint::BuildingBlueprint::new(buildings));
     let output = run.path.join("diagonal-overflow-corrected.spz2bp");
-    fs::write(&output, encode_blueprint(&bp)?)?;
+    bp.write(&output)?;
     let mut harness = bp.clone();
     if let BlueprintContent::Islands(islands) = &mut harness.content {
         for (x, y) in [(0, -1), (0, 1), (1, 1)] {
@@ -28,7 +28,7 @@ pub fn run(source: PathBuf) -> Result<()> {
         }
     }
     let fixture = run.path.join("harness.spz2bp");
-    fs::write(&fixture, encode_blueprint(&harness)?)?;
+    harness.write(&fixture)?;
     let suite = shapez_runtime::Suite {
         projects: vec!["${REPO}/tasks/diagonal-cut/interop/DiagonalTask.csproj".into()],
         cases: vec![

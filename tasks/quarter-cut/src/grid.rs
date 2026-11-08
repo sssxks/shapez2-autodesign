@@ -1701,9 +1701,7 @@ pub fn run(args: Args) -> Result<()> {
     crate::export_buildings(&result.buildings, &args.output)
 }
 fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) -> Result<()> {
-    use shapez_blueprint::{
-        Blueprint, BlueprintContent, BuildingBlueprint, Island, IslandBlueprint, encode_blueprint,
-    };
+    use shapez_blueprint::{Blueprint, BuildingBlueprint, Island};
     use shapez_runtime::{LabPaths, RunDirectory, run_suite};
     let paths = LabPaths::discover();
     let run = RunDirectory::create(
@@ -1786,20 +1784,7 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         Rotation::new(0),
     );
     island.buildings = Some(BuildingBlueprint::new(buildings));
-    let mut bp = Blueprint {
-        game_version: 1138,
-        content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
-        icon: None,
-        source_format_version: None,
-    };
-    bp.icon = Some(shapez_blueprint::BlueprintIcon {
-        components: [
-            Some(shapez_blueprint::IconComponent::Shape("CuCuCuCu".into())),
-            Some(shapez_blueprint::IconComponent::Shape("Cu------".into())),
-            Some(shapez_blueprint::IconComponent::Shape("Cu------".into())),
-            Some(shapez_blueprint::IconComponent::Shape("Cu------".into())),
-        ],
-    });
+    let bp = Blueprint::platform(island, Some(crate::design::icon()));
     let blueprint = run
         .path
         .join(if args.cell || args.bank || args.original_half.is_some() {
@@ -1807,7 +1792,7 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
         } else {
             "quarter-cut-1x2.spz2bp"
         });
-    fs::write(&blueprint, encode_blueprint(&bp)?)?;
+    bp.write(&blueprint)?;
     eprintln!(
         "Blueprint {} ({}x{})",
         blueprint.display(),
@@ -1842,14 +1827,9 @@ fn native(args: &Args, grid: &Grid, solution: &Solution, base: Vec<Building>) ->
             output,
             role,
         });
-        let mut harness = bp.clone();
-        if let BlueprintContent::Islands(islands) = &mut harness.content {
-            islands
-                .entries
-                .extend(shapez_blueprint::foundation_harness(&geometry, &sockets));
-        }
+        let harness = bp.with_harness(&geometry, &sockets)?;
         let test = run.path.join("harness.spz2bp");
-        fs::write(&test, encode_blueprint(&harness)?)?;
+        harness.write(&test)?;
         let suite = shapez_runtime::Suite {
             projects: vec!["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj".into()],
             cases: vec![

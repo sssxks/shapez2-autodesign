@@ -165,6 +165,48 @@ pub fn encode_blueprint(blueprint: &Blueprint) -> Result<String> {
 }
 
 impl Blueprint {
+    /// Create a blueprint for the supported game version, without source metadata.
+    pub fn new(content: BlueprintContent, icon: Option<BlueprintIcon>) -> Self {
+        Self {
+            game_version: 1138,
+            content,
+            icon,
+            source_format_version: None,
+        }
+    }
+
+    /// Package one platform; its placement and buildings remain owned by the caller.
+    pub fn platform(island: Island, icon: Option<BlueprintIcon>) -> Self {
+        Self::new(
+            BlueprintContent::Islands(crate::IslandBlueprint::new(vec![island])),
+            icon,
+        )
+    }
+
+    /// Encode directly to an artifact, reporting the destination on I/O failure.
+    pub fn write(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path.as_ref();
+        std::fs::write(path, encode_blueprint(self)?)
+            .with_context(|| format!("Writing {}", path.display()))
+    }
+
+    /// Clone a platform blueprint and append the transport islands for its sockets.
+    pub fn with_harness(
+        &self,
+        geometry: &shapez_model::FoundationGeometry,
+        sockets: &[shapez_model::FoundationSocket],
+    ) -> Result<Self> {
+        let mut blueprint = self.clone();
+        let BlueprintContent::Islands(islands) = &mut blueprint.content else {
+            bail!("Island blueprint required for a foundation harness");
+        };
+        islands.entries.extend(sockets.iter().map(|&socket| {
+            let (x, y, rotation) = geometry.socket_harness(socket);
+            Island::new("SpaceBelt_Forward", x, y, 0, crate::Rotation::new(rotation))
+        }));
+        Ok(blueprint)
+    }
+
     pub fn read(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         let text =

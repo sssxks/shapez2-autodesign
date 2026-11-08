@@ -2,10 +2,9 @@
 use anyhow::Result;
 use shapez_blueprint::{
     Blueprint, BlueprintContent, Building, BuildingBlueprint, Island, IslandBlueprint, Rotation,
-    encode_blueprint,
 };
 use shapez_runtime::{Experiment, LabPaths, RunDirectory, Suite, run_suite};
-use std::{fs, time::Duration};
+use std::time::Duration;
 fn main() -> Result<()> {
     let paths = LabPaths::discover();
     let run = RunDirectory::create(&paths.root, "native-acceptance")?;
@@ -74,7 +73,7 @@ fn main() -> Result<()> {
             ])),
         };
         let file = run.path.join(format!("{name}.spz2bp"));
-        fs::write(&file, encode_blueprint(&bp)?)?;
+        bp.write(&file)?;
         let mut case = shapez_runtime::case! {name:name,blueprint:file,export_graph:false,experiment:Experiment{assembly:"${LAB}/bin/AcceptanceTask/Release/netstandard2.1/ShapezLab.Acceptance.dll".into(),type_name:"AcceptanceExperiment".into()}};
         case.expected_ok = error.is_none();
         if name == "no-experiment" {

@@ -1,8 +1,6 @@
 use crate::reports::{AdapterReport, Connection, Summary};
 use anyhow::{Result, bail, ensure};
-use shapez_blueprint::{
-    Blueprint, Building, BuildingBlueprint, Island, Rotation, encode_blueprint,
-};
+use shapez_blueprint::{Blueprint, Building, BuildingBlueprint, Island, Rotation};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -347,7 +345,7 @@ pub fn connect_cmam(
     original.replace_islands(islands)?;
     fs::create_dir_all(out)?;
     let path = out.join("CMAM connected.spz2bp");
-    fs::write(&path, encode_blueprint(&original)?)?;
+    original.write(&path)?;
     let report = AdapterReport {
         blueprint: path,
         generated_platforms: grid.len(),

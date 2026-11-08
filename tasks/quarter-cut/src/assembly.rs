@@ -1,9 +1,6 @@
 //! Deterministic assembly from task-owned solved bank definitions.
 use anyhow::{Context, Result, ensure};
-use shapez_blueprint::{
-    Blueprint, BlueprintContent, BlueprintIcon, Building, BuildingBlueprint, IconComponent, Island,
-    IslandBlueprint, Rotation,
-};
+use shapez_blueprint::{Blueprint, Building, BuildingBlueprint, Island, Rotation};
 use shapez_model::{Direction, FoundationGeometry, FoundationSocket};
 /// Reflect connectors while preserving the actual shape rotation operation.
 fn reflect(mut b: Building) -> Building {
@@ -137,18 +134,6 @@ fn finish(mut buildings: Vec<Building>, sockets: [FoundationSocket; 5]) -> Resul
     }
     let mut island = Island::new("Foundation_1x2", 0, 0, 0, Rotation::new(0));
     island.buildings = Some(BuildingBlueprint::new(buildings));
-    let bp = Blueprint {
-        game_version: 1138,
-        content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
-        icon: Some(BlueprintIcon {
-            components: [
-                Some(IconComponent::Shape("CuCuCuCu".into())),
-                Some(IconComponent::Shape("Cu------".into())),
-                Some(IconComponent::Shape("Cu------".into())),
-                Some(IconComponent::Shape("Cu------".into())),
-            ],
-        }),
-        source_format_version: None,
-    };
+    let bp = Blueprint::platform(island, Some(crate::design::icon()));
     Ok(bp)
 }

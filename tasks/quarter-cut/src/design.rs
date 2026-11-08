@@ -139,3 +139,11 @@ pub fn sockets() -> [shapez_model::FoundationSocket; 5] {
         role,
     })
 }
+
+/// Library icon shared by every four-quarter factory representation.
+pub fn icon() -> shapez_blueprint::BlueprintIcon {
+    shapez_blueprint::BlueprintIcon {
+        components: ["CuCuCuCu", "Cu------", "Cu------", "Cu------"]
+            .map(|shape| Some(shapez_blueprint::IconComponent::Shape(shape.into()))),
+    }
+}

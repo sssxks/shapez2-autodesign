@@ -1,12 +1,9 @@
 //! Native acceptance of an in-memory factory and standalone cell probes.
 use anyhow::Result;
 use quarter_cut::design;
-use shapez_blueprint::{
-    Blueprint, BlueprintContent, BlueprintIcon, BuildingBlueprint, IconComponent, Island,
-    IslandBlueprint, Rotation, encode_blueprint,
-};
+use shapez_blueprint::{Blueprint, BuildingBlueprint, Island, Rotation};
 use shapez_runtime::{LabPaths, RunDirectory, run_suite};
-use std::{fs, time::Duration};
+use std::time::Duration;
 pub fn validate(bp: Blueprint) -> Result<()> {
     let paths = LabPaths::discover();
     let run = RunDirectory::create(&paths.root, "quarter-cut")?;
@@ -28,14 +25,7 @@ pub fn validate(bp: Blueprint) -> Result<()> {
         other => anyhow::bail!("Unsupported foundation {other}"),
     };
     let mut bp = bp;
-    bp.icon = Some(BlueprintIcon {
-        components: [
-            Some(IconComponent::Shape("CuCuCuCu".into())),
-            Some(IconComponent::Shape("Cu------".into())),
-            Some(IconComponent::Shape("Cu------".into())),
-            Some(IconComponent::Shape("Cu------".into())),
-        ],
-    });
+    bp.icon = Some(design::icon());
     let output = run.path.join(if chunks == 2 && original {
         "quarter-cut-1x2-original.spz2bp"
     } else if chunks == 2 {
@@ -43,7 +33,7 @@ pub fn validate(bp: Blueprint) -> Result<()> {
     } else {
         "quarter-cut-1x3.spz2bp"
     });
-    fs::write(&output, encode_blueprint(&bp)?)?;
+    bp.write(&output)?;
 
     println!("Factory: {}", output.display());
     let count = bp.islands()[0].buildings().len();
@@ -52,15 +42,12 @@ pub fn validate(bp: Blueprint) -> Result<()> {
         .iter()
         .filter(|b| b.definition.starts_with("Merger"))
         .count();
-    let mut harness = bp.clone();
-    if let BlueprintContent::Islands(islands) = &mut harness.content {
-        islands.entries.extend(shapez_blueprint::foundation_harness(
-            &shapez_model::FoundationGeometry::strip(chunks, 3),
-            &sockets,
-        ));
-    }
+    let harness = bp.with_harness(
+        &shapez_model::FoundationGeometry::strip(chunks, 3),
+        &sockets,
+    )?;
     let test = run.path.join("harness.spz2bp");
-    fs::write(&test, encode_blueprint(&harness)?)?;
+    harness.write(&test)?;
     let suite = shapez_runtime::Suite {
         projects: vec!["${REPO}/tasks/quarter-cut/interop/QuarterCutTask.csproj".into()],
         cases: vec![
@@ -107,14 +94,9 @@ pub fn probe(paths: &LabPaths, run: &RunDirectory, mode: &str) -> Result<()> {
     let count = buildings.len();
     let mut island = Island::new("Foundation_2x2", 0, 0, 0, Rotation::new(0));
     island.buildings = Some(BuildingBlueprint::new(buildings));
-    let bp = Blueprint {
-        game_version: 1138,
-        content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
-        icon: None,
-        source_format_version: None,
-    };
+    let bp = Blueprint::platform(island, None);
     let blueprint = run.path.join("probe.spz2bp");
-    fs::write(&blueprint, encode_blueprint(&bp)?)?;
+    bp.write(&blueprint)?;
     let experiment = match mode {
         "--capacity" => "QuarterCapacityExperiment",
         "--cell" | "--mirror-cell" | "--middle-cell" | "--middle-cell-2" | "--jump-cell" => {

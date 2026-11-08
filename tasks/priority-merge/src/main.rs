@@ -4,11 +4,10 @@ mod routing;
 use anyhow::Result;
 use design::{DESIGNS, Design};
 use shapez_blueprint::{
-    Blueprint, BlueprintContent, Building, BuildingBlueprint, Configuration, Island,
-    IslandBlueprint, Rotation, encode_blueprint,
+    Blueprint, BlueprintContent, Building, BuildingBlueprint, Configuration, Island, Rotation,
 };
 use shapez_runtime::{LabPaths, RunDirectory, run_suite};
-use std::{fs, time::Duration};
+use std::time::Duration;
 
 /// One independently controlled lane, with local coordinates matching the circuit diagram.
 fn cell() -> shapez_blueprint::Cell {
@@ -100,12 +99,7 @@ fn build(design: &Design) -> Result<Blueprint> {
     }
     let mut island = Island::new("Foundation_1x1", 0, 0, 0, Rotation::new(0));
     island.buildings = Some(BuildingBlueprint::new(buildings));
-    Ok(Blueprint {
-        game_version: 1138,
-        content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
-        icon: Some(design.icon()),
-        source_format_version: None,
-    })
+    Ok(Blueprint::platform(island, Some(design.icon())))
 }
 
 /// Build all variants, validate transport and library icons, then publish together.
@@ -117,16 +111,13 @@ fn main() -> Result<()> {
         let bp = build(design)?;
         let count = bp.islands()[0].buildings().len();
         let output = run.path.join(format!("{}.spz2bp", design.name));
-        fs::write(&output, encode_blueprint(&bp)?)?;
-        let mut harness = bp.clone();
-        if let BlueprintContent::Islands(islands) = &mut harness.content {
-            islands.entries.extend(shapez_blueprint::foundation_harness(
-                &shapez_model::FoundationGeometry::strip(1, 3),
-                &design.sockets(),
-            ));
-        }
+        bp.write(&output)?;
+        let harness = bp.with_harness(
+            &shapez_model::FoundationGeometry::strip(1, 3),
+            &design.sockets(),
+        )?;
         let test_blueprint = run.path.join(format!("{}-harness.spz2bp", design.id));
-        fs::write(&test_blueprint, encode_blueprint(&harness)?)?;
+        harness.write(&test_blueprint)?;
         cases.push(shapez_runtime::case!{
         name:design.id,blueprint:test_blueprint,expected_buildings:count,export_graph:true,
         ports:shapez_model::FoundationGeometry::strip(1,3).ports(&design.sockets()),
@@ -150,7 +141,7 @@ fn main() -> Result<()> {
                 )]));
             }
             let invalid_floor = run.path.join("invalid-floor.spz2bp");
-            fs::write(&invalid_floor, encode_blueprint(&invalid)?)?;
+            invalid.write(&invalid_floor)?;
             cases.push(shapez_runtime::case! {
                 name:"reject-off-floor-without-plugin",blueprint:invalid_floor,expected_ok:false,expected_error:"Incomplete player blueprint placement".to_owned()
             });

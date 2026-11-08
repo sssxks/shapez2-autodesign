@@ -13,7 +13,7 @@ fn file_input_requires_the_game_blueprint_envelope() {
     let blueprint = sample();
     std::fs::write(&path, serde_json::to_vec(&blueprint).unwrap()).unwrap();
     assert!(Blueprint::read(&path).is_err());
-    std::fs::write(&path, encode_blueprint(&blueprint).unwrap()).unwrap();
+    blueprint.write(&path).unwrap();
     let decoded = Blueprint::read(&path).unwrap();
     assert_eq!(decoded.content, blueprint.content);
     assert_eq!(decoded.icon, blueprint.icon);
@@ -194,4 +194,47 @@ fn local_library_roundtrips_without_losing_layout_configurations_or_icons() {
     visit(&root, &mut count);
     assert!(count > 0);
     println!("Roundtripped {count} local blueprints");
+}
+
+/// Fixture construction preserves factory metadata and appends sockets in declaration order.
+#[test]
+fn harness_preserves_factory_and_socket_coordinates() {
+    use shapez_model::{Direction, FoundationGeometry, FoundationSocket};
+    let original = sample();
+    let rebuilt = Blueprint::platform(original.islands()[0].clone(), original.icon.clone());
+    assert_eq!(rebuilt, original);
+    let sockets = [
+        FoundationSocket {
+            side: Direction::North,
+            segment: 0,
+            output: false,
+            role: "input",
+        },
+        FoundationSocket {
+            side: Direction::South,
+            segment: 0,
+            output: true,
+            role: "output",
+        },
+    ];
+    let fixture = original
+        .with_harness(&FoundationGeometry::strip(1, 3), &sockets)
+        .unwrap();
+    assert_eq!(fixture.islands()[0], original.islands()[0]);
+    assert_eq!(fixture.icon, original.icon);
+    assert_eq!(original.islands().len(), 1);
+    let ports: Vec<_> = fixture.islands()[1..]
+        .iter()
+        .map(|p| (p.x, p.y, p.rotation.index()))
+        .collect();
+    assert_eq!(ports, [(0, -1, 1), (0, 1, 1)]);
+    let buildings = Blueprint::new(
+        BlueprintContent::Buildings(BuildingBlueprint::new(vec![])),
+        None,
+    );
+    assert!(
+        buildings
+            .with_harness(&FoundationGeometry::strip(1, 3), &sockets)
+            .is_err()
+    );
 }

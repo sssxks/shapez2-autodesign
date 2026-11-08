@@ -4,7 +4,7 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use shapez_blueprint::{Building, Rotation};
 use shapez_solver::{Expr, Limits, Model, Solution, Var};
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf};
 
 type Point = (i32, i32, i16);
 type Edge = (Point, usize, u8);
@@ -591,9 +591,7 @@ fn native(
     model: &Synthesis,
     solution: &Solution,
 ) -> Result<()> {
-    use shapez_blueprint::{
-        Blueprint, BlueprintContent, BuildingBlueprint, Island, IslandBlueprint, encode_blueprint,
-    };
+    use shapez_blueprint::{Blueprint, BuildingBlueprint, Island};
     use shapez_runtime::{LabPaths, RunDirectory, run_suite};
     let paths = LabPaths::discover();
     let run = RunDirectory::create(&paths.root, "quarter-weave")?;
@@ -657,14 +655,9 @@ fn native(
     let count = buildings.len();
     let mut island = Island::new("Foundation_2x2", 0, 0, 0, Rotation::new(0));
     island.buildings = Some(BuildingBlueprint::new(buildings));
-    let bp = Blueprint {
-        game_version: 1138,
-        content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
-        icon: None,
-        source_format_version: None,
-    };
+    let bp = Blueprint::platform(island, None);
     let blueprint = run.path.join("weave.spz2bp");
-    fs::write(&blueprint, encode_blueprint(&bp)?)?;
+    bp.write(&blueprint)?;
     let inputs: Vec<_> = inputs.into_iter().map(|(p, _)| p).collect();
     let outputs: Vec<_> = outputs.into_iter().map(|(p, _)| p).collect();
     let suite = shapez_runtime::Suite {

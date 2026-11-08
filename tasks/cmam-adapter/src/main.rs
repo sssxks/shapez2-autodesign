@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use shapez_blueprint::{Blueprint, encode_blueprint};
+use shapez_blueprint::Blueprint;
 use shapez_runtime::{Host, LabPaths, RunDirectory, prepare_host, run_suite_file};
-use std::{fs, path::PathBuf, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
 #[derive(Parser)]
 struct Cli {
@@ -88,7 +88,7 @@ fn main() -> Result<()> {
                     .file_name()
                     .ok_or_else(|| anyhow::anyhow!("Blueprint filename required"))?,
             );
-            fs::write(&output, encode_blueprint(&model)?)?;
+            model.write(&output)?;
             println!("{}", output.display());
             Ok(())
         }

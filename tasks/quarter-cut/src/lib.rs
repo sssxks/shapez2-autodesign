@@ -8,9 +8,7 @@ mod visualization;
 pub mod weave;
 use anyhow::Result;
 pub use assembly::{assemble_banks, assemble_original_halves, factory_sockets, original_sockets};
-use shapez_blueprint::{
-    Blueprint, BlueprintContent, Building, BuildingBlueprint, encode_blueprint,
-};
+use shapez_blueprint::{Blueprint, BlueprintContent, Building, BuildingBlueprint};
 use std::{fs, path::Path};
 
 /// Physical interface arrangement used by assembly and the viewer.
@@ -55,10 +53,7 @@ impl FactorySolution {
         let scene = visualization::scene(&blueprint, self)?;
         let html = shapez_viz::render_html(&scene)?;
         fs::create_dir_all(destination)?;
-        fs::write(
-            destination.join("factory.spz2bp"),
-            encode_blueprint(&blueprint)?,
-        )?;
+        blueprint.write(destination.join("factory.spz2bp"))?;
         fs::write(destination.join("factory.html"), html)?;
         println!("Factory and visualization: {}", destination.display());
         Ok(())
@@ -67,16 +62,14 @@ impl FactorySolution {
 
 /// Export a solved regional layout as an importable building blueprint.
 pub fn export_buildings(buildings: &[Building], destination: &Path) -> Result<()> {
-    let blueprint = Blueprint {
-        game_version: 1138,
-        content: BlueprintContent::Buildings(BuildingBlueprint::new(buildings.to_vec())),
-        icon: None,
-        source_format_version: None,
-    };
+    let blueprint = Blueprint::new(
+        BlueprintContent::Buildings(BuildingBlueprint::new(buildings.to_vec())),
+        None,
+    );
     if let Some(parent) = destination.parent().filter(|p| !p.as_os_str().is_empty()) {
         fs::create_dir_all(parent)?;
     }
-    fs::write(destination, encode_blueprint(&blueprint)?)?;
+    blueprint.write(destination)?;
     println!("Blueprint: {}", destination.display());
     Ok(())
 }

@@ -39,17 +39,3 @@ pub fn route_buildings(route: &TileRoute, b: &mut Vec<Building>) {
         b.push(Building::new(t, s.p.0, s.p.1, s.p.2, Rotation::new(s.d)));
     }
 }
-
-/// Build adjacent transport islands from the same sockets used for route endpoints.
-pub fn foundation_harness(
-    geometry: &shapez_model::FoundationGeometry,
-    sockets: &[shapez_model::FoundationSocket],
-) -> Vec<crate::Island> {
-    sockets
-        .iter()
-        .map(|&socket| {
-            let (x, y, r) = geometry.socket_harness(socket);
-            crate::Island::new("SpaceBelt_Forward", x, y, 0, Rotation::new(r))
-        })
-        .collect()
-}

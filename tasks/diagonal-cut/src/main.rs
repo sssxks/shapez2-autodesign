@@ -4,11 +4,10 @@ mod overflow;
 mod overflow_design;
 use anyhow::Result;
 use shapez_blueprint::{
-    Blueprint, BlueprintContent, BlueprintIcon, BuildingBlueprint, IconComponent, Island,
-    IslandBlueprint, Rotation, encode_blueprint,
+    Blueprint, BlueprintIcon, BuildingBlueprint, IconComponent, Island, Rotation,
 };
 use shapez_runtime::{LabPaths, RunDirectory, run_suite};
-use std::{fs, time::Duration};
+use std::time::Duration;
 fn main() -> Result<()> {
     let mut args = std::env::args_os().skip(1);
     if let Some(command) = args.next() {
@@ -50,10 +49,9 @@ fn main() -> Result<()> {
         }
         let mut island = Island::new("Foundation_1x2", 0, 0, 0, Rotation::new(0));
         island.buildings = Some(BuildingBlueprint::new(buildings));
-        let bp = Blueprint {
-            game_version: 1138,
-            content: BlueprintContent::Islands(IslandBlueprint::new(vec![island])),
-            icon: Some(BlueprintIcon {
+        let bp = Blueprint::platform(
+            island,
+            Some(BlueprintIcon {
                 components: [
                     Some(IconComponent::Shape("CgCgCgCg".into())),
                     Some(IconComponent::Icon("ArrowDown".into())),
@@ -65,20 +63,16 @@ fn main() -> Result<()> {
                     )),
                 ],
             }),
-            source_format_version: None,
-        };
+        );
         let file = run.path.join(format!("{name}.spz2bp"));
-        fs::write(&file, encode_blueprint(&bp)?)?;
+        bp.write(&file)?;
         cases.push(shapez_runtime::case!{name:format!("{name}-icon"),operation:"inspect-blueprint",blueprint:file.clone(),expected_format_version:5,expected_library_warning:false,expected_icon:bp.icon.as_ref().map(|i| i.components.clone())});
-        let mut harness = bp.clone();
-        if let BlueprintContent::Islands(islands) = &mut harness.content {
-            islands.entries.extend(shapez_blueprint::foundation_harness(
-                &shapez_model::FoundationGeometry::strip(2, 3),
-                &design::sockets(),
-            ));
-        }
+        let harness = bp.with_harness(
+            &shapez_model::FoundationGeometry::strip(2, 3),
+            &design::sockets(),
+        )?;
         let fixture = run.path.join(format!("{name}-harness.spz2bp"));
-        fs::write(&fixture, encode_blueprint(&harness)?)?;
+        harness.write(&fixture)?;
         println!("{}", file.display());
         cases.push(shapez_runtime::case!{name:name,blueprint:fixture,ports:shapez_model::FoundationGeometry::strip(2,3).ports(&design::sockets()),export_graph:true,experiment: shapez_runtime::Experiment { assembly: "${LAB}/bin/DiagonalTask/Release/netstandard2.1/ShapezLab.Diagonal.dll".into(), type_name: ("DiagonalExperiment").into() }});
     }
