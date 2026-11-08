@@ -91,12 +91,28 @@ pub fn layout(source: &BuildingBlueprint) -> Result<Vec<Building>> {
         shapez_blueprint::route_buildings(&route, &mut buildings);
     }
 
-    let layer = buildings.clone();
+    let input: Vec<_> = buildings.iter().filter(|b| b.y < 6).cloned().collect();
     for z in 1..3 {
-        buildings.extend(layer.iter().cloned().map(|mut b| {
+        buildings.extend(input.iter().cloned().map(|mut b| {
             b.layer = z;
             b
         }));
+        buildings.extend(
+            source
+                .entries
+                .iter()
+                .filter(|b| b.layer == z && b.y >= 6)
+                .cloned()
+                .map(|mut b| {
+                    if (b.y == 16 && [9, 10, 11, 28, 29, 30].contains(&b.x))
+                        || ([7, 32].contains(&b.x) && [7, 9, 11, 13].contains(&b.y))
+                        || (b.x == 36 && b.y == 6)
+                    {
+                        b.definition = "BeltDefaultForwardInternalVariant".into();
+                    }
+                    b
+                }),
+        );
     }
     Ok(buildings)
 }

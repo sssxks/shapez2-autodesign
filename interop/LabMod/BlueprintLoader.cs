@@ -47,7 +47,7 @@ internal static class BlueprintLoader
                     building.Definition.TryCreateConfiguration(out var config);
                     if (building.AdditionalConfigData != null && config != null)
                         converter.DeserializeByteArrayIntoData(building.AdditionalConfigData, GameVersionEnvironment.CurrentVersion, config.Sync);
-                    CheckPlacement(world.Model.GetIsland(transform.Position), building.Definition, position);
+                    CheckPlacement(world.Model, world.Model.GetIsland(transform.Position), building.Definition, position, config);
                     world.Model.CreateBuilding(building.Definition, position, config);
                 }
             }
@@ -56,7 +56,7 @@ internal static class BlueprintLoader
 
     /// Apply the native floor, layer, and notch queries used by ActionModifyBuildings.CheckPlace.
     /// CreateBuilding is a low-level mutation and does not enforce these player placement rules.
-    private static void CheckPlacement(IslandModel island, IBuildingDefinition definition, GlobalTileTransform transform)
+    private static void CheckPlacement(MapModel map, IslandModel island, IBuildingDefinition definition, GlobalTileTransform transform, IBuildingConfiguration? configuration)
     {
         var group = definition.CustomData.Get<IBuildingDefinitionGroup>();
         var maximumLayer = GameBindings.Mode.MaxBuildingLayer;
@@ -70,5 +70,14 @@ internal static class BlueprintLoader
             if (reason != null)
                 throw new InvalidOperationException($"Invalid placement: {definition.Id} at island-local {position}, island {island.Definition.Id} at {island.Transform.Position}: {reason}");
         }
+        var descriptor = new BuildingDescriptor(definition, transform, configuration, new SimulationStateContainer());
+        foreach (var requirement in group.PlacementRequirements)
+            // Isolated lab worlds contain foundations only; the hub observer exists only in a player session.
+            if (!(requirement is CatapultOnHubBorderRequirement) && !(requirement is BuildingNotOnHubChunkRequirement) && !requirement.Check(map, descriptor, island.ToDescriptor()))
+                throw new InvalidOperationException($"Invalid placement requirement: {definition.Id} at {transform.Position}: {requirement.GetType().FullName}");
     }
 }
+
+
+
+
