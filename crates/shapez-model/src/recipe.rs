@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct NodeId(pub usize);
+pub struct Node(pub u32);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -35,21 +35,21 @@ impl Operation {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RecipeNode {
-    pub id: NodeId,
+    pub id: Node,
     pub op: Operation,
-    pub inputs: Vec<NodeId>,
+    pub inputs: Vec<Node>,
     pub expected: Shape,
     pub color: Option<Color>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Recipe {
     pub target: Shape,
-    pub root: NodeId,
+    pub root: Node,
     pub nodes: Vec<RecipeNode>,
 }
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct OutputRef {
-    pub node: NodeId,
+    pub node: Node,
     pub port: usize,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -68,7 +68,7 @@ pub struct VerifiedRecipe {
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RecipeTrace {
-    pub id: NodeId,
+    pub id: Node,
     pub op: Operation,
     pub expected: Shape,
     pub outputs: Vec<Option<String>>,
@@ -80,15 +80,21 @@ pub struct RecipeReport {
     pub target: Shape,
     pub trace: Vec<RecipeTrace>,
     pub steps: Option<usize>,
-    pub failed_node: Option<NodeId>,
+    pub failed_node: Option<Node>,
 }
 impl Recipe {
     pub fn validate(&self) -> Result<()> {
-        ensure!(self.root.0 < self.nodes.len(), "Recipe root is missing");
+        ensure!(
+            (self.root.0 as usize) < self.nodes.len(),
+            "Recipe root is missing"
+        );
         for (i, n) in self.nodes.iter().enumerate() {
-            ensure!(n.id.0 == i, "Recipe IDs must follow execution order");
             ensure!(
-                n.inputs.len() == n.op.arity() && n.inputs.iter().all(|p| p.0 < i),
+                n.id.0 as usize == i,
+                "Recipe IDs must follow execution order"
+            );
+            ensure!(
+                n.inputs.len() == n.op.arity() && n.inputs.iter().all(|p| (p.0 as usize) < i),
                 "Invalid inputs for node {i}"
             );
             ensure!(
@@ -97,7 +103,7 @@ impl Recipe {
             );
         }
         ensure!(
-            self.nodes[self.root.0].expected == self.target,
+            self.nodes[self.root.0 as usize].expected == self.target,
             "Root shape differs from target"
         );
         Ok(())
@@ -125,7 +131,11 @@ impl Recipe {
             );
             nodes.push(VerifiedNode {
                 op: n.op,
-                inputs: n.inputs.iter().map(|p| nodes[p.0].output).collect(),
+                inputs: n
+                    .inputs
+                    .iter()
+                    .map(|p| nodes[p.0 as usize].output)
+                    .collect(),
                 output: OutputRef {
                     node: n.id,
                     port: t.selected_port,
@@ -136,7 +146,7 @@ impl Recipe {
         }
         Ok(VerifiedRecipe {
             target: self.target.clone(),
-            root: nodes[self.root.0].output,
+            root: nodes[self.root.0 as usize].output,
             nodes,
         })
     }

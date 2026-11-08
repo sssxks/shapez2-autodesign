@@ -46,9 +46,9 @@ fn native_cases_keep_payloads_typed_and_toml_rejects_misspelled_fields() {
     legacy.validate().unwrap();
     let recipe = shapez_model::Recipe {
         target: "CuCuCuCu".parse().unwrap(),
-        root: shapez_model::NodeId(0),
+        root: shapez_model::Node(0),
         nodes: vec![shapez_model::RecipeNode {
-            id: shapez_model::NodeId(0),
+            id: shapez_model::Node(0),
             op: shapez_model::Operation::Source,
             inputs: vec![],
             expected: "CuCuCuCu".parse().unwrap(),

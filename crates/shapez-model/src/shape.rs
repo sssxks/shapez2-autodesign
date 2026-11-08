@@ -62,20 +62,17 @@ pub struct Layer(pub [Part; 4]);
 /// Validated shape code. Serialization preserves the game's wire representation.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
-pub struct Shape(String);
+pub struct Shape(Box<str>);
 impl Shape {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-    pub fn layers(&self) -> Vec<Layer> {
-        self.0
-            .split(':')
-            .map(|l| {
-                Layer(std::array::from_fn(|i| {
-                    parse_part(&l[i * 2..i * 2 + 2]).expect("validated shape")
-                }))
-            })
-            .collect()
+    pub fn layers(&self) -> impl DoubleEndedIterator<Item = Layer> + '_ {
+        self.0.split(':').map(|l| {
+            Layer(std::array::from_fn(|i| {
+                parse_part(&l[i * 2..i * 2 + 2]).expect("validated shape")
+            }))
+        })
     }
 }
 fn parse_part(s: &str) -> Result<Part> {
@@ -114,7 +111,7 @@ impl TryFrom<String> for Shape {
                 parse_part(&layer[i * 2..i * 2 + 2])?;
             }
         }
-        Ok(Self(s))
+        Ok(Self(s.into_boxed_str()))
     }
 }
 impl FromStr for Shape {
@@ -125,7 +122,7 @@ impl FromStr for Shape {
 }
 impl From<Shape> for String {
     fn from(s: Shape) -> String {
-        s.0
+        s.0.into_string()
     }
 }
 impl fmt::Display for Shape {

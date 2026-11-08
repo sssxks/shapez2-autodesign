@@ -1,5 +1,5 @@
 use anyhow::{Result, ensure};
-use shapez_model::{Color, NodeId, Operation, Recipe, RecipeNode, Shape};
+use shapez_model::{Color, Node, Operation, Recipe, RecipeNode, Shape};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -20,9 +20,13 @@ impl Planner {
         }
         let id = self.nodes.len();
         self.nodes.push(RecipeNode {
-            id: NodeId(id),
+            id: Node(u32::try_from(id).expect("recipe exceeds u32 nodes")),
             op,
-            inputs: inputs.iter().copied().map(NodeId).collect(),
+            inputs: inputs
+                .iter()
+                .copied()
+                .map(|id| Node(u32::try_from(id).expect("recipe exceeds u32 nodes")))
+                .collect(),
             expected: expected.parse().expect("planner generated invalid shape"),
             color: color.map(|c| Color::try_from(c).expect("planner generated invalid color")),
         });
@@ -226,7 +230,7 @@ pub fn plan_recipe(target: &str) -> Result<Recipe> {
     };
     let recipe = Recipe {
         target: shape,
-        root: NodeId(result.unwrap()),
+        root: Node(u32::try_from(result.unwrap()).expect("recipe exceeds u32 nodes")),
         nodes: p.nodes,
     };
     recipe.validate()?;
