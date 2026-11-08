@@ -1,23 +1,33 @@
+//! Typed factory domain models.
 use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
+/// Game paint color, including the uncolored state.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum Color {
+    /// Unpainted material (u).
     #[serde(rename = "u")]
     Uncolored,
+    /// Red paint (r).
     #[serde(rename = "r")]
     Red,
+    /// Green paint (g).
     #[serde(rename = "g")]
     Green,
+    /// Blue paint (b).
     #[serde(rename = "b")]
     Blue,
+    /// Cyan paint (c).
     #[serde(rename = "c")]
     Cyan,
+    /// Magenta paint (m).
     #[serde(rename = "m")]
     Magenta,
+    /// Yellow paint (y).
     #[serde(rename = "y")]
     Yellow,
+    /// White paint (w).
     #[serde(rename = "w")]
     White,
 }
@@ -38,24 +48,36 @@ impl TryFrom<char> for Color {
     }
 }
 impl Color {
+    /// Return the single-character game wire code.
     pub fn code(self) -> char {
         ['u', 'r', 'g', 'b', 'c', 'm', 'y', 'w'][self as usize]
     }
 }
+/// Solid quadrant geometry recognized by the game.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Material {
+    /// Circular quadrant (C).
     Circle,
+    /// Rectangular quadrant (R).
     Rectangle,
+    /// Star quadrant (S).
     Star,
+    /// Windmill quadrant (W).
     Windmill,
+    /// Colored crystal quadrant (c).
     Crystal,
 }
+/// One quadrant: empty, a pin, or a material with a color.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Part {
+    /// Unoccupied quadrant (--).
     Empty,
+    /// Pin quadrant (P-).
     Pin,
+    /// Material and color of an occupied quadrant.
     Solid(Material, Color),
 }
+/// Four quadrants in game wire order.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Layer(pub [Part; 4]);
 
@@ -64,9 +86,11 @@ pub struct Layer(pub [Part; 4]);
 #[serde(try_from = "String", into = "String")]
 pub struct Shape(Box<str>);
 impl Shape {
+    /// Borrow the validated game wire code without allocating.
     pub fn as_str(&self) -> &str {
         &self.0
     }
+    /// Decode layers lazily in wire order without allocating a collection.
     pub fn layers(&self) -> impl DoubleEndedIterator<Item = Layer> + '_ {
         self.0.split(':').map(|l| {
             Layer(std::array::from_fn(|i| {
@@ -75,6 +99,7 @@ impl Shape {
         })
     }
 }
+/// Decode one ASCII two-byte quadrant, rejecting unknown materials and invalid crystal colors.
 fn parse_part(s: &str) -> Result<Part> {
     if s == "--" {
         return Ok(Part::Empty);

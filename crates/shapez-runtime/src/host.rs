@@ -1,3 +1,4 @@
+//! Native host execution and acceptance support.
 use crate::protocol::{Request, Response};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Serialize, de::DeserializeOwned};
@@ -15,15 +16,22 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Process-local suffix preventing named-pipe collisions between host sessions.
 static PIPE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
+/// Locations of the repository, installed game, lab artifacts and .NET executable.
 pub struct LabPaths {
+    /// Output producing the requested final shape.
     pub root: PathBuf,
+    /// Repository root.
     pub repo: PathBuf,
+    /// Installed game root.
     pub game: PathBuf,
+    /// Path to the .NET executable.
     pub dotnet: PathBuf,
 }
 impl LabPaths {
+    /// Discover lab paths from the repository location and supported environment overrides.
     pub fn discover() -> Self {
         let root = std::env::temp_dir().join("shapez-lab");
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -47,9 +55,11 @@ impl LabPaths {
             dotnet,
         }
     }
+    /// Path of the prepared local game clone.
     pub fn host(&self) -> PathBuf {
         self.root.join("host")
     }
+    /// Build a named interop project in Release mode and return its output directory.
     pub fn build(&self, project: &str) -> Result<PathBuf> {
         self.build_project(
             &self
@@ -57,6 +67,7 @@ impl LabPaths {
                 .join(format!("interop/{project}/{project}.csproj")),
         )
     }
+    /// Build the supplied project against the installed game and return its output directory.
     pub fn build_project(&self, path: &Path) -> Result<PathBuf> {
         let project = path
             .file_stem()
@@ -84,6 +95,7 @@ impl LabPaths {
         )))
     }
 }
+/// Stage the local game clone and run the host preparation tool under an exclusive lease.
 pub fn prepare_host(p: &LabPaths) -> Result<()> {
     let prep = p.build("HostPrep")?;
     p.build("LabMod")?;
@@ -102,6 +114,7 @@ pub fn prepare_host(p: &LabPaths) -> Result<()> {
     ensure!(status.success(), "Host patch failed");
     Ok(())
 }
+/// Recursively stage game files, copying managed DLLs and linking other files when possible.
 fn stage(from: &Path, to: &Path) -> Result<()> {
     fs::create_dir_all(to)?;
     for e in fs::read_dir(from)? {
@@ -119,21 +132,31 @@ fn stage(from: &Path, to: &Path) -> Result<()> {
     }
     Ok(())
 }
+/// Running native test host, its request connection and session artifacts.
 pub struct Host {
+    /// Native host child process.
     child: Child,
+    /// Directory containing this host session artifacts.
     pub run: PathBuf,
+    /// Exclusive session lock path.
     lock: PathBuf,
+    /// Open exclusive session lease.
     lease: Option<fs::File>,
+    /// Next request sequence number.
     seq: u64,
+    /// Active framed request connection.
     connection: Option<crate::transport::Connection>,
     #[cfg(windows)]
+    /// Windows job associated with the host.
     _job: Job,
 }
 impl Host {
+    /// Create a host run directory and start a prepared native host.
     pub fn start(p: &LabPaths, timeout: Duration) -> Result<Self> {
         let run = crate::artifacts::RunDirectory::create(&p.root, "host")?;
         Self::start_in(p, &run.path, timeout)
     }
+    /// Start a prepared native host in an existing run directory and await readiness.
     pub fn start_in(p: &LabPaths, run: &Path, timeout: Duration) -> Result<Self> {
         let host = p.host();
         ensure!(host.join("patch-audit.json").exists(), "Run prepare first");
@@ -246,6 +269,7 @@ impl Host {
         }
         result
     }
+    /// Report an error if the host process has exited.
     fn check_alive(&mut self) -> Result<()> {
         if let Some(status) = self.child.try_wait()? {
             bail!(
@@ -255,6 +279,7 @@ impl Host {
         }
         Ok(())
     }
+    /// Wait for one response frame within the timeout while checking host liveness.
     fn receive(&mut self, timeout: Duration) -> Result<Vec<u8>> {
         let deadline = Instant::now() + timeout;
         loop {
@@ -291,6 +316,7 @@ impl Host {
             }
         }
     }
+    /// Send typed arguments with a sequence number and decode the matching response.
     pub fn request<T: Serialize, R: DeserializeOwned>(
         &mut self,
         operation: &str,
@@ -313,6 +339,7 @@ impl Host {
         ensure!(response.id == id, "Response ID mismatch");
         Ok(response)
     }
+    /// Request shutdown and release the host session resources.
     pub fn shutdown(&mut self) -> Result<()> {
         if self.child.try_wait()?.is_some() {
             return Ok(());
@@ -341,6 +368,7 @@ impl Drop for Host {
     }
 }
 
+/// Open the session lock with exclusive access to reject concurrent hosts.
 fn acquire_lease(path: &Path) -> Result<fs::File> {
     let mut options = fs::OpenOptions::new();
     options.read(true).write(true).create(true).truncate(false);
@@ -357,10 +385,12 @@ fn acquire_lease(path: &Path) -> Result<fs::File> {
     Ok(file)
 }
 
+/// Windows job used by the native host session.
 #[cfg(windows)]
 struct Job(windows_sys::Win32::Foundation::HANDLE);
 #[cfg(windows)]
 impl Job {
+    /// Attach the child process to its Windows job.
     fn attach(child: &Child) -> Result<Self> {
         use std::os::windows::io::AsRawHandle;
         use windows_sys::Win32::System::JobObjects::*;
@@ -612,4 +642,3 @@ mod tests {
         fs::remove_file(path).unwrap();
     }
 }
-

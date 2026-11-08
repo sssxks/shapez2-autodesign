@@ -7,8 +7,11 @@ pub const TILE_DIRECTIONS: [(i32, i32); 4] = [(1, 0), (0, 1), (-1, 0), (0, -1)];
 /// Arrival state. A catcher must leave straight on the same layer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TileRouteStep {
+    /// Arrival tile coordinate.
     pub p: TilePoint,
+    /// Arrival heading index.
     pub d: usize,
+    /// Whether arrival was through a jump catcher.
     pub catch: bool,
 }
 /// An explicit equivalence class declared by the layout, preserving stage flow.
@@ -17,31 +20,46 @@ pub struct ExchangeGroup(pub u8);
 /// Directed connection; external endpoints require native receiver/sender buildings.
 #[derive(Clone, Debug)]
 pub struct TileNet {
+    /// Source tile.
     pub a: TilePoint,
+    /// Source heading index.
     pub ad: usize,
+    /// Destination tile.
     pub b: TilePoint,
+    /// Destination heading index.
     pub bd: usize,
+    /// Whether flow enters the factory.
     pub input: bool,
+    /// Selected output or external-output status.
     pub output: bool,
+    /// Layout-declared destination equivalence class.
     pub exchange: Option<ExchangeGroup>,
 }
 /// A solved connection includes the selected destination after any exchanges.
 #[derive(Clone, Debug)]
 pub struct TileRoute {
+    /// Connection realized by this route.
     pub net: TileNet,
+    /// Number of native execution steps, when reported.
     pub steps: Vec<TileRouteStep>,
 }
 /// Occupancy and launcher interference are separate physical resources.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TileResource {
+    /// Exclusive occupancy of a tile.
     Occupancy(TilePoint),
+    /// Launcher interference at a tile in a heading.
     LauncherRange(TilePoint, usize),
 }
 /// Foundation floor plus directed approach corridors for external ports.
 pub struct FoundationGeometry {
+    /// Inclusive lower coordinate bound.
     pub min: (i32, i32),
+    /// Inclusive upper coordinate bound.
     pub max: (i32, i32),
+    /// Number of native building layers.
     pub layers: i16,
+    /// External socket tiles mapped to their approach tiles.
     pub exits: HashMap<TilePoint, TilePoint>,
 }
 impl FoundationGeometry {
@@ -63,8 +81,11 @@ impl FoundationGeometry {
 }
 /// Obstacles, geometry and connections are owned by the design.
 pub struct TileRoutingProblem {
+    /// Usable foundation floor and external corridors.
     pub geometry: FoundationGeometry,
+    /// Tiles blocked by fixed devices.
     pub fixed: HashSet<TilePoint>,
+    /// Directed connections to route.
     pub nets: Vec<TileNet>,
 }
 /// Resources consumed by a path, including all intermediate lift layers.
@@ -92,17 +113,25 @@ pub fn tile_resources(path: &[TileRouteStep]) -> Vec<TileResource> {
 /// Four-lane socket on an edge of a 1xN foundation.
 #[derive(Clone, Copy)]
 pub struct FoundationSocket {
+    /// Outward-facing foundation edge.
     pub side: crate::Direction,
+    /// Zero-based chunk segment along the edge.
     pub segment: i32,
+    /// Selected output or external-output status.
     pub output: bool,
+    /// Task-defined port role used by native bindings.
     pub role: &'static str,
 }
 /// Serialized physical lane used by native experiment bindings.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FactoryBeltPort {
+    /// Task-defined port role used by native bindings.
     pub role: String,
+    /// Layer-major lane index, four lanes per layer.
     pub lane: usize,
+    /// Occupied tile coordinate.
     pub position: TilePoint,
+    /// Selected output or external-output status.
     pub output: bool,
 }
 impl FoundationSocket {

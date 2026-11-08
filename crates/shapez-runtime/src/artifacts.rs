@@ -1,3 +1,4 @@
+//! Native host execution and acceptance support.
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -7,13 +8,18 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+/// Process-local counter separating runs created in the same millisecond.
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+/// Persisted task name and unique directory containing one run.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RunDirectory {
+    /// Task identifier used by published artifact pointers.
     pub task: Box<str>,
+    /// Filesystem directory containing this run.
     pub path: PathBuf,
 }
 impl RunDirectory {
+    /// Create a unique run directory and persist its task metadata.
     pub fn create(root: &Path, task: &str) -> Result<Self> {
         validate_task(task)?;
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
@@ -30,6 +36,7 @@ impl RunDirectory {
         fs::write(run.path.join("run.json"), serde_json::to_vec_pretty(&run)?)?;
         Ok(run)
     }
+    /// Copy an input into this run under a single-component filename.
     pub fn snapshot(&self, source: &Path, name: &str) -> Result<PathBuf> {
         ensure!(
             Path::new(name).components().count() == 1 && name != "." && name != "..",
@@ -50,6 +57,7 @@ impl RunDirectory {
         fs::rename(temp, dir.join("latest.json"))?;
         Ok(())
     }
+    /// Load the last published run for a task and require its directory to exist.
     pub fn latest(root: &Path, task: &str) -> Result<Self> {
         validate_task(task)?;
         let run: Self = serde_json::from_slice(&fs::read(
@@ -62,6 +70,7 @@ impl RunDirectory {
         Ok(run)
     }
 }
+/// Require a nonempty filesystem-safe task name of ASCII letters, digits, hyphens or underscores.
 fn validate_task(task: &str) -> Result<()> {
     ensure!(
         !task.is_empty()

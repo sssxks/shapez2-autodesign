@@ -1,3 +1,4 @@
+//! Native host execution and acceptance support.
 use anyhow::{Context, Result, ensure};
 use std::{
     fs::File,
@@ -6,17 +7,22 @@ use std::{
     thread::{self, JoinHandle},
 };
 
+/// Maximum accepted native message payload in bytes (64 MiB).
 const MAX_FRAME: usize = 64 * 1024 * 1024;
 
 /// One worker owns all blocking pipe I/O. Killing the owned host closes its peer
 /// and releases the worker even when a request times out during a write.
 pub(crate) struct Connection {
+    /// Queued serialized requests; closing the channel stops the worker.
     outgoing: Option<Sender<Vec<u8>>>,
+    /// Response frames or worker errors.
     pub incoming: Receiver<std::result::Result<Vec<u8>, String>>,
+    /// Blocking pipe worker thread.
     worker: Option<JoinHandle<()>>,
 }
 
 impl Connection {
+    /// Start the pipe worker and receive readiness before processing requests.
     pub fn new(mut pipe: File) -> Self {
         let (outgoing, requests) = mpsc::channel::<Vec<u8>>();
         let (responses, incoming) = mpsc::channel();
@@ -46,6 +52,7 @@ impl Connection {
         }
     }
 
+    /// Queue a serialized request for the blocking pipe worker.
     pub fn send(&self, value: Vec<u8>) -> Result<()> {
         self.outgoing.as_ref().context("Pipe closed")?.send(value)?;
         Ok(())
@@ -61,6 +68,7 @@ impl Drop for Connection {
     }
 }
 
+/// Read a nonempty bounded payload prefixed by a little-endian u32 length.
 fn read_frame(reader: &mut impl Read) -> Result<Vec<u8>> {
     let mut header = [0; 4];
     reader
@@ -78,6 +86,7 @@ fn read_frame(reader: &mut impl Read) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+/// Write and flush a bounded payload with its little-endian u32 length prefix.
 fn write_frame(writer: &mut impl Write, bytes: &[u8]) -> Result<()> {
     ensure!(
         (1..=MAX_FRAME).contains(&bytes.len()),

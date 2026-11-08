@@ -1,7 +1,13 @@
+//! Native host execution and acceptance support.
+/// Run directories and published task artifact pointers.
 mod artifacts;
+/// Path of the prepared local game clone.
 mod host;
+/// Typed request, response and acceptance-suite wire data.
 mod protocol;
+/// Suite execution and artifact reporting.
 mod suite;
+/// Native framed pipe transport.
 mod transport;
 pub use artifacts::RunDirectory;
 pub use host::{Host, LabPaths, prepare_host};

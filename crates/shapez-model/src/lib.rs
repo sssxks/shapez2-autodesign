@@ -1,7 +1,13 @@
+//! Typed factory domain models.
+/// Island and tile coordinates and cardinal directions.
 mod geometry;
+/// Typed physical factory inputs and outputs.
 mod interface;
+/// Recipe DAGs and native verification traces.
 mod recipe;
+/// Validated game shape codes and quadrant decoding.
 mod shape;
+/// Island-grid transport problems and route plans.
 mod transport;
 pub use geometry::{ChunkPos, Direction, GridBounds, TilePos};
 pub use interface::{DemandPort, FactoryInterface, Payload, RateManifest, SupplyPort};
@@ -14,6 +20,7 @@ pub use transport::{
     RouteNode, RoutePlan, SearchOptions, TransportEndpoint, TransportNet, TransportProblem,
 };
 
+/// Physical foundation tiles, ports and route constraints.
 mod tile;
 pub use tile::{
     ExchangeGroup, FoundationGeometry, TILE_DIRECTIONS, TileNet, TilePoint, TileResource,

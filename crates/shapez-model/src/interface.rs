@@ -1,3 +1,4 @@
+//! Typed factory domain models.
 use crate::{
     geometry::{ChunkPos, TilePos},
     shape::{Color, Shape},
@@ -5,10 +6,13 @@ use crate::{
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+/// Transported item, either a validated shape or a fluid color.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub enum Payload {
+    /// A solid shape item.
     Shape(Shape),
+    /// Paint fluid of the supplied color.
     Fluid(Color),
 }
 impl TryFrom<String> for Payload {
@@ -29,28 +33,38 @@ impl From<Payload> for String {
         }
     }
 }
+/// Shape or fluid supplied at an island coordinate.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SupplyPort {
+    /// Island coordinate of the supply.
     pub chunk: ChunkPos,
+    /// Shape or fluid crossing this port.
     pub item: Payload,
 }
+/// Shape or fluid demanded at a building tile.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DemandPort {
+    /// Building coordinate of the demand.
     pub tile: TilePos,
+    /// Shape or fluid crossing this port.
     pub item: Payload,
 }
 
 /// Physical factory interfaces have no assumptions about module count or layout.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct FactoryInterface {
+    /// Declared physical supply ports.
     pub sources: Vec<SupplyPort>,
+    /// Declared physical demand ports.
     pub targets: Vec<DemandPort>,
 }
 
 /// A demand experiment may retain only the receivers in selected islands.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RateManifest {
+    /// Physical supply and demand declarations.
     #[serde(flatten)]
     pub interface: FactoryInterface,
+    /// Islands whose receivers are retained in the demand experiment.
     pub cut_islands: Vec<ChunkPos>,
 }

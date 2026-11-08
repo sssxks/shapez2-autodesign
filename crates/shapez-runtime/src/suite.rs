@@ -1,3 +1,4 @@
+//! Native host execution and acceptance support.
 use crate::{
     Host, LabPaths,
     artifacts::RunDirectory,
@@ -7,18 +8,24 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, time::Duration};
 
+/// Recorded acceptance status and native response or host failure for one case.
 #[derive(Serialize)]
 pub struct CaseResult {
+    /// Human-readable name used to identify this record.
     pub name: Box<str>,
+    /// Whether the case satisfied its acceptance conditions.
     pub passed: bool,
+    /// Native response when the request completed.
     #[serde(flatten)]
     pub response: Option<Response>,
+    /// Host communication failure when no response was available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub host_error: Option<Box<str>>,
 }
 
 /// Resolve only path fields; descriptions and arbitrary payload strings are never rewritten.
 pub fn expand_paths(suite: &mut Suite, p: &LabPaths) -> Result<()> {
+    /// Expand repository, lab, library and published-task variables in one path.
     fn resolve(path: &mut std::path::PathBuf, p: &LabPaths) -> Result<()> {
         let library = std::path::PathBuf::from(std::env::var_os("USERPROFILE").unwrap_or_default())
             .join("AppData/LocalLow/tobspr Games/shapez 2/blueprints");
@@ -52,6 +59,7 @@ pub fn expand_paths(suite: &mut Suite, p: &LabPaths) -> Result<()> {
     }
     Ok(())
 }
+/// Read a TOML suite and execute it with the supplied request timeout.
 pub fn run_suite_file(p: &LabPaths, path: &Path, timeout: Duration) -> Result<()> {
     let suite: Suite = toml::from_str(&fs::read_to_string(path)?)?;
     run_suite(p, &suite, timeout)
@@ -147,9 +155,12 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
 /// Only acceptance status participates in runner logic; plugin diagnostics are archived verbatim.
 #[derive(Serialize, Deserialize)]
 pub struct CaseOutcome {
+    /// Native semantic acceptance status, when reported.
     pub verified: Option<bool>,
 }
+/// Borrowed case results serialized as the run report.
 #[derive(Serialize)]
 struct SuiteReport<'a> {
+    /// Acceptance results in execution order.
     cases: &'a [CaseResult],
 }
