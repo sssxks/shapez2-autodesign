@@ -71,7 +71,7 @@ pub struct RecipeTrace {
     pub id: Node,
     pub op: Operation,
     pub expected: Shape,
-    pub outputs: Vec<Option<String>>,
+    pub outputs: Vec<Option<Box<str>>>,
     pub selected_port: usize,
 }
 #[derive(Debug, Serialize, Deserialize)]

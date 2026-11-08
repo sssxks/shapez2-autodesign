@@ -9,12 +9,12 @@ use std::{fs, path::Path, time::Duration};
 
 #[derive(Serialize)]
 pub struct CaseResult {
-    pub name: String,
+    pub name: Box<str>,
     pub passed: bool,
     #[serde(flatten)]
     pub response: Option<Response>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub host_error: Option<String>,
+    pub host_error: Option<Box<str>>,
 }
 
 /// Resolve only path fields; descriptions and arbitrary payload strings are never rewritten.
@@ -81,7 +81,7 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
                     name: case.name.clone(),
                     passed: false,
                     response: None,
-                    host_error: Some(e.to_string()),
+                    host_error: Some(e.to_string().into_boxed_str()),
                 });
                 break;
             }
@@ -96,18 +96,18 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
                 response
                     .error
                     .as_ref()
-                    .is_some_and(|actual| actual.contains(expected))
+                    .is_some_and(|actual| actual.contains(expected.as_ref()))
             })
             && outcome.as_ref().and_then(|r| r.verified) != Some(false)
             && (!case.expected_ok
-                || !matches!(case.operation.as_str(), "blueprint" | "place-blueprint")
+                || !matches!(case.operation.as_ref(), "blueprint" | "place-blueprint")
                 || outcome.as_ref().and_then(|r| r.verified) == Some(true));
         println!(
             "{}: {}",
             case.name,
             if !passed {
                 "FAIL"
-            } else if case.operation == "blueprint-diagnostic" {
+            } else if case.operation.as_ref() == "blueprint-diagnostic" {
                 "DIAGNOSTIC"
             } else {
                 "PASS"

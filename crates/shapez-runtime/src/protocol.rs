@@ -18,7 +18,7 @@ pub struct Response<T = Box<RawValue>> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
+    pub error: Option<Box<str>>,
     pub wall_seconds: Option<f64>,
 }
 impl<T> Response<T> {
@@ -43,12 +43,12 @@ pub struct Suite {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct TestCase {
-    pub name: String,
-    pub operation: String,
+    pub name: Box<str>,
+    pub operation: Box<str>,
     pub expected_ok: bool,
     /// Negative regressions must match the intended failure, not an unrelated host error.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub expected_error: Option<String>,
+    pub expected_error: Option<Box<str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blueprint: Option<PathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -94,7 +94,7 @@ pub struct TestCase {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub production_manifest: Option<ProductionManifest>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub target: Option<String>,
+    pub target: Option<Box<str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_produced: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -103,7 +103,7 @@ pub struct TestCase {
 impl Default for TestCase {
     fn default() -> Self {
         Self {
-            name: String::new(),
+            name: Box::default(),
             operation: "blueprint".into(),
             expected_ok: true,
             expected_error: None,
@@ -140,7 +140,7 @@ impl Default for TestCase {
 pub struct Experiment {
     pub assembly: PathBuf,
     #[serde(rename = "type")]
-    pub type_name: String,
+    pub type_name: Box<str>,
 }
 /// Construct a typed acceptance case, checking field names and types at compile time.
 #[macro_export]
@@ -185,13 +185,14 @@ pub struct ProductionManifest {
 /// Host readiness is decoded once at the protocol boundary.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Ready {
-    pub kind: String,
+    pub kind: Box<str>,
     pub protocol: u32,
     pub pid: u32,
     pub data_path: PathBuf,
-    pub version: String,
+    pub version: Box<str>,
     pub startup_seconds: f64,
 }
 /// Empty operation arguments encode as an object rather than JSON null.
 #[derive(Serialize)]
 pub struct EmptyArgs {}
+

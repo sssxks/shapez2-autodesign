@@ -42,7 +42,7 @@ fn connection(from: Point, to: Point, mask: i64, rate: f64, jump: bool) -> Conne
     Connection {
         from,
         to,
-        material: shape(mask),
+        material: shape(mask).into(),
         rate,
         highlighted: mask == 15,
         jump,
@@ -175,7 +175,7 @@ pub(crate) fn scene(blueprint: &Blueprint, solution: &FactorySolution) -> Result
                 label: label.into(),
                 direction: b.rotation.index(),
                 auxiliary: index != 0,
-                description: b.definition.clone(),
+                description: b.definition.clone().into(),
             });
         }
     }

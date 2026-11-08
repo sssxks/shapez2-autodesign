@@ -229,7 +229,7 @@ impl Host {
                 &h.receive(deadline.saturating_duration_since(Instant::now()))?,
             )?;
             ensure!(
-                ready.kind == "ready" && ready.protocol == 1,
+                ready.kind.as_ref() == "ready" && ready.protocol == 1,
                 "Unsupported host handshake: {ready:?}"
             );
             ensure!(ready.pid == h.child.id(), "Readiness PID mismatch");
@@ -612,3 +612,4 @@ mod tests {
         fs::remove_file(path).unwrap();
     }
 }
+

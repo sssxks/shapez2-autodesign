@@ -12,17 +12,17 @@ pub struct Tile {
     pub position: Point,
     pub owner: usize,
     pub category: usize,
-    pub label: String,
+    pub label: Box<str>,
     pub direction: usize,
     pub auxiliary: bool,
-    pub description: String,
+    pub description: Box<str>,
 }
 
 /// Legend category with a task-supplied name and glyph.
 #[derive(Serialize)]
 pub struct Category {
-    pub name: String,
-    pub glyph: String,
+    pub name: Box<str>,
+    pub glyph: Box<str>,
 }
 
 /// A real material connection, including jumps and changes of layer.
@@ -30,7 +30,7 @@ pub struct Category {
 pub struct Connection {
     pub from: Point,
     pub to: Point,
-    pub material: String,
+    pub material: Box<str>,
     pub rate: f64,
     pub highlighted: bool,
     pub jump: bool,
@@ -40,8 +40,8 @@ pub struct Connection {
 #[derive(Serialize)]
 pub struct Region {
     pub bounds: [i32; 4],
-    pub name: String,
-    pub description: String,
+    pub name: Box<str>,
+    pub description: Box<str>,
 }
 
 /// A named physical boundary port, spanning the indicated line segment.
@@ -49,14 +49,14 @@ pub struct Region {
 pub struct Port {
     pub from: [i32; 2],
     pub to: [i32; 2],
-    pub name: String,
+    pub name: Box<str>,
     pub input: bool,
 }
 
 /// Immutable scene data. No game definitions, solver, or runtime are required.
 #[derive(Serialize)]
 pub struct Scene {
-    pub description: String,
+    pub description: Box<str>,
     pub width: i32,
     pub height: i32,
     pub layers: i32,

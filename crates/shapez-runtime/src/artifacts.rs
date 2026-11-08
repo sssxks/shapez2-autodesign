@@ -10,7 +10,7 @@ use std::{
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RunDirectory {
-    pub task: String,
+    pub task: Box<str>,
     pub path: PathBuf,
 }
 impl RunDirectory {
@@ -43,7 +43,7 @@ impl RunDirectory {
     }
     /// Publish only after the operation has written its complete deliverables.
     pub fn publish(&self, root: &Path) -> Result<()> {
-        let dir = root.join("tasks").join(&self.task);
+        let dir = root.join("tasks").join(self.task.as_ref());
         fs::create_dir_all(&dir)?;
         let temp = dir.join(format!("latest-{}.tmp", std::process::id()));
         fs::write(&temp, serde_json::to_vec_pretty(self)?)?;
@@ -56,7 +56,7 @@ impl RunDirectory {
             root.join("tasks").join(task).join("latest.json"),
         )?)?;
         ensure!(
-            run.task == task && run.path.is_dir(),
+            run.task.as_ref() == task && run.path.is_dir(),
             "Invalid task artifact pointer"
         );
         Ok(run)

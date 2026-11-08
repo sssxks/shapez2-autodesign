@@ -17,14 +17,14 @@ impl TryFrom<String> for Payload {
         if s.len() == 1 {
             Ok(Self::Fluid(Color::try_from(s.as_bytes()[0] as char)?))
         } else {
-            Ok(Self::Shape(s.parse()?))
+            Ok(Self::Shape(Shape::try_from(s)?))
         }
     }
 }
 impl From<Payload> for String {
     fn from(item: Payload) -> String {
         match item {
-            Payload::Shape(s) => s.to_string(),
+            Payload::Shape(s) => s.into(),
             Payload::Fluid(c) => c.code().to_string(),
         }
     }
