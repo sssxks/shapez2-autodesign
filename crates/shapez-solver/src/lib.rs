@@ -291,8 +291,6 @@ pub struct Limits {
     /// Whether native search progress is printed.
     pub log: bool,
 }
-
-#[cfg(feature = "cp-sat")]
 impl Model {
     /// Translate and solve with CP-SAT, validating the returned incumbent.
     pub fn solve_cp_sat(&self, limits: &Limits) -> Result<Solution> {
@@ -393,8 +391,6 @@ impl Model {
         Ok(solution)
     }
 }
-
-#[cfg(feature = "scip")]
 impl Model {
     /// Solve linear constraints with SCIP; finite relations return an error.
     pub fn solve_scip(&self, limits: &Limits) -> Result<Solution> {
@@ -553,8 +549,7 @@ mod tests {
             );
         }
     }
-    /// Contradictory equalities must yield infeasible on every enabled adapter.
-    #[cfg(any(feature = "cp-sat", feature = "scip"))]
+    /// Contradictory equalities must yield infeasible on both adapters.
     #[test]
     fn native_infeasible() {
         let mut model = Model::default();
@@ -566,12 +561,10 @@ mod tests {
             workers: 1,
             log: false,
         };
-        #[cfg(feature = "cp-sat")]
         assert!(matches!(
             model.solve_cp_sat(&limits).unwrap(),
             Solution::Infeasible(_)
         ));
-        #[cfg(feature = "scip")]
         assert!(matches!(
             model.solve_scip(&limits).unwrap(),
             Solution::Infeasible(_)
@@ -579,7 +572,6 @@ mod tests {
     }
 
     /// Verify finite relations preserve nonlinear tuples under minimization.
-    #[cfg(feature = "cp-sat")]
     #[test]
     fn finite_relation_preserves_non_linear_pairs() {
         let mut model = Model::default();
@@ -601,7 +593,6 @@ mod tests {
         assert_eq!((solution.value(x), solution.value(y)), (2, 4));
     }
     /// Verify both adapters honor domains, equalities and minimization.
-    #[cfg(any(feature = "cp-sat", feature = "scip"))]
     #[test]
     fn native_backends_respect_capacity_and_objective() {
         let mut model = Model::default();
@@ -614,7 +605,6 @@ mod tests {
             workers: 1,
             log: false,
         };
-        #[cfg(feature = "cp-sat")]
         {
             let s = model.solve_cp_sat(&limits).unwrap();
             let Solution::Optimal(s) = s else {
@@ -622,7 +612,6 @@ mod tests {
             };
             assert_eq!((s.value(a), s.value(b)), (1, 4));
         }
-        #[cfg(feature = "scip")]
         {
             let s = model.solve_scip(&limits).unwrap();
             let Solution::Optimal(s) = s else {
@@ -630,6 +619,5 @@ mod tests {
             };
             assert_eq!((s.value(a), s.value(b)), (1, 4));
         }
-        let _ = limits;
     }
 }

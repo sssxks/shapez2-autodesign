@@ -3,12 +3,8 @@ name = "shapez-solver"
 version.workspace = true
 edition.workspace = true
 
-[features]
-cp-sat = ["dep:cpsat-rs"]
-scip = ["dep:russcip"]
-
 [dependencies]
 anyhow.workspace = true
 serde.workspace = true
-cpsat-rs = { version = "0.1.2", optional = true }
-russcip = { version = "0.11", default-features = false, features = ["bundled"], optional = true }
+cpsat-rs = { version = "0.1.2" }
+russcip = { version = "0.11", default-features = false, features = ["bundled"] }
