@@ -27,7 +27,7 @@ pub fn run_compact(
         for target in targets {
             cases.push(shapez_runtime::case! { name: format!("production-diagnostic-{}", cases.len()), operation: "blueprint-diagnostic", blueprint: blueprint.clone(),
                 production_manifest: shapez_runtime::ProductionManifest { interface: report.boundary.interface.clone(), production: report.production.clone() },
-                target: target.clone(), seconds: 600, min_produced: 1,
+                target: target.clone().into_boxed_str(), seconds: 600, min_produced: 1,
                 experiment: shapez_runtime::Experiment { assembly: p.root.join("bin/CmamTask/Release/netstandard2.1/ShapezLab.Cmam.dll"), type_name: "CmamExperiment".into() } });
         }
         let projects = if targets.is_empty() {

@@ -79,7 +79,7 @@ fn main() -> Result<()> {
         if name == "no-experiment" {
             case.experiment = None;
         }
-        case.expected_error = error.map(str::to_owned);
+        case.expected_error = error.map(Box::<str>::from);
         cases.push(case);
     }
     run_suite(
