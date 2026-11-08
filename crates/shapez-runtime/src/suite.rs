@@ -5,7 +5,6 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::{fs, path::Path, time::Duration};
 
 #[derive(Serialize)]
@@ -13,7 +12,7 @@ pub struct CaseResult {
     pub name: String,
     pub passed: bool,
     #[serde(flatten)]
-    pub response: Option<Response<CaseOutcome>>,
+    pub response: Option<Response>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub host_error: Option<String>,
 }
@@ -75,7 +74,7 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
     let mut host = Host::start_in(p, &run.path, timeout)?;
     let mut results = Vec::new();
     for case in &suite.cases {
-        let response: Response<CaseOutcome> = match host.request(&case.operation, case, timeout) {
+        let response: Response = match host.request(&case.operation, case, timeout) {
             Ok(response) => response,
             Err(e) => {
                 results.push(CaseResult {
@@ -87,6 +86,7 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
                 break;
             }
         };
+        let outcome: Option<CaseOutcome> = response.result.as_ref().map(|raw| serde_json::from_str(raw.get())).transpose()?;
         let passed = response.ok == case.expected_ok
             && case.expected_error.as_ref().is_none_or(|expected| {
                 response
@@ -94,10 +94,10 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
                     .as_ref()
                     .is_some_and(|actual| actual.contains(expected))
             })
-            && response.result.as_ref().and_then(|r| r.verified) != Some(false)
+            && outcome.as_ref().and_then(|r| r.verified) != Some(false)
             && (!case.expected_ok
                 || !matches!(case.operation.as_str(), "blueprint" | "place-blueprint")
-                || response.result.as_ref().and_then(|r| r.verified) == Some(true));
+                || outcome.as_ref().and_then(|r| r.verified) == Some(true));
         println!(
             "{}: {}",
             case.name,
@@ -144,8 +144,6 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
 #[derive(Serialize, Deserialize)]
 pub struct CaseOutcome {
     pub verified: Option<bool>,
-    #[serde(flatten)]
-    pub diagnostics: serde_json::Map<String, Value>,
 }
 #[derive(Serialize)]
 struct SuiteReport<'a> {

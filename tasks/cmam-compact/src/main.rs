@@ -59,7 +59,7 @@ fn main() -> Result<()> {
             let timeout = Duration::from_secs(timeout);
             let mut host = Host::start(&paths, timeout)?;
             let response =
-                host.request::<_, serde_json::Value>(&operation, serde_json::json!({}), timeout)?;
+                host.request::<_, Box<serde_json::value::RawValue>>(&operation, shapez_runtime::EmptyArgs {}, timeout)?;
             println!("{}", serde_json::to_string(&response)?);
             println!("artifacts: {}", host.run.display());
             host.shutdown()?;

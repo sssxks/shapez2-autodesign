@@ -1,6 +1,6 @@
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::value::RawValue;
 use std::path::PathBuf;
 
 #[derive(Debug, Serialize)]
@@ -12,7 +12,7 @@ pub struct Request<'a, T> {
 
 /// Transport success and operation-specific acceptance remain separate fields.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Response<T = Value> {
+pub struct Response<T = Box<RawValue>> {
     pub id: u64,
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -181,3 +181,17 @@ pub struct ProductionManifest {
     pub interface: shapez_model::FactoryInterface,
     pub production: ProductionConfig,
 }
+
+/// Host readiness is decoded once at the protocol boundary.
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct Ready {
+    pub kind: String,
+    pub protocol: u32,
+    pub pid: u32,
+    pub data_path: PathBuf,
+    pub version: String,
+    pub startup_seconds: f64,
+}
+/// Empty operation arguments encode as an object rather than JSON null.
+#[derive(Serialize)]
+pub struct EmptyArgs {}

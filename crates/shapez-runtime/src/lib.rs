@@ -6,6 +6,6 @@ mod transport;
 pub use artifacts::RunDirectory;
 pub use host::{Host, LabPaths, prepare_host};
 pub use protocol::{
-    Experiment, ProductionConfig, ProductionManifest, Request, Response, Suite, TestCase,
+    EmptyArgs, Experiment, ProductionConfig, ProductionManifest, Request, Response, Suite, TestCase,
 };
 pub use suite::{CaseResult, expand_paths, run_suite, run_suite_file};

@@ -1,7 +1,7 @@
 use crate::protocol::{Request, Response};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Serialize, de::DeserializeOwned};
-use serde_json::Value;
+use serde_json::value::RawValue;
 use std::{
     fs,
     io::Write,
@@ -225,18 +225,18 @@ impl Host {
                 thread::sleep(Duration::from_millis(10));
             };
             h.connection = Some(crate::transport::Connection::new(pipe));
-            let ready = h.receive(deadline.saturating_duration_since(Instant::now()))?;
+            let ready: crate::protocol::Ready = serde_json::from_slice(&h.receive(deadline.saturating_duration_since(Instant::now()))?)?;
             ensure!(
-                ready["kind"] == "ready" && ready["protocol"] == 1,
-                "Unsupported host handshake: {ready}"
+                ready.kind == "ready" && ready.protocol == 1,
+                "Unsupported host handshake: {ready:?}"
             );
             ensure!(
-                ready["pid"].as_u64() == Some(h.child.id() as u64),
+                ready.pid == h.child.id(),
                 "Readiness PID mismatch"
             );
             ensure!(
-                Path::new(ready["data_path"].as_str().unwrap_or("")) == data,
-                "Data isolation mismatch: {ready}"
+                ready.data_path == data,
+                "Data isolation mismatch: {ready:?}"
             );
             // An archive of the handshake, never used for synchronization.
             fs::write(h.run.join("ready.json"), serde_json::to_vec_pretty(&ready)?)?;
@@ -256,7 +256,7 @@ impl Host {
         }
         Ok(())
     }
-    fn receive(&mut self, timeout: Duration) -> Result<Value> {
+    fn receive(&mut self, timeout: Duration) -> Result<Vec<u8>> {
         let deadline = Instant::now() + timeout;
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
@@ -267,7 +267,6 @@ impl Host {
                 .incoming;
             match incoming.recv_timeout(remaining.min(Duration::from_millis(100))) {
                 Ok(Ok(value)) => {
-                    ensure!(value["kind"] != "fatal", "Host fatal: {value}");
                     return Ok(value);
                 }
                 Ok(Err(error)) => bail!(
@@ -309,9 +308,9 @@ impl Host {
         self.connection
             .as_ref()
             .context("Host pipe closed")?
-            .send(serde_json::to_value(message)?)?;
+            .send(serde_json::to_vec(&message)?)?;
         let result = self.receive(timeout)?;
-        let response: Response<R> = serde_json::from_value(result)?;
+        let response: Response<R> = serde_json::from_slice(&result)?;
         ensure!(response.id == id, "Response ID mismatch");
         Ok(response)
     }
@@ -319,7 +318,7 @@ impl Host {
         if self.child.try_wait()?.is_some() {
             return Ok(());
         }
-        self.request::<_, Value>("shutdown", serde_json::json!({}), Duration::from_secs(10))?
+        self.request::<_, Box<RawValue>>("shutdown", crate::EmptyArgs {}, Duration::from_secs(10))?
             .into_result()?;
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(10) {
@@ -425,9 +424,9 @@ mod tests {
             serde_json::json!({"id":1000,"operation":42,"args":{}}),
             serde_json::json!({"id":1000,"operation":"shutdown","args":null}),
         ] {
-            host.connection.as_ref().unwrap().send(malformed).unwrap();
+            host.connection.as_ref().unwrap().send(serde_json::to_vec(&malformed).unwrap()).unwrap();
             let response: Response =
-                serde_json::from_value(host.receive(timeout).unwrap()).unwrap();
+                serde_json::from_slice(&host.receive(timeout).unwrap()).unwrap();
             assert_eq!(response.id, 1000);
             assert!(!response.ok);
         }
