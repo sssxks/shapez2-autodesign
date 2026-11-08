@@ -1,4 +1,4 @@
-//! Owned integer-linear models with optional native solver adapters.
+//! Owned integer-linear models with native CP-SAT and SCIP solver adapters.
 use anyhow::{Result, ensure};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Var(
     /// Allocation index into the model variable arrays.
-    usize,
+    u32,
 );
 
 /// Mutable builder for an integer affine expression.
@@ -55,7 +55,7 @@ struct Row {
 #[derive(Clone, Copy)]
 pub struct Table(
     /// Registration index into the finite relation array.
-    usize,
+    u32,
 );
 /// Append-only integer model translated into a selected native backend.
 #[derive(Default)]
@@ -80,7 +80,8 @@ impl Model {
     pub fn relation(&mut self, rows: Vec<Vec<i64>>) -> Table {
         assert!(!rows.is_empty() && !rows[0].is_empty());
         assert!(rows.iter().all(|r| r.len() == rows[0].len()));
-        let table = Table(self.relations.len());
+        let table =
+            Table(u32::try_from(self.relations.len()).expect("model exceeds u32 relations"));
         self.relations
             .push(rows.into_iter().map(Vec::into_boxed_slice).collect());
         table
@@ -89,13 +90,13 @@ impl Model {
     ///
     /// Panics if the argument count differs from the relation arity.
     pub fn allow(&mut self, table: Table, variables: Vec<Var>) {
-        assert_eq!(variables.len(), self.relations[table.0][0].len());
+        assert_eq!(variables.len(), self.relations[table.0 as usize][0].len());
         self.tables.push((table, variables.into_boxed_slice()));
     }
     /// Allocate an integer variable; panics if bounds are reversed.
     pub fn variable(&mut self, lower: i64, upper: i64) -> Var {
         assert!(lower <= upper, "Ordered variable domain");
-        let v = Var(self.domains.len());
+        let v = Var(u32::try_from(self.domains.len()).expect("model exceeds u32 variables"));
         self.domains.push((lower, upper));
         v
     }
@@ -175,7 +176,7 @@ impl Model {
             let value: i128 = r
                 .terms
                 .iter()
-                .map(|&(v, c)| i128::from(values[v.0]) * i128::from(c))
+                .map(|&(v, c)| i128::from(values[v.0 as usize]) * i128::from(c))
                 .sum();
             ensure!(
                 value >= i128::from(r.lower) && value <= i128::from(r.upper),
@@ -184,10 +185,10 @@ impl Model {
         }
         for (i, (table, vars)) in self.tables.iter().enumerate() {
             ensure!(
-                self.relations[table.0].iter().any(|row| row
+                self.relations[table.0 as usize].iter().any(|row| row
                     .iter()
                     .zip(vars)
-                    .all(|(&wanted, v)| values[v.0] == wanted)),
+                    .all(|(&wanted, v)| values[v.0 as usize] == wanted)),
                 "Finite relation {i} violated"
             );
         }
@@ -257,7 +258,7 @@ pub struct FeasibleSolution {
 impl FeasibleSolution {
     /// Read a variable's assigned integer value.
     pub fn value(&self, v: Var) -> i64 {
-        self.values[v.0]
+        self.values[v.0 as usize]
     }
     /// Measurements for this assignment's solve.
     pub fn metadata(&self) -> &Metadata {
@@ -317,11 +318,11 @@ impl Model {
                 && row
                     .terms
                     .iter()
-                    .all(|&(v, c)| c == 1 && boolean[v.0].is_some())
+                    .all(|&(v, c)| c == 1 && boolean[v.0 as usize].is_some())
                 && (row.lower == 1 || row.lower <= 0)
             {
                 bs.clear();
-                bs.extend(row.terms.iter().filter_map(|&(v, _)| boolean[v.0]));
+                bs.extend(row.terms.iter().filter_map(|&(v, _)| boolean[v.0 as usize]));
                 if row.lower == 1 {
                     model.add_exactly_one(&bs);
                 } else {
@@ -331,12 +332,12 @@ impl Model {
             }
             let mut expression = LinearExpr::constant(0);
             for &(v, c) in &row.terms {
-                expression.add_term(variables[v.0], c);
+                expression.add_term(variables[v.0 as usize], c);
             }
             model.add(expression.between(row.lower, row.upper));
         }
         for (&v, &value) in &self.hints {
-            model.add_hint(variables[v.0], value);
+            model.add_hint(variables[v.0 as usize], value);
         }
         let relations: Vec<Vec<Vec<i64>>> = self
             .relations
@@ -346,13 +347,13 @@ impl Model {
         let mut table_vars = Vec::new();
         for (table, vars) in &self.tables {
             table_vars.clear();
-            table_vars.extend(vars.iter().map(|v| variables[v.0]));
-            model.add_table(&table_vars, &relations[table.0], false);
+            table_vars.extend(vars.iter().map(|v| variables[v.0 as usize]));
+            model.add_table(&table_vars, &relations[table.0 as usize], false);
         }
         if !self.objective.terms.is_empty() {
             let mut objective = LinearExpr::constant(self.objective.constant);
             for &(v, c) in &self.objective.terms {
-                objective.add_term(variables[v.0], c);
+                objective.add_term(variables[v.0 as usize], c);
             }
             model.minimize(objective);
         }
@@ -414,7 +415,7 @@ impl Model {
         }
         let mut objective = vec![0.; self.domains.len()];
         for &(v, c) in &self.objective.terms {
-            objective[v.0] += c as f64;
+            objective[v.0 as usize] += c as f64;
         }
         let variables: Vec<_> = self
             .domains
@@ -439,7 +440,10 @@ impl Model {
             coefficients.clear();
             coefficients.extend(row.terms.iter().map(|(_, c)| *c as f64));
             model.add_cons(
-                row.terms.iter().map(|(v, _)| &variables[v.0]).collect(),
+                row.terms
+                    .iter()
+                    .map(|(v, _)| &variables[v.0 as usize])
+                    .collect(),
                 &coefficients,
                 if row.lower == i64::MIN {
                     f64::NEG_INFINITY
@@ -457,7 +461,7 @@ impl Model {
         if !self.hints.is_empty() {
             let hint = model.create_partial_sol();
             for (&v, &value) in &self.hints {
-                hint.set_val(&variables[v.0], value as f64);
+                hint.set_val(&variables[v.0 as usize], value as f64);
             }
             model
                 .add_sol(hint)
