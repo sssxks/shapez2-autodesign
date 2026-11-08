@@ -1,3 +1,4 @@
+use shapez_solver::Solution;
 mod geometry;
 mod joint;
 mod network;
@@ -119,11 +120,10 @@ pub fn run(args: SearchArgs) -> Result<()> {
         Backend::CpSat => built.network.model.solve_cp_sat(&limits)?,
         Backend::Scip => built.network.model.solve_scip(&limits)?,
     };
-    anyhow::ensure!(
-        solution.feasible(),
-        "No feasible joint solution: {:?}",
-        solution.status
-    );
+    let status = solution.status();
+    let (Solution::Optimal(solution) | Solution::Feasible(solution)) = solution else {
+        anyhow::bail!("No feasible joint solution: {:?}", status);
+    };
     if let Some(path) = &args.checkpoint {
         let checkpoint = SearchCheckpoint {
             selected: built

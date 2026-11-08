@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use shapez_blueprint::{Building, Rotation};
-use shapez_solver::{Expr, Limits, Model, Solution, Var};
+use shapez_solver::{Expr, FeasibleSolution, Limits, Model, Solution, Var};
 use std::{collections::BTreeMap, path::PathBuf};
 
 type Point = (i32, i32, i16);
@@ -489,11 +489,10 @@ pub fn run(args: Args) -> Result<()> {
         workers: args.workers,
         log: false,
     })?;
-    ensure!(
-        solution.feasible(),
-        "No feasible weave solution: {:?}",
-        solution.status
-    );
+    let status = solution.status();
+    let (Solution::Optimal(solution) | Solution::Feasible(solution)) = solution else {
+        anyhow::bail!("No feasible weave solution: {:?}", status);
+    };
     let selected = || {
         model
             .choices
@@ -539,7 +538,8 @@ pub fn run(args: Args) -> Result<()> {
     let building_count = buildings.len();
     eprintln!(
         "{:?}: {building_count} buildings, {occupied} occupied tiles, {rotators} rotators, {:.2}s",
-        solution.status, solution.seconds
+        status,
+        solution.metadata().seconds()
     );
     Ok(())
 }
@@ -548,7 +548,7 @@ fn native(
     args: &Args,
     selected: &[Building],
     model: &Synthesis,
-    solution: &Solution,
+    solution: &FeasibleSolution,
 ) -> Result<()> {
     let mut buildings: Vec<_> = selected
         .iter()

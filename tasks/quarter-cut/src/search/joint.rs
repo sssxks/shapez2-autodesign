@@ -4,7 +4,7 @@ use super::{
     network::{Network, Witness},
 };
 use anyhow::{Result, ensure};
-use shapez_solver::{Expr, Solution, Var};
+use shapez_solver::{Expr, FeasibleSolution, Var};
 use std::collections::{BTreeMap, BTreeSet};
 
 struct Pose {
@@ -238,7 +238,10 @@ pub fn build(
     })
 }
 impl Joint {
-    pub fn buildings(&self, solution: &Solution) -> Result<Vec<shapez_blueprint::Building>> {
+    pub fn buildings(
+        &self,
+        solution: &FeasibleSolution,
+    ) -> Result<Vec<shapez_blueprint::Building>> {
         use shapez_blueprint::{Building, Placement, Rotation, route_buildings};
         let selected: Vec<_> = self
             .choices

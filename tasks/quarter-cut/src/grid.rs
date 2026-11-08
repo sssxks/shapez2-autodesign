@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use shapez_blueprint::{Building, Rotation};
-use shapez_solver::{Expr, Limits, Model, Solution, Var};
+use shapez_solver::{Expr, FeasibleSolution, Limits, Model, Solution, Var};
 use std::{collections::BTreeMap, fs, path::PathBuf};
 type Point = (i32, i32, i16);
 const D: [Point; 6] = [
@@ -489,7 +489,7 @@ fn equal_if(model: &mut Model, on: Var, a: Var, b: Var, limit: i64) {
         i64::MAX,
     );
 }
-fn edge_value(e: Edge, s: &Solution) -> i64 {
+fn edge_value(e: Edge, s: &FeasibleSolution) -> i64 {
     let wire = s.value(e.wire);
     let shape = s.value(e.shape);
     let rate = s.value(e.rate);
@@ -1289,7 +1289,7 @@ struct CellState {
     kind: usize,
     ports: [i64; 12],
 }
-fn selected(grid: &Grid, solution: &Solution) -> Vec<CellState> {
+fn selected(grid: &Grid, solution: &FeasibleSolution) -> Vec<CellState> {
     grid.tiles
         .iter()
         .filter_map(|(&p, t)| {
@@ -1636,22 +1636,22 @@ fn solve(
         workers: search.workers,
         log: !search.quiet,
     })?;
-    let complete = if solution.feasible() {
-        grid.served.iter().map(|&v| solution.value(v)).sum::<i64>()
-    } else {
-        0
+    let complete = match &solution {
+        Solution::Optimal(s) | Solution::Feasible(s) => {
+            grid.served.iter().map(|&v| s.value(v)).sum::<i64>()
+        }
+        _ => 0,
     };
     eprintln!(
         "{:?}: {complete}/{} outputs in {:.2}s",
-        solution.status,
+        solution.status(),
         grid.served.len(),
-        solution.seconds
+        solution.metadata().seconds()
     );
-    ensure!(
-        solution.feasible(),
-        "No complete grid solution: {:?}",
-        solution.status
-    );
+    let status = solution.status();
+    let (Solution::Optimal(solution) | Solution::Feasible(solution)) = solution else {
+        anyhow::bail!("No complete grid solution: {:?}", status);
+    };
     let state = selected(&grid, &solution);
     if let Some(path) = &execution.checkpoint {
         crate::checkpoint::save(
@@ -1787,7 +1787,12 @@ pub fn run(args: Args) -> Result<()> {
     let result = solve(&region, &args.search, &args.execution)?;
     crate::export_buildings(&result.buildings, &args.output)
 }
-fn native(args: &Region, grid: &Grid, solution: &Solution, base: Vec<Building>) -> Result<()> {
+fn native(
+    args: &Region,
+    grid: &Grid,
+    solution: &FeasibleSolution,
+    base: Vec<Building>,
+) -> Result<()> {
     use shapez_blueprint::{Blueprint, BuildingBlueprint, Island};
     use shapez_runtime::{LabPaths, RunDirectory, run_suite};
     let (offset, layers) = if args.regional() {
