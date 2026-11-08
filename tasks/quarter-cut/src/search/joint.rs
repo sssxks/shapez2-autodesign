@@ -1,3 +1,4 @@
+//! Joint rigid-cell placement, terminal selection and material routing.
 use super::{
     SearchArgs,
     geometry::*,
@@ -7,22 +8,36 @@ use anyhow::{Result, ensure};
 use shapez_solver::{Expr, FeasibleSolution, Var};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// A translated and rotated cell candidate with its occupied footprint.
 struct Pose {
+    /// Cell configuration before selecting terminal variants.
     cell: PackedCell,
+    /// Tiles occupied by the candidate core.
     body: BTreeSet<Point>,
 }
+/// One selectable placement and terminal configuration for a seed cell.
 pub struct Choice {
+    /// Boolean selecting this configuration.
     pub enabled: Var,
+    /// Zero-based factory layer containing the seed cell.
     pub layer: usize,
+    /// Index within the sixteen seed cells on that layer.
     pub index: usize,
+    /// Complete placement and terminal configuration to export.
     pub cell: PackedCell,
 }
+/// Placement and routing model together with its export metadata.
 pub struct Joint {
+    /// Shared material-flow and physical occupancy constraints.
     pub network: Network,
+    /// All candidate configurations, grouped logically by seed cell.
     pub choices: Vec<Choice>,
+    /// External supply ports used to reconstruct selected routes.
     pub inputs: Vec<Port>,
+    /// External delivery ports used to terminate selected routes.
     pub outputs: Vec<Port>,
 }
+/// Build placement and transport constraints for three layers of sixteen seed cells.
 pub fn build(
     seed: &[Vec<PackedCell>],
     args: &SearchArgs,
@@ -238,6 +253,7 @@ pub fn build(
     })
 }
 impl Joint {
+    /// Extract selected cells and source-connected routes, rejecting cycles and disconnected ends.
     pub fn buildings(
         &self,
         solution: &FeasibleSolution,

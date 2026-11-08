@@ -1,35 +1,54 @@
+//! Multi-commodity transport constraints shared by candidate cell placements.
 use super::geometry::{Point, Port, State, shift};
 use anyhow::{Result, ensure};
 use shapez_solver::{Expr, Model, Var};
 use std::collections::{BTreeMap, BTreeSet};
+/// Material class and directed state whose net flow must balance.
 pub type Key = (u8, State);
+/// Restart flow amounts indexed by material class and directed move endpoints.
 pub type Witness = BTreeMap<(u8, State, State), i64>;
+/// A candidate transport move and its solver variables.
 #[derive(Clone, Copy)]
 pub struct Arc {
+    /// Material class transported by this move.
     pub commodity: u8,
+    /// Departure state including arrival direction and jump history.
     pub from: State,
+    /// Arrival state after the move.
     pub to: State,
+    /// Boolean selecting this physical transport move.
     pub selected: Var,
+    /// Integer flow; aliases selection for unit-capacity material.
     pub amount: Var,
 }
 /// Launcher tile, catcher tile, and the shared straight-line travel heading.
 type Jump = (Point, Point, shapez_model::Direction);
+/// Transport model with pending conservation and physical occupancy constraints.
 #[derive(Default)]
 pub struct Network {
+    /// Variables and constraints shared with cell placement.
     pub model: Model,
+    /// Signed net inflow accumulated for each material state.
     pub balance: BTreeMap<Key, Expr>,
+    /// Selected objects competing for each physical tile.
     pub capacity: BTreeMap<Point, Expr>,
+    /// Selected arrivals competing for each material input tile.
     pub fanin: BTreeMap<(u8, Point), Expr>,
+    /// Candidate moves retained for hints, checkpoints and blueprint extraction.
     pub arcs: Vec<Arc>,
+    /// Selection variables grouped by physical jump for interference constraints.
     jumps: BTreeMap<Jump, Vec<Var>>,
 }
 impl Network {
+    /// Add a signed contribution to a material conservation equation.
     pub fn add_flow(&mut self, key: Key, flow: &Expr, scale: i64) {
         self.balance.entry(key).or_default().extend(flow, scale);
     }
+    /// Reserve a tile whenever the selection variable is true.
     pub fn occupy(&mut self, p: Point, v: Var) {
         self.capacity.entry(p).or_default().term(v, 1);
     }
+    /// Inject cell output into transport and count its arrival at the port.
     pub fn emit(&mut self, commodity: u8, port: Port, amount: Expr, enabled: Var) {
         self.add_flow((commodity, port.state()), &amount, 1);
         self.fanin
@@ -37,6 +56,7 @@ impl Network {
             .or_default()
             .term(enabled, 1);
     }
+    /// Consume cell input through one legal arrival state when enabled.
     pub fn receive(&mut self, commodity: u8, port: Port, max: i64, enabled: Expr, amount: Expr) {
         let mut flags = Expr::default();
         let mut flows = Expr::default();
@@ -59,6 +79,7 @@ impl Network {
         self.model.equal(flows, 0);
         self.model.equal(flags, 0);
     }
+    /// Enumerate legal moves; a witness fixes all move amounts and rejects unsupported moves.
     pub fn transport(
         &mut self,
         free: &BTreeSet<Point>,
@@ -170,6 +191,7 @@ impl Network {
         }
         Ok(())
     }
+    /// Apply fixed per-port supply for material zero and demand for the last material.
     pub fn external(
         &mut self,
         inputs: &[Port],
@@ -187,6 +209,7 @@ impl Network {
             self.capacity.entry(p.p).or_default().constant += 1;
         }
     }
+    /// Emit pending balance and occupancy constraints and forbid interfering jump pairs.
     pub fn finish(&mut self) {
         for (_, expr) in std::mem::take(&mut self.balance) {
             self.model.equal(expr, 0);
