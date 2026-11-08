@@ -3,11 +3,7 @@ use anyhow::{Context, Result, bail, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use flate2::{Compression, read::GzDecoder, write::GzEncoder};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    io::{Read, Write},
-    path::Path,
-};
+use std::{collections::BTreeMap, io::Read, path::Path};
 
 /// Envelope version, independent of the game/save version inside the payload.
 pub const BLUEPRINT_FORMAT_VERSION: u32 = 5;
@@ -16,9 +12,13 @@ pub const BLUEPRINT_FORMAT_VERSION: u32 = 5;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Blueprint {
+    /// Game/save version inside the payload.
     pub game_version: u32,
+    /// Layout or serialized content carried by this envelope.
     pub content: BlueprintContent,
+    /// Optional library display icon.
     pub icon: Option<BlueprintIcon>,
+    /// Source envelope version, absent for newly constructed layouts.
     pub source_format_version: Option<u32>,
 }
 
@@ -26,8 +26,10 @@ pub struct Blueprint {
 #[derive(Serialize)]
 struct Payload<'a> {
     #[serde(rename = "V")]
+    /// Game/save version inside the payload.
     game_version: u32,
     #[serde(rename = "BP")]
+    /// Layout or serialized content carried by this envelope.
     content: &'a BlueprintContent,
 }
 
@@ -36,10 +38,13 @@ struct Payload<'a> {
 #[serde(deny_unknown_fields)]
 struct Document {
     #[serde(rename = "$type", default)]
-    _type_name: Option<String>,
+    /// Newtonsoft type annotation accepted for compatibility.
+    _type_name: Option<Box<str>>,
     #[serde(rename = "V")]
+    /// Game/save version inside the payload.
     game_version: u32,
     #[serde(rename = "BP")]
+    /// Layout or serialized content carried by this envelope.
     content: BlueprintContent,
 }
 impl TryFrom<Document> for Blueprint {
@@ -64,9 +69,11 @@ impl TryFrom<Document> for Blueprint {
 #[serde(deny_unknown_fields)]
 struct MetadataEntry {
     #[serde(rename = "Type")]
-    kind: String,
+    /// Wire type discriminator.
+    kind: Box<str>,
     #[serde(rename = "Content")]
-    content: String,
+    /// Layout or serialized content carried by this envelope.
+    content: Box<str>,
 }
 /// Assembly-qualified game type name identifying icon metadata.
 const ICON_TYPE: &str =
@@ -150,17 +157,24 @@ pub fn decode_blueprint(text: &str) -> Result<Blueprint> {
 /// Serialize the layout and icon into the current compressed SHAPEZ2 envelope.
 pub fn encode_blueprint(blueprint: &Blueprint) -> Result<String> {
     let mut gz = GzEncoder::new(Vec::new(), Compression::default());
-    gz.write_all(&serde_json::to_vec(&Payload {
-        game_version: blueprint.game_version,
-        content: &blueprint.content,
-    })?)?;
-    let icon = blueprint
-        .icon
-        .clone()
-        .unwrap_or_else(|| blueprint.default_icon());
+    serde_json::to_writer(
+        &mut gz,
+        &Payload {
+            game_version: blueprint.game_version,
+            content: &blueprint.content,
+        },
+    )?;
+    let fallback;
+    let icon = match &blueprint.icon {
+        Some(icon) => icon,
+        None => {
+            fallback = blueprint.default_icon();
+            &fallback
+        }
+    };
     let metadata = serde_json::to_string(&[MetadataEntry {
         kind: ICON_TYPE.into(),
-        content: serde_json::to_string(&icon)?,
+        content: serde_json::to_string(&icon)?.into_boxed_str(),
     }])?;
     Ok(format!(
         "SHAPEZ2-{BLUEPRINT_FORMAT_VERSION}-{}{}_{length}$",
@@ -213,18 +227,21 @@ impl Blueprint {
         Ok(blueprint)
     }
 
+    /// Read and decode a file, attaching its path to errors.
     pub fn read(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         let text =
             std::fs::read_to_string(path).with_context(|| format!("Reading {}", path.display()))?;
         decode_blueprint(&text).with_context(|| format!("Decoding {}", path.display()))
     }
+    /// Borrow island entries; building-only layouts return an empty slice.
     pub fn islands(&self) -> &[Island] {
         match &self.content {
             BlueprintContent::Islands(b) => &b.entries,
             _ => &[],
         }
     }
+    /// Replace island entries; return an error for building-only layouts.
     pub fn replace_islands(&mut self, entries: Vec<Island>) -> Result<()> {
         match &mut self.content {
             BlueprintContent::Islands(b) => {
@@ -234,6 +251,7 @@ impl Blueprint {
             _ => bail!("Island blueprint required"),
         }
     }
+    /// Construct the conventional icon for this layout kind.
     pub fn default_icon(&self) -> BlueprintIcon {
         let (name, shape) = match self.content {
             BlueprintContent::Islands(_) => ("Platforms", "RuRuRuRu"),
@@ -248,6 +266,7 @@ impl Blueprint {
             ],
         }
     }
+    /// Collect island types, building counts, labels and train interfaces.
     pub fn summary(&self) -> BlueprintSummary<'_> {
         let mut summary = BlueprintSummary {
             version: self.game_version,
@@ -276,11 +295,17 @@ impl Blueprint {
 /// Borrowed layout inventory with counts and decoded labels.
 #[derive(Serialize)]
 pub struct BlueprintSummary<'a> {
+    /// Game/save version of the summarized blueprint.
     pub version: u32,
+    /// Number of island entries.
     pub islands: usize,
+    /// Total building count across the layout.
     pub buildings: usize,
+    /// Island counts keyed by borrowed definition identifiers.
     pub types: BTreeMap<&'a str, usize>,
+    /// Label buildings and decoded configuration text.
     pub labels: Vec<LabelSummary<'a>>,
+    /// Islands whose definitions identify train interfaces.
     pub train_interfaces: Vec<TrainInterfaceSummary<'a>>,
 }
 impl<'a> BlueprintSummary<'a> {
@@ -306,14 +331,20 @@ impl<'a> BlueprintSummary<'a> {
 /// Label configuration associated with its containing island and building.
 #[derive(Serialize)]
 pub struct LabelSummary<'a> {
+    /// Containing island index, or zero for building-only layouts.
     pub island: usize,
+    /// Containing island chunk coordinates, or the origin for building-only layouts.
     pub chunk: [i32; 2],
+    /// Borrowed label building.
     pub building: &'a crate::Building,
+    /// UTF-8 label text with invalid sequences replaced.
     pub decoded: std::borrow::Cow<'a, str>,
 }
 /// Train interface island and its index in the blueprint.
 #[derive(Serialize)]
 pub struct TrainInterfaceSummary<'a> {
+    /// Index in the blueprint island entries.
     pub index: usize,
+    /// Borrowed train interface island.
     pub island: &'a Island,
 }

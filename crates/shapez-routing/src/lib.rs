@@ -1,3 +1,5 @@
+//! Transport and tile routing over the shared Shapez domain model.
+
 mod solver;
 pub use solver::solve_transport;
 

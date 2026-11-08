@@ -8,9 +8,11 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 pub struct Rotation(u8);
 
 impl Rotation {
+    /// Normalize clockwise turns modulo four.
     pub fn new(turns: usize) -> Self {
         Self((turns % 4) as u8)
     }
+    /// Return the normalized turn count in 0..4.
     pub fn index(self) -> usize {
         self.0 as usize
     }
@@ -48,19 +50,26 @@ impl<'de> Deserialize<'de> for Configuration {
 #[serde(try_from = "wire::Building")]
 pub struct Building {
     #[serde(rename = "X")]
+    /// Horizontal coordinate: tiles for buildings, chunks for islands.
     pub x: i32,
     #[serde(rename = "Y")]
+    /// Vertical coordinate: tiles for buildings, chunks for islands.
     pub y: i32,
     #[serde(rename = "L")]
+    /// Game placement layer.
     pub layer: i16,
     #[serde(rename = "R")]
+    /// Clockwise quarter-turn orientation.
     pub rotation: Rotation,
     #[serde(rename = "T")]
+    /// Game definition identifier.
     pub definition: String,
     #[serde(rename = "C")]
+    /// Optional game-owned binary settings.
     pub configuration: Option<Configuration>,
 }
 impl Building {
+    /// Place an unconfigured building at a tile position.
     pub fn new(
         definition: impl Into<String>,
         x: i32,
@@ -88,13 +97,17 @@ impl Building {
 /// Building layout and legacy embedded metadata.
 pub struct BuildingBlueprint {
     #[serde(rename = "Entries")]
+    /// Ordered entries editable by layout builders.
     pub entries: Vec<Building>,
     #[serde(rename = "Icon", skip_serializing_if = "Option::is_none")]
+    /// Legacy icon embedded in the layout.
     pub embedded_icon: Option<BlueprintIcon>,
     #[serde(rename = "BinaryVersion", skip_serializing_if = "Option::is_none")]
+    /// Optional legacy binary format version.
     pub binary_version: Option<u32>,
 }
 impl BuildingBlueprint {
+    /// Create an editable building layout without legacy metadata.
     pub fn new(entries: Vec<Building>) -> Self {
         Self {
             entries,
@@ -109,24 +122,32 @@ impl BuildingBlueprint {
 #[serde(try_from = "wire::Island")]
 pub struct Island {
     #[serde(rename = "X")]
+    /// Horizontal coordinate: tiles for buildings, chunks for islands.
     pub x: i32,
     #[serde(rename = "Y")]
+    /// Vertical coordinate: tiles for buildings, chunks for islands.
     pub y: i32,
     #[serde(rename = "Z")]
+    /// Game placement layer.
     pub layer: i16,
     #[serde(rename = "R")]
+    /// Clockwise quarter-turn orientation.
     pub rotation: Rotation,
     #[serde(rename = "T")]
+    /// Game definition identifier.
     pub definition: String,
     #[serde(rename = "S")]
+    /// Optional game-owned binary settings.
     pub configuration: Option<Configuration>,
     /// Older island records also carried C. Preserve these bytes explicitly.
     #[serde(rename = "C")]
     pub legacy_configuration: Option<Configuration>,
     #[serde(rename = "B")]
+    /// Buildings composing this layout.
     pub buildings: Option<BuildingBlueprint>,
 }
 impl Island {
+    /// Place an empty unconfigured island at a chunk position.
     pub fn new(
         definition: impl Into<String>,
         x: i32,
@@ -145,6 +166,7 @@ impl Island {
             buildings: None,
         }
     }
+    /// Borrow attached buildings, or an empty slice if absent.
     pub fn buildings(&self) -> &[Building] {
         self.buildings.as_ref().map_or(&[], |b| &b.entries)
     }
@@ -155,13 +177,17 @@ impl Island {
 #[serde(tag = "$type", rename = "Island", try_from = "wire::IslandBlueprint")]
 pub struct IslandBlueprint {
     #[serde(rename = "Entries")]
+    /// Ordered entries editable by layout builders.
     pub entries: Vec<Island>,
     #[serde(rename = "Icon", skip_serializing_if = "Option::is_none")]
+    /// Legacy icon embedded in the layout.
     pub embedded_icon: Option<BlueprintIcon>,
     #[serde(rename = "BinaryVersion", skip_serializing_if = "Option::is_none")]
+    /// Optional legacy binary format version.
     pub binary_version: Option<u32>,
 }
 impl IslandBlueprint {
+    /// Create an editable island layout without legacy metadata.
     pub fn new(entries: Vec<Island>) -> Self {
         Self {
             entries,
@@ -175,7 +201,9 @@ impl IslandBlueprint {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(from = "wire::Content", untagged)]
 pub enum BlueprintContent {
+    /// World chunk-grid layout.
     Islands(IslandBlueprint),
+    /// Building tile-grid layout.
     Buildings(BuildingBlueprint),
 }
 
@@ -183,8 +211,10 @@ pub enum BlueprintContent {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub enum IconComponent {
-    Icon(String),
-    Shape(String),
+    /// Named game library icon.
+    Icon(Box<str>),
+    /// Shape code rendered in a quadrant.
+    Shape(Box<str>),
 }
 impl TryFrom<String> for IconComponent {
     type Error = anyhow::Error;
@@ -211,11 +241,13 @@ impl From<IconComponent> for String {
 #[serde(deny_unknown_fields)]
 pub struct BlueprintIcon {
     #[serde(rename = "Data")]
+    /// Four optional icon quadrants in game ordering.
     pub components: [Option<IconComponent>; 4],
 }
 
 // Deserialization-only DTOs accept Newtonsoft's typed array/byte wrappers.
 // Unknown fields fail rather than silently losing data during a rewrite.
+/// Strict adapters for plain and Newtonsoft-wrapped game records.
 pub(crate) mod wire {
     use super::*;
 
@@ -223,20 +255,28 @@ pub(crate) mod wire {
     #[derive(Deserialize)]
     #[serde(tag = "$type", deny_unknown_fields)]
     pub enum Content {
+        /// Island layout wire record.
         Island {
             #[serde(rename = "Entries")]
+            /// Ordered entries editable by layout builders.
             entries: Array<super::Island>,
             #[serde(rename = "Icon", default)]
+            /// Optional library display icon.
             icon: Option<BlueprintIcon>,
             #[serde(rename = "BinaryVersion", default)]
+            /// Optional legacy binary format version.
             binary_version: Option<u32>,
         },
+        /// Building layout wire record.
         Building {
             #[serde(rename = "Entries")]
+            /// Ordered entries editable by layout builders.
             entries: Array<super::Building>,
             #[serde(rename = "Icon", default)]
+            /// Optional library display icon.
             icon: Option<BlueprintIcon>,
             #[serde(rename = "BinaryVersion", default)]
+            /// Optional legacy binary format version.
             binary_version: Option<u32>,
         },
     }
@@ -304,7 +344,9 @@ pub(crate) mod wire {
     #[derive(Deserialize)]
     #[serde(untagged)]
     pub enum Bytes {
-        Plain(String),
+        /// Unwrapped base64 text.
+        Plain(Box<str>),
+        /// Newtonsoft-wrapped base64 text.
         Typed(TypedBytes),
     }
     /// Newtonsoft binary wrapper carrying its base64 value.
@@ -312,13 +354,15 @@ pub(crate) mod wire {
     #[serde(deny_unknown_fields)]
     pub struct TypedBytes {
         #[serde(rename = "$type")]
-        _type_name: String,
+        /// Newtonsoft type annotation accepted for compatibility.
+        _type_name: Box<str>,
         #[serde(rename = "$value")]
-        value: String,
+        /// Base64 configuration text.
+        value: Box<str>,
     }
     impl Bytes {
         /// Extract the base64 text from either supported wire representation.
-        pub fn into_text(self) -> String {
+        pub fn into_text(self) -> Box<str> {
             match self {
                 Self::Plain(v) => v,
                 Self::Typed(v) => v.value,
@@ -330,18 +374,25 @@ pub(crate) mod wire {
     #[serde(deny_unknown_fields)]
     pub struct Building {
         #[serde(rename = "$type", default)]
-        _type_name: Option<String>,
+        /// Newtonsoft type annotation accepted for compatibility.
+        _type_name: Option<Box<str>>,
         #[serde(rename = "X", default)]
+        /// Horizontal coordinate: tiles for buildings, chunks for islands.
         pub x: i32,
         #[serde(rename = "Y", default)]
+        /// Vertical coordinate: tiles for buildings, chunks for islands.
         pub y: i32,
         #[serde(rename = "L", default)]
+        /// Game placement layer.
         pub layer: i16,
         #[serde(rename = "R", default)]
+        /// Clockwise quarter-turn orientation.
         pub rotation: Rotation,
         #[serde(rename = "T")]
+        /// Game definition identifier.
         pub definition: String,
         #[serde(rename = "C", default)]
+        /// Optional game-owned binary settings.
         pub configuration: Option<Configuration>,
     }
     /// Building layout and legacy embedded metadata.
@@ -349,12 +400,16 @@ pub(crate) mod wire {
     #[serde(deny_unknown_fields)]
     pub struct BuildingBlueprint {
         #[serde(rename = "$type")]
-        pub kind: String,
+        /// Wire type discriminator.
+        pub kind: Box<str>,
         #[serde(rename = "Entries")]
+        /// Ordered entries editable by layout builders.
         pub entries: Array<super::Building>,
         #[serde(rename = "Icon", default)]
+        /// Optional library display icon.
         pub icon: Option<BlueprintIcon>,
         #[serde(rename = "BinaryVersion", default)]
+        /// Optional legacy binary format version.
         pub binary_version: Option<u32>,
     }
     /// Placed island with optional buildings and game configuration.
@@ -362,22 +417,31 @@ pub(crate) mod wire {
     #[serde(deny_unknown_fields)]
     pub struct Island {
         #[serde(rename = "$type", default)]
-        _type_name: Option<String>,
+        /// Newtonsoft type annotation accepted for compatibility.
+        _type_name: Option<Box<str>>,
         #[serde(rename = "X", default)]
+        /// Horizontal coordinate: tiles for buildings, chunks for islands.
         pub x: i32,
         #[serde(rename = "Y", default)]
+        /// Vertical coordinate: tiles for buildings, chunks for islands.
         pub y: i32,
         #[serde(rename = "Z", default)]
+        /// Game placement layer.
         pub layer: i16,
         #[serde(rename = "R", default)]
+        /// Clockwise quarter-turn orientation.
         pub rotation: Rotation,
         #[serde(rename = "T")]
+        /// Game definition identifier.
         pub definition: String,
         #[serde(rename = "S", default)]
+        /// Optional game-owned binary settings.
         pub configuration: Option<Configuration>,
         #[serde(rename = "C", default)]
+        /// Legacy C settings preserved alongside current S settings.
         pub legacy_configuration: Option<Configuration>,
         #[serde(rename = "B", default)]
+        /// Buildings composing this layout.
         pub buildings: Option<super::BuildingBlueprint>,
     }
     /// Island layout and legacy embedded metadata.
@@ -385,12 +449,16 @@ pub(crate) mod wire {
     #[serde(deny_unknown_fields)]
     pub struct IslandBlueprint {
         #[serde(rename = "$type")]
-        pub kind: String,
+        /// Wire type discriminator.
+        pub kind: Box<str>,
         #[serde(rename = "Entries")]
+        /// Ordered entries editable by layout builders.
         pub entries: Array<super::Island>,
         #[serde(rename = "Icon", default)]
+        /// Optional library display icon.
         pub icon: Option<BlueprintIcon>,
         #[serde(rename = "BinaryVersion", default)]
+        /// Optional legacy binary format version.
         pub binary_version: Option<u32>,
     }
 }
@@ -452,7 +520,7 @@ impl TryFrom<wire::BuildingBlueprint> for BuildingBlueprint {
     type Error = anyhow::Error;
     fn try_from(v: wire::BuildingBlueprint) -> Result<Self> {
         ensure!(
-            v.kind == "Building",
+            v.kind.as_ref() == "Building",
             "Expected Building blueprint, got {}",
             v.kind
         );
@@ -467,7 +535,7 @@ impl TryFrom<wire::IslandBlueprint> for IslandBlueprint {
     type Error = anyhow::Error;
     fn try_from(v: wire::IslandBlueprint) -> Result<Self> {
         ensure!(
-            v.kind == "Island",
+            v.kind.as_ref() == "Island",
             "Expected Island blueprint, got {}",
             v.kind
         );

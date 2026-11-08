@@ -6,13 +6,17 @@ use std::collections::{BTreeMap, HashSet};
 /// A connection tile adjacent to a cell and its direction of travel.
 #[derive(Clone, Copy, Debug)]
 pub struct CellPort {
+    /// Port position in local tile coordinates.
     pub position: TilePoint,
+    /// Port direction in clockwise quarter turns.
     pub direction: usize,
 }
 /// Rigid clockwise rotation followed by translation, including a layer offset.
 #[derive(Clone, Copy)]
 pub struct Placement {
+    /// Translation applied after rotation.
     pub origin: TilePoint,
+    /// Clockwise quarter-turn orientation.
     pub rotation: Rotation,
 }
 impl Placement {
@@ -30,8 +34,11 @@ impl Placement {
 /// A reusable layout owns all of its occupied tiles, including non-anchor tiles.
 #[derive(Clone)]
 pub struct Cell {
+    /// Buildings composing this layout.
     pub buildings: Vec<Building>,
+    /// Occupied local tiles used for placement conflict checks.
     pub footprint: HashSet<TilePoint>,
+    /// Named connection points in local coordinates.
     pub ports: BTreeMap<&'static str, CellPort>,
 }
 impl Cell {
