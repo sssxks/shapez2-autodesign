@@ -1,3 +1,4 @@
+//! Legacy adapter routing and physical transport generation.
 use crate::reports::{AdapterReport, Connection, Summary};
 use anyhow::{Result, bail, ensure};
 use shapez_blueprint::{Blueprint, Building, BuildingBlueprint, Island, Rotation};
@@ -7,19 +8,27 @@ use std::{
     path::Path,
 };
 
+/// Horizontal tile coordinates in a generated platform.
 type Point = (i32, i32);
+/// Unit offsets indexed east, south, west and north.
 const D: [Point; 4] = [(1, 0), (0, 1), (-1, 0), (0, -1)];
 #[derive(Clone, Default)]
+/// One net crossing a tile, with one incoming side and possible branching outputs.
 struct Flow {
+    /// Side from which the net enters the tile.
     input: Option<usize>,
+    /// Sides to which this net leaves the tile.
     outputs: BTreeSet<usize>,
 }
+/// Per-tile routes grouped by logical net.
 type Grid = BTreeMap<Point, BTreeMap<usize, Flow>>;
+/// Return the cardinal direction between adjacent points; panics for nonadjacent points.
 fn dir(a: Point, b: Point) -> usize {
     D.iter()
         .position(|&(x, y)| (b.0 - a.0, b.1 - a.1) == (x, y))
         .unwrap()
 }
+/// Expand orthogonal waypoints into interior tile flows, rejecting conflicting arrivals.
 fn route(grid: &mut Grid, net: usize, waypoints: &[Point]) -> Result<()> {
     let mut points = vec![waypoints[0]];
     for pair in waypoints.windows(2) {
@@ -45,9 +54,11 @@ fn route(grid: &mut Grid, net: usize, waypoints: &[Point]) -> Result<()> {
     }
     Ok(())
 }
+/// Append a building at a tile with its rotation normalized by the blueprint model.
 fn put(b: &mut Vec<Building>, p: Point, z: i16, r: usize, t: &str) {
     b.push(Building::new(t, p.0, p.1, z, Rotation::new(r)));
 }
+/// Append a belt or fluid sender or receiver at the requested tile.
 fn port(b: &mut Vec<Building>, p: Point, z: i16, r: usize, fluid: bool, send: bool) {
     put(
         b,
@@ -61,6 +72,7 @@ fn port(b: &mut Vec<Building>, p: Point, z: i16, r: usize, fluid: bool, send: bo
         ),
     );
 }
+/// Append straight or turning transport for an incoming travel direction and outgoing direction.
 fn turn(b: &mut Vec<Building>, p: Point, z: i16, in_dir: usize, out: usize, fluid: bool) {
     let delta = (out + 4 - in_dir) % 4;
     let (t, r) = if fluid {
@@ -84,6 +96,7 @@ fn turn(b: &mut Vec<Building>, p: Point, z: i16, in_dir: usize, out: usize, flui
     };
     put(b, p, z, r, t);
 }
+/// Locate one of four lanes on a platform side.
 fn edge(side: usize, k: i32) -> Point {
     match side {
         0 => (17, 8 + k),
@@ -92,6 +105,7 @@ fn edge(side: usize, k: i32) -> Point {
         _ => (8 + k, 2),
     }
 }
+/// Connect opposite platform sides across three layers, optionally jumping over the center.
 fn straight(b: &mut Vec<Building>, input: usize, output: usize, fluid: bool, jump: bool) {
     for z in 0..3 {
         for k in 0..4 {
@@ -117,6 +131,7 @@ fn straight(b: &mut Vec<Building>, input: usize, output: usize, fluid: bool, jum
         }
     }
 }
+/// Connect adjacent platform sides with nested four-lane corners on three layers.
 fn corner(b: &mut Vec<Building>, input: usize, output: usize, fluid: bool) {
     // Rotate a north -> west nested corner; mirror for north -> east.
     let rot = (input + 1) % 4;
@@ -157,6 +172,7 @@ fn corner(b: &mut Vec<Building>, input: usize, output: usize, fluid: bool) {
         }
     }
 }
+/// Transform a splitter template to match the requested input and output sides.
 fn split(
     b: &mut Vec<Building>,
     template: &[Building],

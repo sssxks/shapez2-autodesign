@@ -4,11 +4,16 @@ use shapez_blueprint::{BlueprintIcon, IconComponent};
 use shapez_model::{Direction, FoundationSocket};
 /// A complete external-interface choice; internal cells always prioritize their A input.
 pub(crate) struct Design {
+    /// Stable slug used to name exported artifacts.
     pub(crate) id: &'static str,
+    /// Bilingual display name stored in the blueprint.
     pub(crate) name: &'static str,
+    /// Foundation side supplying the preferred stream.
     pub(crate) primary: Direction,
+    /// Foundation side supplying the fallback stream.
     pub(crate) secondary: Direction,
 }
+/// Supported external socket arrangements.
 pub(crate) const DESIGNS: [Design; 3] = [
     Design {
         id: "inline",
@@ -30,6 +35,7 @@ pub(crate) const DESIGNS: [Design; 3] = [
     },
 ];
 impl Design {
+    /// Return preferred input, fallback input and east output sockets in that order.
     pub(crate) fn sockets(&self) -> [FoundationSocket; 3] {
         [
             FoundationSocket {

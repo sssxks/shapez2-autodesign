@@ -277,6 +277,7 @@ pub fn compact_cmam(
     Ok(build.manifest)
 }
 
+/// Compute inclusive chunk bounds covering islands and their contained buildings.
 fn bounds(bp: &Blueprint) -> Bounds {
     let mut points = vec![];
     for i in bp.islands() {

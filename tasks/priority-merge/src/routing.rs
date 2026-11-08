@@ -5,6 +5,7 @@ use shapez_blueprint::Building;
 use shapez_model::{FoundationGeometry, SearchOptions, TileNet as Net, TileRoutingProblem};
 use shapez_routing::solve_tiles_sequential;
 use std::collections::HashSet;
+/// Route each cell to its external sockets and append the resulting transport buildings.
 pub fn connect(
     buildings: &mut Vec<Building>,
     cells: &[shapez_blueprint::Cell],

@@ -5,6 +5,7 @@ use shapez_blueprint::{BlueprintContent, Island, Rotation, decode_blueprint};
 use shapez_runtime::{LabPaths, RunDirectory, run_suite};
 use std::{fs, path::PathBuf, time::Duration};
 
+/// Build the corrected reference layout, run native acceptance and publish to the supplied path.
 pub fn run(source: PathBuf) -> Result<()> {
     let paths = LabPaths::discover();
     let run = RunDirectory::create(&paths.root, "diagonal-overflow")?;
