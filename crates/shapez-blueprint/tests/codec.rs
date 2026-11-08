@@ -8,7 +8,8 @@ use std::io::Write;
 
 #[test]
 fn file_input_requires_the_game_blueprint_envelope() {
-    let path = std::env::temp_dir().join(format!("shapez-codec-input-{}.spz2bp", std::process::id()));
+    let path =
+        std::env::temp_dir().join(format!("shapez-codec-input-{}.spz2bp", std::process::id()));
     let blueprint = sample();
     std::fs::write(&path, serde_json::to_vec(&blueprint).unwrap()).unwrap();
     assert!(Blueprint::read(&path).is_err());

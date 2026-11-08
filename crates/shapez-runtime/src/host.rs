@@ -438,10 +438,22 @@ mod tests {
         assert!(catalog.ok, "{:?}", catalog.error);
         let catalog = catalog.result.unwrap();
         assert!(!catalog.is_empty());
-        assert!(catalog.iter().all(|item| !item.id.is_empty() && !item.tiles.is_empty()));
-        assert!(catalog.iter().flat_map(|item| &item.connectors)
-            .all(|connector| !connector.kind.is_empty() && !connector.pivot.is_empty()));
-        assert!(catalog.iter().any(|item| item.cutter_speed.is_some() && item.cutter_delay.is_some()));
+        assert!(
+            catalog
+                .iter()
+                .all(|item| !item.id.is_empty() && !item.tiles.is_empty())
+        );
+        assert!(
+            catalog
+                .iter()
+                .flat_map(|item| &item.connectors)
+                .all(|connector| !connector.kind.is_empty() && !connector.pivot.is_empty())
+        );
+        assert!(
+            catalog
+                .iter()
+                .any(|item| item.cutter_speed.is_some() && item.cutter_delay.is_some())
+        );
         assert!(!host.run.join("definitions.json").exists());
         // A rejected shutdown must not make the pipe worker terminate.
         for malformed in [
