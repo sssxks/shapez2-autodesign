@@ -5,6 +5,7 @@ use shapez_blueprint::{Blueprint, Building};
 use shapez_viz::{Category, Connection, Point, Port, Region, Scene, Tile};
 use std::collections::BTreeMap;
 
+/// Clockwise horizontal moves followed by upward and downward layer moves.
 const DIRECTIONS: [Point; 6] = [
     [1, 0, 0],
     [0, 1, 0],

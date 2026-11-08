@@ -95,6 +95,7 @@ pub fn variant(kind: u8, mirrored: bool) -> Cell {
     if mirrored { reflect(result) } else { result }
 }
 
+/// Reflect the cell across its four-tile span, including handed buildings and ports.
 fn reflect(mut cell: Cell) -> Cell {
     for b in &mut cell.buildings {
         b.y = 3 - b.y;

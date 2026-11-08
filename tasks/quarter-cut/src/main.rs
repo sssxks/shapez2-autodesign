@@ -1,13 +1,17 @@
 //! One task executable: solve, visualize, export and optionally validate.
+/// Native acceptance and probe commands for exported quarter-cut designs.
 mod native;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+/// Select one quarter-cut solver or native acceptance operation.
 #[derive(Parser)]
 struct Cli {
+    /// Requested solver, export or native probe.
     #[command(subcommand)]
     command: Command,
 }
+/// Quarter-cut design, export and acceptance entry points.
 #[derive(Subcommand)]
 enum Command {
     /// Solve both halves, assemble the factory and render its material flow in memory.
@@ -19,10 +23,14 @@ enum Command {
     /// Solve a primitive socket-flow region.
     Weave(quarter_cut::weave::Args),
     /// Validate an explicitly supplied game blueprint.
-    Native { blueprint: PathBuf },
+    Native {
+        /// Existing game blueprint to load into the isolated host.
+        blueprint: PathBuf,
+    },
     /// Run one native cell or definition probe.
     Probe {
         #[arg(value_parser = ["cell", "mirror-cell", "middle-cell", "middle-cell-2", "jump-cell", "definitions", "capacity"])]
+        /// Native experiment selected from the supported cell and capacity probes.
         mode: String,
     },
 }

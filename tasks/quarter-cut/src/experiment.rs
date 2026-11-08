@@ -6,12 +6,16 @@ use shapez_runtime::{LabPaths, RunDirectory, run_suite};
 
 /// One physical supply lane with its solved rate in items per second.
 pub(crate) struct Input {
+    /// Native tile coordinate and building layer of the lane endpoint.
     pub position: TilePoint,
+    /// Required source throughput in items per second.
     pub rate: f64,
 }
 /// One physical measured lane and the shape class expected by the region experiment.
 pub(crate) struct Output {
+    /// Native tile coordinate and building layer of the lane endpoint.
     pub position: TilePoint,
+    /// Whether the output carries full shapes rather than cut quarters.
     pub full: bool,
 }
 /// Package the region on a test platform and validate its explicit lane manifest.
