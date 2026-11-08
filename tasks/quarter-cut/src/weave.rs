@@ -6,77 +6,121 @@ use shapez_blueprint::{Building, Rotation};
 use shapez_solver::{Expr, FeasibleSolution, Limits, Model, Solution, Var};
 use std::{collections::BTreeMap, path::PathBuf};
 
+/// Tile coordinates `(x, y, layer)` in the synthesis volume.
 type Point = (i32, i32, i16);
+/// Directed connection keyed by its source tile, direction index, and quadrant mask.
 type Edge = (Point, usize, u8);
+/// Planar offsets in building rotation order: east, south, west, north.
 const DIRECTIONS: [(i32, i32); 4] = [(1, 0), (0, 1), (-1, 0), (0, -1)];
+/// Command-line bounds, candidate families, and export options for socket-flow synthesis.
 #[derive(Parser)]
 pub struct Args {
+    /// Destination blueprint for the selected buildings in synthesis coordinates.
     output: PathBuf,
+    /// Number of tile columns available to candidate footprints.
     #[arg(long, default_value_t = 2)]
     width: i32,
+    /// Number of tile rows; quarter-only synthesis requires eight.
     #[arg(long, default_value_t = 8)]
     height: i32,
+    /// Number of usable building layers, from one through three.
     #[arg(long, default_value_t = 2)]
     layers: i16,
+    /// Maximum number of selected rotators across all supported shape transitions.
     #[arg(long, default_value_t = 3)]
     rotators: i64,
+    /// CP-SAT solve time limit in seconds.
     #[arg(long, default_value_t = 60.)]
     seconds: f64,
+    /// Number of CP-SAT search workers.
     #[arg(long, default_value_t = 4)]
     workers: i32,
+    /// Validate the exported solution in the native experiment with boundary belts.
     #[arg(long)]
     native: bool,
     /// Also synthesize the cutting stages and their half-shape rotation network.
     #[arg(long)]
     whole: bool,
+    /// Include paired jump senders and receivers separated by two through five tiles.
     #[arg(long)]
     jumps: bool,
+    /// Allow whole-shape input and quarter output ports on any row of their edges.
     #[arg(long, requires = "whole")]
     free_ports: bool,
+    /// Load a compatible checkpoint as placement and socket-flow hints.
     #[arg(long)]
     resume: Option<PathBuf>,
+    /// Save selected candidate indices and socket amounts after a feasible solve.
     #[arg(long)]
     checkpoint: Option<PathBuf>,
+    /// Number of unit-rate whole inputs and four-unit quarter outputs to select.
     #[arg(long, default_value_t = 2)]
     units: i64,
+    /// Extend free boundary port candidates to all four edges on layer zero.
     #[arg(long, requires = "free_ports")]
     all_edges: bool,
 }
+/// One shape-specific input or output face of a placement.
 #[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 struct Socket {
+    /// Tile carrying this face, which may differ from the building anchor.
     position: Point,
+    /// Outward-facing direction index after applying the building rotation.
     side: usize,
+    /// Occupied-quadrant bit mask; its population count weights material conservation.
     shape: u8,
+    /// Whether material enters the placement through this face.
     input: bool,
 }
+/// Optional placement and the solver variables needed to export or checkpoint it.
 struct Choice {
+    /// Boolean selecting the entire placement, including any companion.
     enabled: Var,
+    /// Primary building at its synthesis position and rotation.
     building: Building,
+    /// Resolved socket faces paired with their gated integer flow amounts.
     sockets: Vec<(Socket, Var)>,
+    /// Tiles reserved together, including lift layers or both jump endpoints.
     footprint: Vec<Point>,
+    /// Receiver emitted alongside a selected jump sender.
     companion: Option<Building>,
 }
+/// Optional fixed-rate external connection retained for native source and meter placement.
 struct Boundary {
+    /// Boolean selecting this external connection.
     enabled: Var,
+    /// Source tile of the directed edge, outside the volume for supply ports.
     position: Point,
+    /// Whether the connection supplies material rather than consumes it.
     supply: bool,
+    /// Direction of material travel across the boundary.
     direction: usize,
 }
+/// Candidate placements and accumulated equations for a socket-connected factory.
 #[derive(Default)]
 struct Synthesis {
+    /// CP-SAT variables, constraints, hints, and placement-cost objective.
     model: Model,
+    /// Placement selectors sharing each tile, later constrained to at most one.
     occupied: BTreeMap<Point, Vec<Var>>,
-    // Each directed edge has both physical-connection and material-flow equations.
+    /// Signed physical-connection and material-flow balances for each directed shape edge.
     edges: BTreeMap<Edge, (Expr, Expr)>,
+    /// Placements in deterministic generation order used by checkpoint indices.
     choices: Vec<Choice>,
+    /// Rotator selectors summed against the requested machine limit.
     rotators: Vec<Var>,
+    /// Jump selectors grouped by sender tile, receiver tile, and travel direction.
     jumps: BTreeMap<(Point, Point, usize), Vec<Var>>,
+    /// External connections from which native input and output records are derived.
     boundaries: Vec<Boundary>,
 }
+/// Step one tile in a direction without changing layers.
 fn neighbor(p: Point, d: usize) -> Point {
     (p.0 + DIRECTIONS[d].0, p.1 + DIRECTIONS[d].1, p.2)
 }
 impl Synthesis {
+    /// Add a socket's selector and flow to its canonical directed edge balances.
+    /// Inputs subtract from the neighboring source edge; outputs add at their own tile.
     fn socket(&mut self, socket: Socket, enabled: Var, amount: Var) {
         let Socket {
             position,
@@ -93,6 +137,9 @@ impl Synthesis {
         physical.term(enabled, sign);
         flow.term(amount, sign);
     }
+    /// Register a placement with capacity-gated socket flows and quadrant conservation.
+    /// Socket sides are rotated here; positions and footprint tiles must already be resolved.
+    /// Every socket shares the placement selector, so selected faces require physical peers.
     fn add(
         &mut self,
         kind: &str,
@@ -135,6 +182,8 @@ impl Synthesis {
             companion: None,
         });
     }
+    /// Add an optional external edge carrying `amount` units of the given shape.
+    /// Supply adds to both balances; consumption subtracts. Return its selection variable.
     fn boundary(
         &mut self,
         position: Point,
@@ -156,6 +205,9 @@ impl Synthesis {
         });
         enabled
     }
+    /// Close edge balances, forbid footprint overlap, and bound selected rotators.
+    /// Exclude jump pairs whose senders could see an unintended receiver, then minimize
+    /// the weighted cost of 100 per occupied tile plus one per emitted building.
     fn finish(&mut self, rotators: i64) {
         for (_, candidates) in std::mem::take(&mut self.occupied) {
             self.model.at_most_one(candidates);
@@ -204,6 +256,9 @@ impl Synthesis {
         self.model.minimize(objective);
     }
 }
+/// Enumerate in-bounds transport and processing placements, then finalize their constraints.
+/// Quarter-only mode supplies eight fixed quarter streams; whole mode selects whole-shape
+/// inputs and exactly three cutters per unit. Each selected output carries four quarters.
 fn build(args: &Args) -> Synthesis {
     let mut result = Synthesis::default();
     for z in 0..args.layers {
@@ -440,6 +495,10 @@ fn build(args: &Args) -> Synthesis {
     result.finish(args.rotators);
     result
 }
+/// Validate options, solve the placement model, and export its selected buildings.
+/// Optionally load checkpoint hints, save the feasible assignment, and run native validation.
+/// Return an error for invalid bounds, incompatible checkpoints, infeasible search outcomes,
+/// solver or file failures, or failed native validation.
 pub fn run(args: Args) -> Result<()> {
     ensure!(
         args.width > 0
@@ -544,6 +603,9 @@ pub fn run(args: Args) -> Result<()> {
     Ok(())
 }
 
+/// Translate selected buildings into the native test area and attach source and meter belts.
+/// Quarter-only solutions receive fixed upstream cutting stages; whole solutions use their
+/// selected supply boundaries. Feed whole shapes at 0.5 per second and validate quarter outputs.
 fn native(
     args: &Args,
     selected: &[Building],
@@ -623,10 +685,14 @@ fn native(
     crate::experiment::validate("weave", buildings, None, &inputs, &outputs)
 }
 
+/// Feasible placement and flow assignment persisted for a compatible model's search hints.
 #[derive(Serialize, Deserialize)]
 struct WeaveCheckpoint {
+    /// Model-defining dimensions, limits, and candidate-family switches in specification order.
     spec: [i64; 9],
+    /// Total candidate count checked before interpreting saved placement indices.
     choices: usize,
+    /// Selected candidate indices with integer flow amounts in each candidate's socket order.
     selected: Vec<(usize, Vec<i64>)>,
 }
 /// Parameters that determine candidate ordering and flow constraints.
