@@ -33,3 +33,31 @@ fn task_artifacts_publish_atomically_and_resolve_in_suites() {
     fs::remove_dir(paths.root.join("runs")).unwrap();
     fs::remove_dir(paths.root).unwrap();
 }
+
+#[test]
+fn native_cases_keep_payloads_typed_and_toml_rejects_misspelled_fields() {
+    let suite: Suite = toml::from_str("[[cases]]\nname = 'inspection'\noperation = 'inspect-blueprint'\nblueprint = 'factory.spz2bp'\nexpected_format_version = 5\n").unwrap();
+    assert_eq!(suite.cases[0].expected_format_version, Some(5));
+    assert!(toml::from_str::<Suite>("[[cases]]\nname = 'bad'\nexpected_buidlings = 12\n").is_err());
+    let legacy: Suite = toml::from_str(include_str!(
+        "../../../tasks/cmam-compact/tests/legacy.toml"
+    ))
+    .unwrap();
+    legacy.validate().unwrap();
+    let recipe = shapez_model::Recipe {
+        target: "CuCuCuCu".parse().unwrap(),
+        root: shapez_model::NodeId(0),
+        nodes: vec![shapez_model::RecipeNode {
+            id: shapez_model::NodeId(0),
+            op: shapez_model::Operation::Source,
+            inputs: vec![],
+            expected: "CuCuCuCu".parse().unwrap(),
+            color: None,
+        }],
+    };
+    recipe.validate().unwrap();
+    let case = shapez_runtime::case! { name: "recipe", operation: "recipe", recipe: recipe };
+    let wire = serde_json::to_string(&case).unwrap();
+    let decoded: shapez_runtime::TestCase = serde_json::from_str(&wire).unwrap();
+    assert_eq!(decoded.recipe.unwrap().target.to_string(), "CuCuCuCu");
+}

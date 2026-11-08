@@ -12,8 +12,7 @@ pub fn run_check(p: &LabPaths) -> Result<()> {
 pub fn run_recipe(p: &LabPaths, target: &str) -> Result<()> {
     let recipe = crate::plan_recipe(target)?;
     let run = RunDirectory::create(&p.root, "scaffold-recipe")?;
-    let path = run.path.join("recipe.json");
-    fs::write(&path, serde_json::to_vec_pretty(&recipe)?)?;
+
     p.build("LabMod")?;
     let t = Duration::from_secs(180);
     let mut host = Host::start_in(p, &run.path, t)?;

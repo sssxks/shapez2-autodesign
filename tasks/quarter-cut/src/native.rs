@@ -44,10 +44,7 @@ pub fn validate(bp: Blueprint) -> Result<()> {
         "quarter-cut-1x3.spz2bp"
     });
     fs::write(&output, encode_blueprint(&bp)?)?;
-    fs::write(
-        run.path.join("layout.json"),
-        serde_json::to_vec_pretty(&bp)?,
-    )?;
+
     println!("Factory: {}", output.display());
     let count = bp.islands()[0].buildings().len();
     let merger_count = bp.islands()[0]

@@ -1,5 +1,5 @@
+use crate::reports::{AdapterReport, Connection, Summary};
 use anyhow::{Result, bail, ensure};
-use serde_json::{Value, json};
 use shapez_blueprint::{
     Blueprint, Building, BuildingBlueprint, Island, Rotation, encode_blueprint,
 };
@@ -213,7 +213,12 @@ fn split(
 }
 
 /// Generate a full, reproducible adapter using the user's own splitter and RGB templates.
-pub fn connect_cmam(input: &Path, splitter: &Path, rgb: &Path, out: &Path) -> Result<Value> {
+pub fn connect_cmam(
+    input: &Path,
+    splitter: &Path,
+    rgb: &Path,
+    out: &Path,
+) -> Result<AdapterReport> {
     let mut original = Blueprint::read(input)?;
     let split_bp = Blueprint::read(splitter)?;
     let rgb_bp = Blueprint::read(rgb)?;
@@ -318,8 +323,12 @@ pub fn connect_cmam(input: &Path, splitter: &Path, rgb: &Path, out: &Path) -> Re
                     corner(&mut b, input, output, fluid)
                 }
             }
-            connections
-                .push(json!({"chunk":[pos.0,pos.1],"net":net,"input":input,"outputs":f.outputs}));
+            connections.push(Connection {
+                chunk: [pos.0, pos.1],
+                net,
+                input,
+                outputs: f.outputs.clone(),
+            });
         }
         let mut occupied = BTreeSet::new();
         for e in &b {
@@ -339,7 +348,12 @@ pub fn connect_cmam(input: &Path, splitter: &Path, rgb: &Path, out: &Path) -> Re
     fs::create_dir_all(out)?;
     let path = out.join("CMAM connected.spz2bp");
     fs::write(&path, encode_blueprint(&original)?)?;
-    let report = json!({"blueprint":path,"generated_platforms":grid.len(),"summary":original.summary(),"connections":connections});
+    let report = AdapterReport {
+        blueprint: path,
+        generated_platforms: grid.len(),
+        summary: Summary::from(&original),
+        connections,
+    };
     fs::write(
         out.join("adapter.json"),
         serde_json::to_vec_pretty(&report)?,

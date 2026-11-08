@@ -4,7 +4,7 @@
 
 ## 配方编译器原型
 
-`cargo run -p scaffold-recipe -- plan 'WwcbWwcb:P-cwP-cw:WgP---P-'` 使用 Rust 生成加工 DAG，再由独立游戏实例逐节点执行原生形状运算。输出位于本次运行目录：`recipe.json`、`recipe-verification.json`、`verified-recipe.json` 和 `recipe.txt`。节点记录设备操作、上游节点、期望形状和原生输出端口。真实原料只允许四种未染色完整基础形状与完整销钉；颜色限定 RGB 可混合的七色。没有把目标或中间形状作为原料注入。
+`cargo run -p scaffold-recipe -- plan 'WwcbWwcb:P-cwP-cw:WgP---P-'` 使用 Rust 生成加工 DAG，通过管道直接发送 typed recipe，再由独立游戏实例逐节点执行原生形状运算。输出位于本次运行目录：`recipe.json`、`recipe-verification.json`、`verified-recipe.json` 和 `recipe.txt`。节点记录设备操作、上游节点、期望形状和原生输出端口。真实原料只允许四种未染色完整基础形状与完整销钉；颜色限定 RGB 可混合的七色。没有把目标或中间形状作为原料注入。
 
 这是自动配方/加工网表原型，尚未生成摆放在地图上的自动控制工厂。它验证形状变换，不测机器吞吐；DAG 的共享节点需要在布局阶段配置分流和设备数量。流体颜色参数假定上游已有相应 RGB 混色供应。
 
@@ -32,7 +32,7 @@ cargo run -p scaffold-recipe -- plan 'WwcbWwcb:P-cwP-cw:WgP---P-'
 cargo run -p scaffold-recipe -- check
 ```
 
-每次运行有独立目录。成功规划及原生验证后发布 `tasks/scaffold-recipe/latest.json`；用例集生成后发布 `tasks/scaffold-recipe-check/latest.json`。原始逻辑 DAG 用 `NodeId` 引用共享形状；`VerifiedRecipe` 将每条连接解析为明确的 `OutputRef { node, port }`，供后续实体布局使用。
+每次运行有独立目录。成功规划及原生验证后发布 `tasks/scaffold-recipe/latest.json`；`check` 在内存中生成 624 个用例并直接执行，不发布中间 suite 或 recipe 文件。原始逻辑 DAG 用 `NodeId` 引用共享形状；`VerifiedRecipe` 将每条连接解析为明确的 `OutputRef { node, port }`，供后续实体布局使用。
 
 ## 2026-11-05 重构验收
 

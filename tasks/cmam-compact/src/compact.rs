@@ -1,6 +1,6 @@
 use crate::CmamDesign;
+use crate::reports::{Bounds, CompactReport, Previous, Route, Summary};
 use anyhow::{Result, ensure};
-use serde_json::{Value, json};
 use shapez_blueprint::{
     Blueprint, Configuration, Island, Rotation, encode_blueprint, space_island,
 };
@@ -16,7 +16,7 @@ use std::{
 };
 pub struct CompactBuild {
     pub blueprint: Blueprint,
-    pub manifest: Value,
+    pub manifest: CompactReport,
 }
 
 pub fn build_compact(
@@ -208,7 +208,13 @@ pub fn build_compact(
     let ordered: BTreeMap<_, _> = nodes.iter().collect();
     for (&p, node) in ordered {
         islands.push(space_island(p, node, problem.nets[node.net].fluid));
-        routing.push(json!({"p":p,"net":node.net,"input":node.incoming.index(),"out_z":node.output_layer,"outputs":node.outgoing.iter().map(|d|d.index()).collect::<Vec<_>>()}));
+        routing.push(Route {
+            p,
+            net: node.net,
+            input: node.incoming.index(),
+            out_z: node.output_layer,
+            outputs: node.outgoing.iter().map(|d| d.index()).collect(),
+        });
     }
     let mut result = original.clone();
     result.replace_islands(islands)?;
@@ -216,7 +222,23 @@ pub fn build_compact(
         interface: FactoryInterface { sources, targets },
         cut_islands: cuts,
     };
-    let manifest = json!({"sources":boundary.interface.sources,"targets":boundary.interface.targets,"cut_islands":boundary.cut_islands,"space_ratio":4,"production_buildings":production_buildings,"space_nodes":nodes.len(),"routing":routing,"summary":result.summary(),"bounds":bounds(&result),"production":{"output_chunk":design.accepted_output,"signal_receivers":design.signal_receivers},"previous":previous.map(|p|json!({"summary":p.summary(),"bounds":bounds(p)}))});
+    let manifest = CompactReport {
+        boundary,
+        space_ratio: 4,
+        production_buildings,
+        space_nodes: nodes.len(),
+        routing,
+        summary: Summary::from(&result),
+        bounds: bounds(&result),
+        production: shapez_runtime::ProductionConfig {
+            output_chunk: design.accepted_output,
+            signal_receivers: design.signal_receivers,
+        },
+        previous: previous.map(|p| Previous {
+            summary: Summary::from(p),
+            bounds: bounds(p),
+        }),
+    };
     Ok(CompactBuild {
         blueprint: result,
         manifest,
@@ -246,7 +268,7 @@ pub fn compact_cmam(
     rgb: &Path,
     out: &Path,
     previous: Option<&Path>,
-) -> Result<Value> {
+) -> Result<CompactReport> {
     let input = Blueprint::read(input)?;
     let rgb = Blueprint::read(rgb)?;
     let previous = previous.map(Blueprint::read).transpose()?;
@@ -255,7 +277,7 @@ pub fn compact_cmam(
     Ok(build.manifest)
 }
 
-fn bounds(bp: &Blueprint) -> Value {
+fn bounds(bp: &Blueprint) -> Bounds {
     let mut points = vec![];
     for i in bp.islands() {
         let (x, y) = (i.x, i.y);
@@ -268,5 +290,11 @@ fn bounds(bp: &Blueprint) -> Value {
     let x1 = points.iter().map(|p| p.0).max().unwrap();
     let y0 = points.iter().map(|p| p.1).min().unwrap();
     let y1 = points.iter().map(|p| p.1).max().unwrap();
-    json!({"min_x":x0,"min_y":y0,"width":x1-x0+1,"height":y1-y0+1,"area":(x1-x0+1)*(y1-y0+1)})
+    Bounds {
+        min_x: x0,
+        min_y: y0,
+        width: x1 - x0 + 1,
+        height: y1 - y0 + 1,
+        area: (x1 - x0 + 1) * (y1 - y0 + 1),
+    }
 }

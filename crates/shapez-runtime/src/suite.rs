@@ -4,7 +4,7 @@ use crate::{
     protocol::{Response, Suite},
 };
 use anyhow::{Context, Result, ensure};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{fs, path::Path, time::Duration};
 
@@ -13,7 +13,7 @@ pub struct CaseResult {
     pub name: String,
     pub passed: bool,
     #[serde(flatten)]
-    pub response: Option<Response>,
+    pub response: Option<Response<CaseOutcome>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub host_error: Option<String>,
 }
@@ -54,7 +54,7 @@ pub fn expand_paths(suite: &mut Suite, p: &LabPaths) -> Result<()> {
     Ok(())
 }
 pub fn run_suite_file(p: &LabPaths, path: &Path, timeout: Duration) -> Result<()> {
-    let suite: Suite = serde_json::from_slice(&fs::read(path)?)?;
+    let suite: Suite = toml::from_str(&fs::read_to_string(path)?)?;
     run_suite(p, &suite, timeout)
 }
 
@@ -75,7 +75,7 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
     let mut host = Host::start_in(p, &run.path, timeout)?;
     let mut results = Vec::new();
     for case in &suite.cases {
-        let response: Response = match host.request(&case.operation, case, timeout) {
+        let response: Response<CaseOutcome> = match host.request(&case.operation, case, timeout) {
             Ok(response) => response,
             Err(e) => {
                 results.push(CaseResult {
@@ -88,12 +88,7 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
             }
         };
         let passed = response.ok == case.expected_ok
-            && response
-                .result
-                .as_ref()
-                .and_then(|r| r.get("verified"))
-                .and_then(Value::as_bool)
-                != Some(false);
+            && response.result.as_ref().and_then(|r| r.verified) != Some(false);
         println!("{}: {}", case.name, if passed { "PASS" } else { "FAIL" });
         if !passed {
             eprintln!(
@@ -114,7 +109,7 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
     let report = run.path.join("report.json");
     fs::write(
         &report,
-        serde_json::to_vec_pretty(&serde_json::json!({"cases":results}))?,
+        serde_json::to_vec_pretty(&SuiteReport { cases: &results })?,
     )?;
     host.shutdown()?;
     println!("{}", report.display());
@@ -124,4 +119,16 @@ pub fn run_suite(p: &LabPaths, suite: &Suite, timeout: Duration) -> Result<()> {
     );
     run.publish(&p.root)?;
     Ok(())
+}
+
+/// Only acceptance status participates in runner logic; plugin diagnostics are archived verbatim.
+#[derive(Serialize, Deserialize)]
+pub struct CaseOutcome {
+    pub verified: Option<bool>,
+    #[serde(flatten)]
+    pub diagnostics: serde_json::Map<String, Value>,
+}
+#[derive(Serialize)]
+struct SuiteReport<'a> {
+    cases: &'a [CaseResult],
 }

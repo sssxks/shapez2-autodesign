@@ -30,7 +30,7 @@ tasks/
 
 [12 带优先合并器](tasks/priority-merge/README.md) 提供直列优先、反向直列优先和左右输入左侧优先三个版本；运行 `cargo run -p priority-merge` 一次生成并验收三份带图库图标的单平台蓝图。
 
-[四象限切割器](tasks/quarter-cut/README.md) 提供 1×2 平台成品：`CuCuCuCu` 满带输入 12 带，四口各满带输出 12 带 `Cu------`。运行 `cargo run --locked --release -p quarter-cut` 从已提交的分区解重建蓝图和交互可视化；`-- --native` 单独执行原生整机验收。
+[四象限切割器](tasks/quarter-cut/README.md) 提供 1×2 平台成品：`CuCuCuCu` 满带输入 12 带，四口各满带输出 12 带 `Cu------`。运行 `cargo run --release -p quarter-cut -- factory artifacts/quarter-cut` 在内存中求解、装配并生成蓝图和交互可视化；添加 `--native` 验收当前结果。
 
 ## 构建与验证
 
@@ -86,7 +86,7 @@ Managed DLL 是独立副本，其他只读发行资源使用硬链接。HostPrep
 
 ## 任务命令
 
-CMAM 入口的 `inspect` 输出蓝图摘要，`decode` 解压到独立运行目录；两个任务都提供 `prepare`、`probe` 和 `test`。`probe --operation capacities` 查询原生速度及运输类型。任务的 `test [suite.json]` 在同一宿主中执行用例，错误请求可通过 `expected_ok: false` 验收。
+CMAM 入口的 `inspect` 输出蓝图摘要，两个任务都提供 `prepare`、`probe` 和 `test`。`probe --operation capacities` 查询原生速度及运输类型。任务的 `test <suite.toml>` 在同一宿主中执行用例，错误请求可通过 `expected_ok: false` 验收。
 
 `decode` 输出完整类型化模型（包含图标和来源格式版本），可以直接通过 `Blueprint::read` 读取。`reencode <blueprint>` 将既有蓝图转换为当前格式，输出到新的独立运行目录，保留源文件。蓝图模型、格式及图库旧版警告的原因见[蓝图格式说明](docs/blueprint-format.md)。
 
@@ -96,7 +96,7 @@ Cargo 使用标准的 `target` 目录，没有写死的个人路径。可以通�
 
 ```powershell
 cargo run -p cmam-compact -- test
-cargo run -p cmam-compact -- test tasks/cmam-compact/tests/production-smoke.json
+cargo run -p cmam-compact -- build <source.spz2bp> --rgb <rgb.spz2bp> --native --target 'WrWr----:CuCu----'
 cargo run -p scaffold-recipe -- plan 'WwcbWwcb:P-cwP-cw:WgP---P-'
 cargo run -p scaffold-recipe -- check
 cargo run -p scaffold-recipe -- test

@@ -88,6 +88,14 @@ pub struct TestCase {
     pub warmup_seconds: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub minimum_rate_ratio: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub production_manifest: Option<ProductionManifest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_produced: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub adapter_probe: Option<bool>,
 }
 impl Default for TestCase {
     fn default() -> Self {
@@ -116,6 +124,10 @@ impl Default for TestCase {
             rate_manifest: None,
             warmup_seconds: None,
             minimum_rate_ratio: None,
+            production_manifest: None,
+            target: None,
+            min_produced: None,
+            adapter_probe: None,
         }
     }
 }
@@ -146,4 +158,17 @@ impl Suite {
         }
         Ok(())
     }
+}
+
+/// Production experiment configuration carried directly over the native protocol.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProductionConfig {
+    pub output_chunk: shapez_model::ChunkPos,
+    pub signal_receivers: usize,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProductionManifest {
+    #[serde(flatten)]
+    pub interface: shapez_model::FactoryInterface,
+    pub production: ProductionConfig,
 }

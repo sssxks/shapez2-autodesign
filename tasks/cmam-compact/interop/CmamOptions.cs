@@ -33,12 +33,12 @@ internal sealed class CmamOptions
         MinimumProduced = JsonInput.Long(args, "min_produced");
         if (MinimumProduced < 0)
             throw new ArgumentOutOfRangeException("min_produced");
-        var path = JsonInput.OptionalString(args, "production_manifest");
-        if (path != null)
+        var manifest = args["production_manifest"];
+        if (manifest != null)
         {
             if (Adapter)
                 throw new ArgumentException("Production experiment cannot cut adapter buildings");
-            Production = new ProductionOptions(JsonInput.ReadFile(path), JsonInput.String(args, "target"));
+            Production = new ProductionOptions(JsonInput.Object(manifest, "production_manifest"), JsonInput.String(args, "target"));
         }
     }
 }

@@ -19,16 +19,14 @@ enum Command {
         timeout: u64,
     },
     Test {
-        suite: Option<PathBuf>,
+        suite: PathBuf,
         #[arg(long, default_value_t = 300)]
         timeout: u64,
     },
     Inspect {
         blueprint: PathBuf,
     },
-    Decode {
-        blueprint: PathBuf,
-    },
+
     /// Rewrite an existing blueprint using the current format and typed model.
     Reencode {
         blueprint: PathBuf,
@@ -39,6 +37,10 @@ enum Command {
         rgb: PathBuf,
         #[arg(long)]
         previous: Option<PathBuf>,
+        #[arg(long)]
+        native: bool,
+        #[arg(long = "target", requires = "native")]
+        targets: Vec<String>,
     },
     Legacy {
         blueprint: PathBuf,
@@ -65,9 +67,6 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::Test { suite, timeout } => {
-            let suite = suite.unwrap_or_else(|| {
-                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/compact.json")
-            });
             run_suite_file(&paths, &suite, Duration::from_secs(timeout))
         }
         Command::Inspect { blueprint } => {
@@ -75,17 +74,6 @@ fn main() -> Result<()> {
                 "{}",
                 serde_json::to_string_pretty(&Blueprint::read(blueprint)?.summary())?
             );
-            Ok(())
-        }
-        Command::Decode { blueprint } => {
-            let run = RunDirectory::create(&paths.root, "decode")?;
-            let input = run.snapshot(&blueprint, "source.spz2bp")?;
-            let output = run.path.join("decoded.json");
-            fs::write(
-                &output,
-                serde_json::to_vec_pretty(&Blueprint::read(input)?)?,
-            )?;
-            println!("{}", output.display());
             Ok(())
         }
         Command::Reencode { blueprint } => {
@@ -105,7 +93,16 @@ fn main() -> Result<()> {
             blueprint,
             rgb,
             previous,
-        } => cmam_compact::run_compact(&paths, &blueprint, &rgb, previous.as_deref()),
+            native,
+            targets,
+        } => cmam_compact::run_compact(
+            &paths,
+            &blueprint,
+            &rgb,
+            previous.as_deref(),
+            native,
+            &targets,
+        ),
         Command::Legacy {
             blueprint,
             splitter,
