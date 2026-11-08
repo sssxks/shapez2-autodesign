@@ -440,38 +440,6 @@ fn build(args: &Args) -> Synthesis {
     result.finish(args.rotators);
     result
 }
-#[derive(Serialize, Deserialize)]
-struct ResolvedSocket {
-    #[serde(flatten)]
-    socket: Socket,
-    half_items_per_second: i64,
-}
-#[derive(Serialize, Deserialize)]
-struct ResolvedBuilding {
-    building: Building,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    companion: Option<Building>,
-    sockets: Vec<ResolvedSocket>,
-}
-fn export(model: &Synthesis, solution: &Solution) -> Vec<ResolvedBuilding> {
-    model
-        .choices
-        .iter()
-        .filter(|c| solution.value(c.enabled) == 1)
-        .map(|c| ResolvedBuilding {
-            building: c.building.clone(),
-            companion: c.companion.clone(),
-            sockets: c
-                .sockets
-                .iter()
-                .map(|&(socket, amount)| ResolvedSocket {
-                    socket,
-                    half_items_per_second: solution.value(amount),
-                })
-                .collect(),
-        })
-        .collect()
-}
 pub fn run(args: Args) -> Result<()> {
     ensure!(
         args.width > 0
@@ -521,30 +489,21 @@ pub fn run(args: Args) -> Result<()> {
         workers: args.workers,
         log: false,
     })?;
-    let selected = if solution.feasible() {
-        export(&model, &solution)
-    } else {
-        Vec::new()
-    };
-    let rotators = selected
-        .iter()
-        .filter(|b| b.building.definition.starts_with("Rotator"))
-        .count();
-    let building_count: usize = selected
-        .iter()
-        .map(|b| 1 + usize::from(b.companion.is_some()))
-        .sum();
-    let occupied: usize = model
-        .choices
-        .iter()
-        .filter(|c| solution.feasible() && solution.value(c.enabled) == 1)
-        .map(|c| c.footprint.len())
-        .sum();
     ensure!(
         solution.feasible(),
         "No feasible weave solution: {:?}",
         solution.status
     );
+    let selected = || {
+        model
+            .choices
+            .iter()
+            .filter(|c| solution.value(c.enabled) == 1)
+    };
+    let rotators = selected()
+        .filter(|c| c.building.definition.starts_with("Rotator"))
+        .count();
+    let occupied: usize = selected().map(|c| c.footprint.len()).sum();
     if let Some(path) = &args.checkpoint {
         crate::checkpoint::save(
             path,
@@ -570,14 +529,14 @@ pub fn run(args: Args) -> Result<()> {
             },
         )?;
     }
-    let buildings = selected
-        .iter()
+    let buildings = selected()
         .flat_map(|s| std::iter::once(s.building.clone()).chain(s.companion.clone()))
         .collect::<Vec<_>>();
     crate::export_buildings(&buildings, &args.output)?;
     if args.native {
-        native(&args, &selected, &model, &solution)?;
+        native(&args, &buildings, &model, &solution)?;
     }
+    let building_count = buildings.len();
     eprintln!(
         "{:?}: {building_count} buildings, {occupied} occupied tiles, {rotators} rotators, {:.2}s",
         solution.status, solution.seconds
@@ -587,7 +546,7 @@ pub fn run(args: Args) -> Result<()> {
 
 fn native(
     args: &Args,
-    selected: &[ResolvedBuilding],
+    selected: &[Building],
     model: &Synthesis,
     solution: &Solution,
 ) -> Result<()> {
@@ -597,7 +556,6 @@ fn native(
     let run = RunDirectory::create(&paths.root, "quarter-weave")?;
     let mut buildings: Vec<_> = selected
         .iter()
-        .flat_map(|s| std::iter::once(&s.building).chain(s.companion.iter()))
         .map(|building| {
             let mut b = building.clone();
             b.x += if args.whole { 8 } else { 11 };

@@ -32,8 +32,8 @@ pub fn build(
         seed.len() == 3 && seed.iter().all(|row| row.len() == 16),
         "Expected 3 layers with 16 cells each"
     );
-    let floor = floor(args.chunks);
-    let (inputs, outputs) = ports(args.chunks, args.west());
+    let floor = floor();
+    let (inputs, outputs) = ports(args.west());
     let approaches: BTreeSet<_> = inputs.iter().map(|p| shift(p.p, p.d, 1, p.p.2)).collect();
     let mut poses = Vec::new();
     let mut fixed = BTreeSet::new();

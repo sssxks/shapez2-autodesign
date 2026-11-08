@@ -37,68 +37,36 @@ pub fn rotate(p: (i32, i32), r: usize) -> (i32, i32) {
     let (x, y) = p;
     [(x, y), (-y, x), (-x, -y), (y, -x)][r % 4]
 }
-pub fn floor(chunks: i32) -> BTreeSet<Point> {
-    (3..chunks * 20 - 3)
-        .flat_map(|x| (3..17).flat_map(move |y| (0..3).map(move |z| (x, y, z))))
+/// Usable tiles of the supported three-layer 1x2 factory.
+pub fn floor() -> BTreeSet<Point> {
+    let g = shapez_model::FoundationGeometry::strip(2, 3);
+    (g.min.0..=g.max.0)
+        .flat_map(|x| (g.min.1..=g.max.1).flat_map(move |y| (0..g.layers).map(move |z| (x, y, z))))
         .collect()
 }
-pub fn ports(chunks: i32, west: bool) -> (Vec<Port>, Vec<Port>) {
+/// Search and native acceptance derive physical lanes from the same socket declarations.
+pub fn ports(west: bool) -> (Vec<Port>, Vec<Port>) {
+    let geometry = shapez_model::FoundationGeometry::strip(2, 3);
+    let sockets = if west {
+        crate::factory_sockets()
+    } else {
+        crate::original_sockets()
+    };
     let mut inputs = Vec::new();
     let mut outputs = Vec::new();
-    for z in 0..3 {
-        for lane in 0..4 {
-            inputs.push(if chunks == 3 {
-                Port {
-                    p: (28 + lane, 2, z),
-                    d: 1,
-                }
-            } else if west {
-                Port {
-                    p: (2, 8 + lane, z),
-                    d: 0,
-                }
-            } else {
-                Port {
-                    p: (8 + lane, 2, z),
-                    d: 1,
-                }
-            });
-        }
-    }
-    if chunks == 3 || west {
-        for (y, d) in [(2, 3), (17, 1)] {
-            for base in [8, chunks * 20 - 12] {
-                for z in 0..3 {
-                    for lane in 0..4 {
-                        outputs.push(Port {
-                            p: (base + lane, y, z),
-                            d,
-                        });
-                    }
-                }
-            }
-        }
-    } else {
-        for (x, d) in [(2, 2), (37, 0)] {
-            for z in 0..3 {
-                for lane in 0..4 {
-                    outputs.push(Port {
-                        p: (x, 8 + lane, z),
-                        d,
-                    });
-                }
-            }
-        }
-        for base in [8, 28] {
-            for z in 0..3 {
-                for lane in 0..4 {
-                    outputs.push(Port {
-                        p: (base + lane, 17, z),
-                        d: 1,
-                    });
-                }
-            }
-        }
+    let geometry = &geometry;
+    for socket in sockets {
+        let ports = if socket.output {
+            &mut outputs
+        } else {
+            &mut inputs
+        };
+        ports.extend((0..3).flat_map(|z| {
+            (0..4).map(move |lane| Port {
+                p: geometry.socket_tile(socket, lane, z),
+                d: socket.direction(),
+            })
+        }));
     }
     (inputs, outputs)
 }

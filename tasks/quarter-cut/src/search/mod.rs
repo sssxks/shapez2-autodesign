@@ -30,8 +30,6 @@ pub struct SearchArgs {
     radius: i32,
     #[arg(long)]
     half_turn: bool,
-    #[arg(long, default_value_t = 2)]
-    chunks: i32,
     #[arg(long)]
     checkpoint: Option<PathBuf>,
     #[arg(long, value_enum, default_value = "cp-sat")]
@@ -53,7 +51,7 @@ impl SearchArgs {
 }
 pub fn run(args: SearchArgs) -> Result<()> {
     anyhow::ensure!(
-        (2..=3).contains(&args.chunks) && args.radius >= 0 && args.workers > 0 && args.seconds > 0.,
+        args.radius >= 0 && args.workers > 0 && args.seconds > 0.,
         "Invalid search limits"
     );
     if let Some(parent) = args.output.parent() {
