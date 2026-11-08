@@ -1,5 +1,7 @@
 //! Correct the supplied overflow cutter's output quadrants.
-use anyhow::{Result, ensure};
+#[path = "../overflow_design.rs"]
+mod design;
+use anyhow::Result;
 use shapez_blueprint::{BlueprintContent, Island, Rotation, decode_blueprint, encode_blueprint};
 use shapez_runtime::{LabPaths, RunDirectory, run_suite};
 use std::{fs, path::PathBuf, time::Duration};
@@ -14,27 +16,8 @@ fn main() -> Result<()> {
     };
     let island = &mut islands.entries[0];
     island.x = 0;
-    let mut changed = 0;
-    for b in &mut island.buildings.as_mut().expect("buildings").entries {
-        if b.y == 16 && [9, 10, 11, 28, 29, 30].contains(&b.x) {
-            ensure!(
-                b.definition == "BeltDefaultForwardInternalVariant",
-                "expected straight belt"
-            );
-            b.definition = "RotatorOneQuadInternalVariant".into();
-            changed += 1;
-        }
-    }
-    ensure!(changed == 18, "expected 18 output rotators, got {changed}");
-    for b in &mut island.buildings.as_mut().expect("buildings").entries {
-        if [7, 32].contains(&b.x) && [7, 9, 11, 13].contains(&b.y) {
-            ensure!(
-                b.definition == "BeltDefaultForwardInternalVariant",
-                "parallel output belt"
-            );
-            b.definition = "RotatorOneQuadInternalVariant".into();
-        }
-    }
+    let buildings = design::layout(island.buildings.as_ref().expect("buildings"))?;
+    island.buildings = Some(shapez_blueprint::BuildingBlueprint::new(buildings));
     let output = run.path.join("diagonal-overflow-corrected.spz2bp");
     fs::write(&output, encode_blueprint(&bp)?)?;
     let mut harness = bp.clone();
