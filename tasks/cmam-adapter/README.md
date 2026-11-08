@@ -1,11 +1,11 @@
 # CMAM 接入与压缩
 
-本 task 只有 `cmam-compact` 一个 binary。构建结果、路由、供料接口和生产参数均使用 Rust 结构体；可视化及原生验收直接消费内存结果。
+本 task 只有 `cmam-adapter` 一个 binary。构建结果、路由、供料接口和生产参数均使用 Rust 结构体；可视化及原生验收直接消费内存结果。
 
 ```powershell
-cargo run --release -p cmam-compact -- build <source.spz2bp> --rgb <rgb.spz2bp>
-cargo run --release -p cmam-compact -- build <source.spz2bp> --rgb <rgb.spz2bp> --native
-cargo run --release -p cmam-compact -- build <source.spz2bp> --rgb <rgb.spz2bp> --native --target 'WrWr----:CuCu----'
+cargo run --release -p cmam-adapter -- build <source.spz2bp> --rgb <rgb.spz2bp>
+cargo run --release -p cmam-adapter -- build <source.spz2bp> --rgb <rgb.spz2bp> --native
+cargo run --release -p cmam-adapter -- build <source.spz2bp> --rgb <rgb.spz2bp> --native --target 'WrWr----:CuCu----'
 ```
 
 `--previous <blueprint>` 添加旧版对照；`--target` 可以重复指定多个生产目标，要求同时使用 `--native`。

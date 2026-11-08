@@ -1,5 +1,5 @@
 [package]
-name = "cmam-compact"
+name = "cmam-adapter"
 version.workspace = true
 edition.workspace = true
 

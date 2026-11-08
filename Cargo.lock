@@ -227,7 +227,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cmam-compact"
+name = "cmam-adapter"
 version = "0.1.0"
 dependencies = [
  "anyhow",

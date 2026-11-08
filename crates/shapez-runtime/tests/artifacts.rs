@@ -40,7 +40,7 @@ fn native_cases_keep_payloads_typed_and_toml_rejects_misspelled_fields() {
     assert_eq!(suite.cases[0].expected_format_version, Some(5));
     assert!(toml::from_str::<Suite>("[[cases]]\nname = 'bad'\nexpected_buidlings = 12\n").is_err());
     let legacy: Suite = toml::from_str(include_str!(
-        "../../../tasks/cmam-compact/tests/legacy.toml"
+        "../../../tasks/cmam-adapter/tests/legacy.toml"
     ))
     .unwrap();
     legacy.validate().unwrap();

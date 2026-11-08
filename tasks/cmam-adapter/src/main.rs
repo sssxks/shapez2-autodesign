@@ -98,7 +98,7 @@ fn main() -> Result<()> {
             previous,
             native,
             targets,
-        } => cmam_compact::run_compact(
+        } => cmam_adapter::run_compact(
             &paths,
             &blueprint,
             &rgb,
@@ -110,6 +110,6 @@ fn main() -> Result<()> {
             blueprint,
             splitter,
             rgb,
-        } => cmam_compact::run_legacy(&paths, &blueprint, &splitter, &rgb),
+        } => cmam_adapter::run_legacy(&paths, &blueprint, &splitter, &rgb),
     }
 }

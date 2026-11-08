@@ -10,7 +10,7 @@ pub fn run_compact(
     native: bool,
     targets: &[String],
 ) -> Result<()> {
-    let run = RunDirectory::create(&p.root, "cmam-compact")?;
+    let run = RunDirectory::create(&p.root, "cmam-adapter")?;
     let blueprint = run.snapshot(blueprint, "source.spz2bp")?;
     let rgb = run.snapshot(rgb, "rgb.spz2bp")?;
     let previous = previous
@@ -33,7 +33,7 @@ pub fn run_compact(
         let projects = if targets.is_empty() {
             vec![]
         } else {
-            vec![p.repo.join("tasks/cmam-compact/interop/CmamTask.csproj")]
+            vec![p.repo.join("tasks/cmam-adapter/interop/CmamTask.csproj")]
         };
         shapez_runtime::run_suite(
             p,

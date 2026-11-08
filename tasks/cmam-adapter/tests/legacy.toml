@@ -1,4 +1,4 @@
-projects = ["${REPO}/tasks/cmam-compact/interop/CmamTask.csproj"]
+projects = ["${REPO}/tasks/cmam-adapter/interop/CmamTask.csproj"]
 
 [[cases]]
 name = "host-capabilities"

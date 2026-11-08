@@ -17,7 +17,7 @@ interop/
   HostPrep/          临时游戏副本与启动裁剪
   LabMod/            世界生命周期、原生运算、供料、测量、连接图和扩展接口
 tasks/
-  cmam-compact/      CMAM 接入设计、旧版生成、原生生产/接入插件、模板与套件
+  cmam-adapter/      CMAM 接入设计、旧版生成、原生生产/接入插件、模板与套件
   scaffold-recipe/   脚手架竖列配方策略、原生验证编排与用例生成
   quarter-cut/       1×2 平台的 12 带输入、48 带统一象限输出切割器
   diagonal-cut/     两种对角切割器、共享格子级布线与原生验收
@@ -26,7 +26,7 @@ tasks/
 
 三个平台内设计共用生产单元、命名端口、完整占地、格子级布线和原生供料计量组件；外部 socket 同时驱动路由、测试夹具和实验端口。新增设计的接入方式见[可组合的实体产线设计](docs/architecture.md#可组合的实体产线设计)。
 
-具体设计及已有诊断保存在 [CMAM 任务](tasks/cmam-compact/README.md) 和 [配方任务](tasks/scaffold-recipe/README.md)。公共接口与添加任务的方法见 [架构说明](docs/architecture.md)。
+具体设计及已有诊断保存在 [CMAM 任务](tasks/cmam-adapter/README.md) 和 [配方任务](tasks/scaffold-recipe/README.md)。公共接口与添加任务的方法见 [架构说明](docs/architecture.md)。
 
 [12 带优先合并器](tasks/priority-merge/README.md) 提供直列优先、反向直列优先和左右输入左侧优先三个版本；运行 `cargo run -p priority-merge` 一次生成并验收三份带图库图标的单平台蓝图。
 
@@ -38,11 +38,11 @@ tasks/
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
-cargo run -p cmam-compact -- prepare
-cargo run -p cmam-compact -- probe
+cargo run -p cmam-adapter -- prepare
+cargo run -p cmam-adapter -- probe
 ```
 
-公共部分全部为库，任务提供可执行入口：`cargo run -p cmam-compact -- --help`、`cargo run -p scaffold-recipe -- --help`。
+公共部分全部为库，任务提供可执行入口：`cargo run -p cmam-adapter -- --help`、`cargo run -p scaffold-recipe -- --help`。
 
 C# 三个工程统一使用 C# 14、nullable 和 .NET 分析器，构建警告视为错误；格式由根目录 `.editorconfig` 管理。可单独执行构建和格式检查：
 
@@ -67,8 +67,8 @@ C# 三个工程统一使用 C# 14、nullable 和 .NET 分析器，构建警告�
 
 ```powershell
 .\scripts\bootstrap.ps1  # SDK 已安装时跳过
-cargo run -p cmam-compact -- prepare
-cargo run -p cmam-compact -- probe
+cargo run -p cmam-adapter -- prepare
+cargo run -p cmam-adapter -- probe
 ```
 
 `SHAPEZ_GAME_ROOT` 可覆盖安装目录，`SHAPEZ_LAB_DOTNET` 可指定 SDK 的 `dotnet.exe`。游戏升级或 HostPrep 修改后重新 `prepare`。每次 `probe` / `batch` 自动构建 Mod。
@@ -95,8 +95,8 @@ CMAM 入口的 `inspect` 输出蓝图摘要，两个任务都提供 `prepare`、
 Cargo 使用标准的 `target` 目录，没有写死的个人路径。可以通过 `CARGO_TARGET_DIR` 覆盖；`scripts/dev.ps1` 可选地把构建目录指向当前系统临时目录。
 
 ```powershell
-cargo run -p cmam-compact -- test
-cargo run -p cmam-compact -- build <source.spz2bp> --rgb <rgb.spz2bp> --native --target 'WrWr----:CuCu----'
+cargo run -p cmam-adapter -- test
+cargo run -p cmam-adapter -- build <source.spz2bp> --rgb <rgb.spz2bp> --native --target 'WrWr----:CuCu----'
 cargo run -p scaffold-recipe -- plan 'WwcbWwcb:P-cwP-cw:WgP---P-'
 cargo run -p scaffold-recipe -- check
 cargo run -p scaffold-recipe -- test

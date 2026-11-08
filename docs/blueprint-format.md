@@ -38,12 +38,12 @@ SHAPEZ2-5-<base64(gzip(游戏载荷))><图标元数据 JSON>_<元数据 UTF-16 �
 ## 命令与验证
 
 ```powershell
-cargo run -p cmam-compact -- reencode '<既有蓝图.spz2bp>'
+cargo run -p cmam-adapter -- reencode '<既有蓝图.spz2bp>'
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 cargo test -p shapez-blueprint local_library -- --ignored --nocapture
-cargo run -p cmam-compact -- test
+cargo run -p cmam-adapter -- test
 ```
 
 `reencode` 先保存输入快照，再将新版文件写到 `%TEMP%/shapez-lab/runs/<run-id>/<原文件名>`，不覆盖蓝图库文件。
