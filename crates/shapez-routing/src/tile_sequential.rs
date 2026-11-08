@@ -1,8 +1,8 @@
 //! Ordered disjoint routing with deterministic permutation retries.
 use anyhow::{Result, bail};
 use shapez_model::{
-    FoundationGeometry, SearchOptions, TILE_DIRECTIONS as D, TileNet as Net, TilePoint as Point,
-    TileRoute, TileRouteStep as State, TileRoutingProblem,
+    Direction, FoundationGeometry, SearchOptions, TileNet as Net, TilePoint as Point, TileRoute,
+    TileRouteStep as State, TileRoutingProblem,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 /// Route all twelve connections, restarting deterministic permutations on congestion.
@@ -19,9 +19,9 @@ pub fn solve_tiles_sequential(
         .iter()
         .map(|n| {
             let approach = if n.input {
-                (n.a.0 + D[n.ad].0, n.a.1 + D[n.ad].1, n.a.2)
+                (n.a.0 + n.ad.delta().0, n.a.1 + n.ad.delta().1, n.a.2)
             } else {
-                (n.b.0 - D[n.bd].0, n.b.1 - D[n.bd].1, n.b.2)
+                (n.b.0 - n.bd.delta().0, n.b.1 - n.bd.delta().1, n.b.2)
             };
             [n.a, n.b, approach]
         })
@@ -99,8 +99,8 @@ fn search(
             return Some(path);
         }
         for offset in 0..4 {
-            let d = (offset + preference) % 4;
-            let direction = D[d];
+            let d = Direction::East.rotated(offset + preference);
+            let direction = d.delta();
             for length in 1..=5 {
                 if !s.allows_move(d, s.p.2, length > 1, s == start && n.input) {
                     continue;

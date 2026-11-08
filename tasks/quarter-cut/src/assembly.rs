@@ -127,7 +127,7 @@ fn finish(mut buildings: Vec<Building>, sockets: [FoundationSocket; 5]) -> Resul
                     p.0,
                     p.1,
                     p.2,
-                    Rotation::new(socket.direction()),
+                    Rotation::new(socket.direction().index()),
                 ));
             }
         }

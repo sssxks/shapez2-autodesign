@@ -1,8 +1,8 @@
 //! Congestion negotiation for building-grid routes.
 use anyhow::{Result, bail};
 use shapez_model::{
-    FoundationGeometry, TILE_DIRECTIONS as D, TileNet as Net, TilePoint as Point, TileResource,
-    TileRoute, TileRouteStep as State, TileRoutingProblem, tile_resources as resources,
+    Direction, FoundationGeometry, TileNet as Net, TilePoint as Point, TileResource, TileRoute,
+    TileRouteStep as State, TileRoutingProblem, tile_resources as resources,
 };
 
 /// Destination indices reachable with production buildings and source tiles reserved.
@@ -179,7 +179,7 @@ fn search(
     usage: &HashMap<TileResource, i32>,
     history: &HashMap<TileResource, i32>,
     penalty: i32,
-    targets: &[(Point, usize)],
+    targets: &[(Point, Direction)],
 ) -> Option<Vec<State>> {
     let start = State {
         p: n.a,
@@ -238,7 +238,8 @@ fn search(
             {
                 continue;
             }
-            for (d, v) in D.iter().enumerate() {
+            for d in Direction::ALL {
+                let v = d.delta();
                 for len in 1..=5 {
                     if !s.allows_move(d, z, len > 1, s.p == n.a && n.input) {
                         continue;
@@ -276,7 +277,7 @@ fn search(
                                 && (parent.p.0 - child.p.0).abs() + (parent.p.1 - child.p.1).abs()
                                     > 1
                             {
-                                let aligned = if d % 2 == 0 {
+                                let aligned = if d.index() % 2 == 0 {
                                     parent.p.1 == s.p.1
                                 } else {
                                     parent.p.0 == s.p.0
@@ -417,7 +418,10 @@ pub fn solve_tiles_negotiated(
             return Ok(nets
                 .into_iter()
                 .zip(paths)
-                .map(|(net, steps)| TileRoute { net, steps: steps.into_boxed_slice() })
+                .map(|(net, steps)| TileRoute {
+                    net,
+                    steps: steps.into_boxed_slice(),
+                })
                 .collect());
         }
         for (&p, &v) in &usage {

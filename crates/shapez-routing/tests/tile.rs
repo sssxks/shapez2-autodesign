@@ -9,9 +9,9 @@ fn problem() -> TileRoutingProblem {
         fixed: HashSet::new(),
         nets: vec![TileNet {
             a: (2, 8, 0),
-            ad: 0,
+            ad: shapez_model::Direction::East,
             b: (17, 8, 0),
-            bd: 0,
+            bd: shapez_model::Direction::East,
             input: true,
             output: true,
             exchange: None,
@@ -54,13 +54,13 @@ fn catcher_and_external_input_cannot_turn_lift_or_relaunch() {
     for (catch, external) in [(true, false), (false, true)] {
         let s = TileRouteStep {
             p: (5, 5, 0),
-            d: 0,
+            d: shapez_model::Direction::East,
             catch,
         };
-        assert!(s.allows_move(0, 0, false, external));
-        assert!(!s.allows_move(1, 0, false, external));
-        assert!(!s.allows_move(0, 1, false, external));
-        assert!(!s.allows_move(0, 0, true, external));
+        assert!(s.allows_move(shapez_model::Direction::East, 0, false, external));
+        assert!(!s.allows_move(shapez_model::Direction::South, 0, false, external));
+        assert!(!s.allows_move(shapez_model::Direction::East, 1, false, external));
+        assert!(!s.allows_move(shapez_model::Direction::East, 0, true, external));
     }
 }
 #[test]
@@ -69,23 +69,26 @@ fn lift_occupancy_and_launcher_interference_remain_distinct() {
     let path = [
         TileRouteStep {
             p: (5, 5, 0),
-            d: 0,
+            d: shapez_model::Direction::East,
             catch: false,
         },
         TileRouteStep {
             p: (6, 5, 2),
-            d: 0,
+            d: shapez_model::Direction::East,
             catch: false,
         },
         TileRouteStep {
             p: (10, 5, 2),
-            d: 0,
+            d: shapez_model::Direction::East,
             catch: true,
         },
     ];
     let resources = tile_resources(&path);
     assert!(resources.contains(&TileResource::Occupancy((5, 5, 1))));
-    assert!(resources.contains(&TileResource::LauncherRange((11, 5, 2), 0)));
+    assert!(resources.contains(&TileResource::LauncherRange(
+        (11, 5, 2),
+        shapez_model::Direction::East
+    )));
     assert!(!resources.contains(&TileResource::Occupancy((8, 5, 2))));
 }
 
@@ -94,9 +97,9 @@ fn jump_can_land_directly_before_a_machine_input() {
     let mut p = problem();
     p.nets[0] = TileNet {
         a: (4, 8, 0),
-        ad: 0,
+        ad: shapez_model::Direction::East,
         b: (7, 8, 0),
-        bd: 0,
+        bd: shapez_model::Direction::East,
         input: false,
         output: false,
         exchange: None,

@@ -9,7 +9,7 @@ pub struct CellPort {
     /// Port position in local tile coordinates.
     pub position: TilePoint,
     /// Port direction in clockwise quarter turns.
-    pub direction: usize,
+    pub direction: shapez_model::Direction,
 }
 /// Rigid clockwise rotation followed by translation, including a layer offset.
 #[derive(Clone, Copy)]
@@ -81,7 +81,7 @@ impl Cell {
                         name,
                         CellPort {
                             position: placement.point(p.position),
-                            direction: (p.direction + placement.rotation.index()) % 4,
+                            direction: p.direction.rotated(placement.rotation.index()),
                         },
                     )
                 })

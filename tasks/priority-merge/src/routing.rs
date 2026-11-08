@@ -42,7 +42,7 @@ pub fn connect(
             a: out.position,
             ad: out.direction,
             b: geometry.socket_tile(sockets[2], k, 0),
-            bd: 0,
+            bd: shapez_model::Direction::East,
             input: false,
             output: true,
             exchange: None,

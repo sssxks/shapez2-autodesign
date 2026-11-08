@@ -12,7 +12,8 @@ pub struct Arc {
     pub selected: Var,
     pub amount: Var,
 }
-type Jump = (Point, Point, usize);
+/// Launcher tile, catcher tile, and the shared straight-line travel heading.
+type Jump = (Point, Point, shapez_model::Direction);
 #[derive(Default)]
 pub struct Network {
     pub model: Model,
@@ -39,7 +40,7 @@ impl Network {
     pub fn receive(&mut self, commodity: u8, port: Port, max: i64, enabled: Expr, amount: Expr) {
         let mut flags = Expr::default();
         let mut flows = Expr::default();
-        for d in 0..4 {
+        for d in shapez_model::Direction::ALL {
             for caught in [false, true] {
                 let state = State::new(port.p, d, caught);
                 if !state.step().allows_destination(port.d, false) {
@@ -74,7 +75,9 @@ impl Network {
             let states: Vec<_> = free
                 .iter()
                 .flat_map(|&p| {
-                    (0..4).flat_map(move |d| [false, true].map(|caught| State::new(p, d, caught)))
+                    shapez_model::Direction::ALL
+                        .into_iter()
+                        .flat_map(move |d| [false, true].map(|caught| State::new(p, d, caught)))
                 })
                 .chain(
                     if c == 0 {
@@ -101,7 +104,7 @@ impl Network {
                     if shaft.iter().any(|p| !free.contains(p)) {
                         continue;
                     }
-                    for d in 0..4 {
+                    for d in shapez_model::Direction::ALL {
                         for length in 1..=5 {
                             let jump = length > 1;
                             if !from
@@ -195,7 +198,7 @@ impl Network {
         ) {
             self.model.bounded(expr, i64::MIN, 1);
         }
-        let mut receivers = BTreeMap::<(Point, usize), Vec<Jump>>::new();
+        let mut receivers = BTreeMap::<(Point, shapez_model::Direction), Vec<Jump>>::new();
         for &jump in self.jumps.keys() {
             receivers.entry((jump.1, jump.2)).or_default().push(jump);
         }

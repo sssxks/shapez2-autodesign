@@ -48,21 +48,21 @@ fn cell() -> shapez_blueprint::Cell {
                 "primary",
                 CellPort {
                     position: (-2, -2, 0),
-                    direction: 1,
+                    direction: shapez_model::Direction::South,
                 },
             ),
             (
                 "secondary",
                 CellPort {
                     position: (1, 1, 0),
-                    direction: 2,
+                    direction: shapez_model::Direction::West,
                 },
             ),
             (
                 "output",
                 CellPort {
                     position: (-1, 2, 0),
-                    direction: 1,
+                    direction: shapez_model::Direction::South,
                 },
             ),
         ],

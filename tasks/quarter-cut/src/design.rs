@@ -33,14 +33,14 @@ pub fn cell(factory: bool) -> Cell {
                 "input",
                 CellPort {
                     position: (-1, 2, 0),
-                    direction: 0,
+                    direction: shapez_model::Direction::East,
                 },
             ),
             (
                 "output",
                 CellPort {
                     position: if factory { (4, 4, 0) } else { (5, 3, 0) },
-                    direction: usize::from(factory),
+                    direction: shapez_model::Direction::East.rotated(usize::from(factory)),
                 },
             ),
         ],
@@ -78,7 +78,7 @@ pub fn middle_cell(row: i32) -> Cell {
         "output",
         CellPort {
             position: (5, row, 0),
-            direction: 0,
+            direction: shapez_model::Direction::East,
         },
     );
     result
@@ -117,7 +117,7 @@ fn reflect(mut cell: Cell) -> Cell {
         .collect();
     for port in cell.ports.values_mut() {
         port.position.1 = 3 - port.position.1;
-        port.direction = (4 - port.direction) % 4;
+        port.direction = shapez_model::Direction::East.rotated(4 - port.direction.index());
     }
     cell
 }

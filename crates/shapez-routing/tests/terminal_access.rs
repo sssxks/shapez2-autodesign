@@ -10,9 +10,9 @@ fn identifies_terminal_reservations_separating_a_corridor() {
         .collect();
     let mut nets = vec![TileNet {
         a: (3, 8, 0),
-        ad: 0,
+        ad: shapez_model::Direction::East,
         b: (16, 8, 0),
-        bd: 0,
+        bd: shapez_model::Direction::East,
         input: false,
         output: false,
         exchange: None,
@@ -20,9 +20,9 @@ fn identifies_terminal_reservations_separating_a_corridor() {
     for x in 8..=12 {
         nets.push(TileNet {
             a: (x, 8, 0),
-            ad: 0,
+            ad: shapez_model::Direction::East,
             b: (x, 8, 0),
-            bd: 0,
+            bd: shapez_model::Direction::East,
             input: false,
             output: false,
             exchange: None,

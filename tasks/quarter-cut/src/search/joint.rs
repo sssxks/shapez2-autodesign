@@ -56,7 +56,7 @@ pub fn build(
                         let mut candidate = cell.clone();
                         candidate.x += dx + offset.0;
                         candidate.y += dy + offset.1;
-                        candidate.r = (candidate.r + turn) % 4;
+                        candidate.r = candidate.r.rotated(*turn);
                         let body = candidate.body(z as i16);
                         if body.is_subset(&floor) && body.is_disjoint(&approaches) {
                             candidates.push(Pose {
@@ -96,7 +96,7 @@ pub fn build(
     let input_map: BTreeMap<_, _> = inputs.iter().map(|p| (p.p, p.d)).collect();
     let output_map: BTreeMap<_, _> = outputs.iter().map(|p| (p.p, p.d)).collect();
     let mut choices = Vec::new();
-    let mut terminal_groups = BTreeMap::<(Point, usize), (Expr, Expr)>::new();
+    let mut terminal_groups = BTreeMap::<(Point, shapez_model::Direction), (Expr, Expr)>::new();
     for (cell_id, candidates) in poses.iter().enumerate() {
         let z = (cell_id / 16) as i16;
         let index = cell_id % 16;
@@ -261,7 +261,7 @@ impl Joint {
                 crate::design::variant(cell.out, cell.mirror)
                     .placed(Placement {
                         origin: (cell.x, cell.y, z),
-                        rotation: Rotation::new(cell.r),
+                        rotation: Rotation::new(cell.r.index()),
                     })
                     .buildings,
             );
@@ -278,7 +278,7 @@ impl Joint {
                     p.0,
                     p.1,
                     p.2,
-                    Rotation::new((cell.r + r) % 4),
+                    Rotation::new(cell.r.rotated(r).index()),
                 ));
             }
             let input = cell.input(z);

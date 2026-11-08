@@ -86,21 +86,21 @@ fn lane(ne: bool) -> Cell {
                 "input",
                 CellPort {
                     position: (4, 6, 0),
-                    direction: 1,
+                    direction: shapez_model::Direction::South,
                 },
             ),
             (
                 "first",
                 CellPort {
                     position: (11, 13, 0),
-                    direction: 1,
+                    direction: shapez_model::Direction::South,
                 },
             ),
             (
                 "second",
                 CellPort {
                     position: (9, 14, 0),
-                    direction: 1,
+                    direction: shapez_model::Direction::South,
                 },
             ),
         ],

@@ -9,7 +9,7 @@ pub fn route_buildings(route: &TileRoute, b: &mut Vec<Building>) {
         let next = path.get(i + 1);
         let d = next.map_or(n.bd, |v| v.d);
         let z = next.map_or(s.p.2, |v| v.p.2);
-        let delta = (d + 4 - s.d) % 4;
+        let delta = d.turns_from(s.d);
         let jump = next.is_some_and(|v| (v.p.0 - s.p.0).abs() + (v.p.1 - s.p.1).abs() > 1);
         let t = if z != s.p.2 {
             format!(
@@ -36,6 +36,12 @@ pub fn route_buildings(route: &TileRoute, b: &mut Vec<Building>) {
             }
             .into()
         };
-        b.push(Building::new(t, s.p.0, s.p.1, s.p.2, Rotation::new(s.d)));
+        b.push(Building::new(
+            t,
+            s.p.0,
+            s.p.1,
+            s.p.2,
+            Rotation::new(s.d.index()),
+        ));
     }
 }

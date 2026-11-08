@@ -64,10 +64,15 @@ pub fn layout(source: &BuildingBlueprint) -> Result<Vec<Building>> {
     let fixed = buildings.iter().map(|b| (b.x, b.y, b.layer)).collect();
     let nets = (0..4)
         .map(|g| {
-            let (x, d) = [(6, 2), (16, 0), (23, 2), (33, 0)][g];
+            let (x, d) = [
+                (6, shapez_model::Direction::West),
+                (16, shapez_model::Direction::East),
+                (23, shapez_model::Direction::West),
+                (33, shapez_model::Direction::East),
+            ][g];
             TileNet {
                 a: (8 + g as i32, 2, 0),
-                ad: 1,
+                ad: shapez_model::Direction::South,
                 b: (x, 3 + ((mask >> g) & 1), 0),
                 bd: d,
                 input: true,

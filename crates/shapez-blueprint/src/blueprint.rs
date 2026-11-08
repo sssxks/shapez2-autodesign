@@ -222,7 +222,13 @@ impl Blueprint {
         };
         islands.entries.extend(sockets.iter().map(|&socket| {
             let (x, y, rotation) = geometry.socket_harness(socket);
-            Island::new("SpaceBelt_Forward", x, y, 0, crate::Rotation::new(rotation))
+            Island::new(
+                "SpaceBelt_Forward",
+                x,
+                y,
+                0,
+                crate::Rotation::new(rotation.index()),
+            )
         }));
         Ok(blueprint)
     }

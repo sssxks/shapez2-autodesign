@@ -1,16 +1,15 @@
 //! Physical routes inside a foundation, independent of blueprint encoding.
+use crate::Direction;
 use std::collections::{HashMap, HashSet};
 /// Building coordinates; the layer is a native building layer.
 pub type TilePoint = (i32, i32, i16);
-/// Clockwise movement vectors in native tile coordinates.
-pub const TILE_DIRECTIONS: [(i32, i32); 4] = [(1, 0), (0, 1), (-1, 0), (0, -1)];
 /// Arrival state. A catcher must leave straight on the same layer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TileRouteStep {
     /// Arrival tile coordinate.
     pub p: TilePoint,
-    /// Arrival heading index.
-    pub d: usize,
+    /// Arrival heading.
+    pub d: Direction,
     /// Whether arrival was through a jump catcher.
     pub catch: bool,
 }
@@ -22,12 +21,12 @@ pub struct ExchangeGroup(pub u8);
 pub struct TileNet {
     /// Source tile.
     pub a: TilePoint,
-    /// Source heading index.
-    pub ad: usize,
+    /// Source heading.
+    pub ad: Direction,
     /// Destination tile.
     pub b: TilePoint,
-    /// Destination heading index.
-    pub bd: usize,
+    /// Destination heading.
+    pub bd: Direction,
     /// Whether flow enters the factory.
     pub input: bool,
     /// Selected output or external-output status.
@@ -49,7 +48,7 @@ pub enum TileResource {
     /// Exclusive occupancy of a tile.
     Occupancy(TilePoint),
     /// Launcher interference at a tile in a heading.
-    LauncherRange(TilePoint, usize),
+    LauncherRange(TilePoint, Direction),
 }
 /// Foundation floor plus directed approach corridors for external ports.
 pub struct FoundationGeometry {
@@ -98,7 +97,7 @@ pub fn tile_resources(path: &[TileRouteStep]) -> Vec<TileResource> {
             resources.push(TileResource::Occupancy((s.p.0, s.p.1, layer)));
         }
         if next.is_some_and(|n| (n.p.0 - s.p.0).abs() + (n.p.1 - s.p.1).abs() > 1) {
-            let d = TILE_DIRECTIONS[s.d];
+            let d = s.d.delta();
             for k in 1..=5 {
                 resources.push(TileResource::LauncherRange(
                     (s.p.0 + d.0 * k, s.p.1 + d.1 * k, s.p.2),
@@ -136,11 +135,11 @@ pub struct FactoryBeltPort {
 }
 impl FoundationSocket {
     /// Direction of travel at this socket.
-    pub fn direction(self) -> usize {
+    pub fn direction(self) -> Direction {
         if self.output {
-            self.side.index()
+            self.side
         } else {
-            self.side.opposite().index()
+            self.side.opposite()
         }
     }
 }
@@ -158,7 +157,7 @@ impl FoundationGeometry {
         (x, y, layer)
     }
     /// Adjacent space-belt chunk and its direction for a test fixture.
-    pub fn socket_harness(&self, socket: FoundationSocket) -> (i32, i32, usize) {
+    pub fn socket_harness(&self, socket: FoundationSocket) -> (i32, i32, Direction) {
         use crate::Direction;
         let (x, y) = match socket.side {
             Direction::North => (socket.segment, -1),
@@ -190,7 +189,7 @@ impl TileRouteStep {
     /// Native movement rule shared by sequential and negotiated search.
     pub fn allows_move(
         self,
-        outgoing: usize,
+        outgoing: Direction,
         layer: i16,
         jump: bool,
         external_input: bool,
@@ -200,14 +199,13 @@ impl TileRouteStep {
         if locked && (lift || outgoing != self.d) {
             return false;
         }
-        if !lift && (outgoing + 4 - self.d) % 4 == 2 {
+        if !lift && outgoing == self.d.opposite() {
             return false;
         }
         !jump || (!lift && outgoing == self.d && !locked)
     }
     /// Native final-tile constraints at a device or external sender.
-    pub fn allows_destination(self, direction: usize, external_output: bool) -> bool {
-        (!(self.catch || external_output) || self.d == direction)
-            && (direction + 4 - self.d) % 4 != 2
+    pub fn allows_destination(self, direction: Direction, external_output: bool) -> bool {
+        (!(self.catch || external_output) || self.d == direction) && direction != self.d.opposite()
     }
 }

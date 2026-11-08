@@ -14,7 +14,7 @@ fn placement_transforms_non_anchor_occupancy_and_ports_together() {
             "input",
             CellPort {
                 position: (-1, 1, 0),
-                direction: 0,
+                direction: shapez_model::Direction::East,
             },
         )],
     );
@@ -32,6 +32,9 @@ fn placement_transforms_non_anchor_occupancy_and_ports_together() {
     );
     assert!(placed.footprint.contains(&(10, 20, 2)));
     assert_eq!(placed.port("input").unwrap().position, (9, 19, 2));
-    assert_eq!(placed.port("input").unwrap().direction, 1);
+    assert_eq!(
+        placed.port("input").unwrap().direction,
+        shapez_model::Direction::South
+    );
     assert_eq!(placed.buildings[0].rotation.index(), 1);
 }
